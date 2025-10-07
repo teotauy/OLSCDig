@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Env
+.env
+
+# Certs (never commit real certs)
+certs/
+
+# Pages build cache
+public/headcount.json
+
