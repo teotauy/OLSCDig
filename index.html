@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OLSC Headcount</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 2rem; }
+      .count { font-size: 6rem; font-weight: 700; }
+      .meta { color: #666; margin-top: .5rem; }
+      .ok { color: #2e7d32; }
+      .warn { color: #ef6c00; }
+    </style>
+  </head>
+  <body>
+    <h1>OLSC Headcount</h1>
+    <div class="count" id="count">—</div>
+    <div class="meta" id="updated">Last updated: —</div>
+    <div class="meta" id="next">Refreshing in: 60s</div>
+    <script>
+      const COUNTDOWN_SEC = 60;
+      let remaining = COUNTDOWN_SEC;
+      let timerId;
+
+      async function fetchHeadcount() {
+        try {
+          const res = await fetch('headcount.json', { cache: 'no-store' });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const data = await res.json();
+          document.getElementById('count').textContent = data.count ?? '—';
+          document.getElementById('updated').textContent = 'Last updated: ' + (data.updated_at ?? '—');
+        } catch (e) {
+          document.getElementById('count').textContent = '—';
+          document.getElementById('updated').textContent = 'Last updated: error fetching';
+        }
+      }
+
+      function tick() {
+        remaining -= 1;
+        if (remaining <= 0) {
+          remaining = COUNTDOWN_SEC;
+          fetchHeadcount();
+        }
+        document.getElementById('next').textContent = 'Refreshing in: ' + remaining + 's';
+      }
+
+      fetchHeadcount();
+      timerId = setInterval(tick, 1000);
+    </script>
+  </body>
+</html>
+
