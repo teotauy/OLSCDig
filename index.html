@@ -14,37 +14,24 @@
   </head>
   <body>
     <h1>OLSC Headcount</h1>
-    <div class="count" id="count">—</div>
-    <div class="meta" id="updated">Last updated: —</div>
+    <div class="count" id="count">28</div>
+    <div class="meta" id="updated">Last updated: 2025-10-07T22:26:23-04:00</div>
     <div class="meta" id="next">Refreshing in: 60s</div>
     <script>
       const COUNTDOWN_SEC = 60;
       let remaining = COUNTDOWN_SEC;
       let timerId;
 
-      async function fetchHeadcount() {
-        try {
-          const res = await fetch('headcount.json', { cache: 'no-store' });
-          if (!res.ok) throw new Error('HTTP ' + res.status);
-          const data = await res.json();
-          document.getElementById('count').textContent = data.count ?? '—';
-          document.getElementById('updated').textContent = 'Last updated: ' + (data.updated_at ?? '—');
-        } catch (e) {
-          document.getElementById('count').textContent = '—';
-          document.getElementById('updated').textContent = 'Last updated: error fetching';
-        }
-      }
-
       function tick() {
         remaining -= 1;
         if (remaining <= 0) {
           remaining = COUNTDOWN_SEC;
-          fetchHeadcount();
+          // For now, just refresh the page to get updated data
+          window.location.reload();
         }
         document.getElementById('next').textContent = 'Refreshing in: ' + remaining + 's';
       }
 
-      fetchHeadcount();
       timerId = setInterval(tick, 1000);
     </script>
   </body>
