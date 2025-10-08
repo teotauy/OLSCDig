@@ -25,33 +25,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Restore certs from secrets
-        shell: bash
-        env:
-          CERT_B64: ${{ secrets.PASSKIT_CERTIFICATE_PEM_B64 }}
-          CA_B64: ${{ secrets.PASSKIT_CA_CHAIN_PEM_B64 }}
-          KEY_B64: ${{ secrets.PASSKIT_KEY_PEM_B64 }}
-          KEY_PASSWORD: ${{ secrets.PASSKIT_KEY_PASSWORD }}
-        run: |
-          mkdir -p certs
-          echo "$CERT_B64" | base64 -d > certs/certificate.pem
-          echo "$CA_B64" | base64 -d > certs/ca-chain.pem
-          echo "$KEY_B64" | base64 -d > certs/key.enc.pem
-          # Decrypt private key
-          if [ -n "$KEY_PASSWORD" ]; then
-            openssl ec -in certs/key.enc.pem -passin pass:"$KEY_PASSWORD" -out certs/key.pem
-          else
-            mv certs/key.enc.pem certs/key.pem
-          fi
-
       - name: Build headcount.json
         env:
           PROGRAM_ID: ${{ secrets.PROGRAM_ID }}
-          API_HOST: ${{ secrets.API_HOST }}
+          API_BASE: ${{ secrets.API_BASE }}
+          PASSKIT_API_KEY: ${{ secrets.PASSKIT_API_KEY }}
+          PASSKIT_PROJECT_KEY: ${{ secrets.PASSKIT_PROJECT_KEY }}
           TIMEZONE: America/New_York
-          CERTIFICATE_PEM: certs/certificate.pem
-          CA_CHAIN_PEM: certs/ca-chain.pem
-          KEY_PEM: certs/key.pem
         run: |
           python scripts/build_headcount_json.py
 

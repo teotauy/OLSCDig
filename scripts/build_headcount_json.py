@@ -1,25 +1,49 @@
 import os
 import json
+import requests
 from datetime import datetime
 
 from dotenv import load_dotenv
 import pytz
-
-# Placeholder SDK import
-# from passkit import members
 
 
 def load_config():
 	load_dotenv()
 	return {
 		"PROGRAM_ID": os.getenv("PROGRAM_ID", ""),
+		"API_BASE": os.getenv("API_BASE", "https://api.pub1.passkit.io"),
+		"API_KEY": os.getenv("PASSKIT_API_KEY", ""),
+		"PROJECT_KEY": os.getenv("PASSKIT_PROJECT_KEY", ""),
 		"TIMEZONE": os.getenv("TIMEZONE", "America/New_York"),
 	}
 
 
-def get_checked_in_count(program_id: str) -> int:
-	# Replace with actual PassKit SDK call
-	raise NotImplementedError("Integrate PassKit SDK: query members where status == CHECKED_IN")
+def get_checked_in_count(config: dict) -> int:
+	"""Return the count of members with status == CHECKED_IN using PassKit REST API."""
+	headers = {
+		"Authorization": f"Bearer {config['API_KEY']}",
+		"Content-Type": "application/json",
+	}
+	
+	if config.get("PROJECT_KEY"):
+		headers["X-Project-Key"] = config["PROJECT_KEY"]
+	
+	url = f"{config['API_BASE']}/membership/members"
+	params = {
+		"programId": config["PROGRAM_ID"],
+		"status": "CHECKED_IN"
+	}
+	
+	try:
+		response = requests.get(url, headers=headers, params=params, timeout=30)
+		response.raise_for_status()
+		data = response.json()
+		
+		members = data.get("members", [])
+		return len(members)
+		
+	except requests.exceptions.RequestException as e:
+		raise RuntimeError(f"Failed to fetch members: {e}")
 
 
 def main():
@@ -27,7 +51,7 @@ def main():
 	if not config["PROGRAM_ID"]:
 		raise RuntimeError("PROGRAM_ID is required")
 
-	count = get_checked_in_count(config["PROGRAM_ID"])
+	count = get_checked_in_count(config)
 	now = datetime.now(pytz.timezone(config["TIMEZONE"]))
 	payload = {
 		"count": int(count),

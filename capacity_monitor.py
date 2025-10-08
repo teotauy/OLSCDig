@@ -1,14 +1,12 @@
 import os
 import time
 import json
+import requests
 from datetime import datetime
 from typing import Optional
 
 from dotenv import load_dotenv
 import pytz
-
-# Placeholder imports for PassKit SDK
-# from passkit import members
 
 
 REFRESH_SECONDS = int(os.getenv("REFRESH_SECONDS", "5"))
@@ -18,29 +16,46 @@ def load_config():
 	load_dotenv()
 	config = {
 		"PROGRAM_ID": os.getenv("PROGRAM_ID", ""),
-		"API_HOST": os.getenv("API_HOST", "grpc.pub1.passkit.io"),
+		"API_BASE": os.getenv("API_BASE", "https://api.pub1.passkit.io"),
+		"API_KEY": os.getenv("PASSKIT_API_KEY", ""),
+		"PROJECT_KEY": os.getenv("PASSKIT_PROJECT_KEY", ""),
 		"TIMEZONE": os.getenv("TIMEZONE", "America/New_York"),
-		"CERTIFICATE_PEM": os.getenv("CERTIFICATE_PEM", "certs/certificate.pem"),
-		"CA_CHAIN_PEM": os.getenv("CA_CHAIN_PEM", "certs/ca-chain.pem"),
-		"KEY_PEM": os.getenv("KEY_PEM", "certs/key.pem"),
-		"KEY_PASSWORD": os.getenv("KEY_PASSWORD", ""),
 	}
-	missing = [k for k, v in config.items() if k in ("PROGRAM_ID",) and not v]
+	missing = [k for k, v in config.items() if k in ("PROGRAM_ID", "API_KEY", "PROJECT_KEY") and not v]
 	if missing:
 		raise RuntimeError(f"Missing required config env vars: {', '.join(missing)}")
 	return config
 
 
 def get_checked_in_count(config: dict) -> int:
-	"""Return the count of members with status == CHECKED_IN.
-	Replace the body with actual PassKit SDK calls.
-	"""
-	# Example outline (pseudo):
-	# client = members.MembersClient(... credentials from CERTIFICATE/KEY ...)
-	# resp = client.ListMembers(program_id=config["PROGRAM_ID"], status="CHECKED_IN")
-	# return len(resp.members)
-	# For now, raise if not implemented.
-	raise NotImplementedError("Integrate PassKit SDK: query members where status == CHECKED_IN")
+	"""Return the count of members with status == CHECKED_IN using PassKit REST API."""
+	headers = {
+		"Authorization": f"Bearer {config['API_KEY']}",
+		"Content-Type": "application/json",
+	}
+	
+	# Add project key header if provided
+	if config.get("PROJECT_KEY"):
+		headers["X-Project-Key"] = config["PROJECT_KEY"]
+	
+	# List members with CHECKED_IN status
+	url = f"{config['API_BASE']}/membership/members"
+	params = {
+		"programId": config["PROGRAM_ID"],
+		"status": "CHECKED_IN"
+	}
+	
+	try:
+		response = requests.get(url, headers=headers, params=params, timeout=30)
+		response.raise_for_status()
+		data = response.json()
+		
+		# Count members in the response
+		members = data.get("members", [])
+		return len(members)
+		
+	except requests.exceptions.RequestException as e:
+		raise RuntimeError(f"Failed to fetch members: {e}")
 
 
 def fmt_now_tz(tz_name: str) -> str:

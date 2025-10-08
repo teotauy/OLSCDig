@@ -21,34 +21,23 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-2) Place PassKit credentials for local runs
-- Put `certificate.pem`, `ca-chain.pem`, `key.pem` in `certs/`
-- Decrypt `key.pem` locally once:
-
-```bash
-cd certs
-openssl ec -in key.pem -out key.pem
-```
-
-3) Configure environment
+2) Configure environment
 - Copy `.env.example` to `.env` and fill values
 - Required:
-  - `PROGRAM_ID` (e.g., MEM-XXXXXXX)
-  - `API_HOST` (e.g., grpc.pub1.passkit.io)
+  - `PROGRAM_ID` (e.g., 3yyTsbqwmtXaiKZ5qWhqTP)
+  - `API_BASE` (e.g., https://api.pub1.passkit.io)
   - `TIMEZONE` (e.g., America/New_York)
-  - `CERTIFICATE_PEM`, `CA_CHAIN_PEM`, `KEY_PEM` paths (defaults point to `certs/`)
-  - `KEY_PASSWORD` (blank if key already decrypted)
+  - `PASSKIT_API_KEY` – your PassKit API key
+  - `PASSKIT_PROJECT_KEY` – your PassKit project key
 
-4) GitHub Actions secrets (for free hosting)
+3) GitHub Actions secrets (for free hosting)
 Store these as repository Secrets (Settings → Secrets and variables → Actions):
-- `PASSKIT_CERTIFICATE_PEM_B64` – base64 of certificate.pem
-- `PASSKIT_CA_CHAIN_PEM_B64` – base64 of ca-chain.pem
-- `PASSKIT_KEY_PEM_B64` – base64 of encrypted key.pem
-- `PASSKIT_KEY_PASSWORD` – password to decrypt key.pem
-- `PROGRAM_ID` – your program id
-- `API_HOST` – e.g., grpc.pub1.passkit.io
+- `PROGRAM_ID` – your program id (3yyTsbqwmtXaiKZ5qWhqTP)
+- `API_BASE` – your PassKit REST API base URL
+- `PASSKIT_API_KEY` – your PassKit API key
+- `PASSKIT_PROJECT_KEY` – your PassKit project key
 
-5) Enable GitHub Pages
+4) Enable GitHub Pages
 - Settings → Pages → Build from `main` branch, `/public` folder
 
 ## Running locally

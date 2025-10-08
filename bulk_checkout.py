@@ -1,24 +1,20 @@
 import os
+import requests
 from datetime import datetime
 from typing import List
 
 from dotenv import load_dotenv
 import pytz
 
-# Placeholder imports for PassKit SDK
-# from passkit import members
-
 
 def load_config():
 	load_dotenv()
 	return {
 		"PROGRAM_ID": os.getenv("PROGRAM_ID", ""),
-		"API_HOST": os.getenv("API_HOST", "grpc.pub1.passkit.io"),
+		"API_BASE": os.getenv("API_BASE", "https://api.pub1.passkit.io"),
+		"API_KEY": os.getenv("PASSKIT_API_KEY", ""),
+		"PROJECT_KEY": os.getenv("PASSKIT_PROJECT_KEY", ""),
 		"TIMEZONE": os.getenv("TIMEZONE", "America/New_York"),
-		"CERTIFICATE_PEM": os.getenv("CERTIFICATE_PEM", "certs/certificate.pem"),
-		"CA_CHAIN_PEM": os.getenv("CA_CHAIN_PEM", "certs/ca-chain.pem"),
-		"KEY_PEM": os.getenv("KEY_PEM", "certs/key.pem"),
-		"KEY_PASSWORD": os.getenv("KEY_PASSWORD", ""),
 	}
 
 
@@ -29,28 +25,64 @@ def is_midnight_local(tz_name: str) -> bool:
 
 
 def list_checked_in_member_ids(config) -> List[str]:
-	"""Return list of member IDs where status == CHECKED_IN.
-	Replace with actual PassKit SDK calls.
-	"""
-	# Example (pseudo):
-	# client = members.MembersClient(...)
-	# resp = client.ListMembers(program_id=config["PROGRAM_ID"], status="CHECKED_IN")
-	# return [m.id for m in resp.members]
-	raise NotImplementedError("Integrate PassKit SDK: list members with status == CHECKED_IN")
+	"""Return list of member IDs where status == CHECKED_IN using PassKit REST API."""
+	headers = {
+		"Authorization": f"Bearer {config['API_KEY']}",
+		"Content-Type": "application/json",
+	}
+	
+	if config.get("PROJECT_KEY"):
+		headers["X-Project-Key"] = config["PROJECT_KEY"]
+	
+	url = f"{config['API_BASE']}/membership/members"
+	params = {
+		"programId": config["PROGRAM_ID"],
+		"status": "CHECKED_IN"
+	}
+	
+	try:
+		response = requests.get(url, headers=headers, params=params, timeout=30)
+		response.raise_for_status()
+		data = response.json()
+		
+		members = data.get("members", [])
+		return [member.get("id") for member in members if member.get("id")]
+		
+	except requests.exceptions.RequestException as e:
+		raise RuntimeError(f"Failed to list checked-in members: {e}")
 
 
 def checkout_members(config, member_ids: List[str]) -> int:
-	"""Set status to CHECKED_OUT for each member id.
+	"""Set status to CHECKED_OUT for each member id using PassKit REST API.
 	Return number successfully updated.
 	"""
-	# Example (pseudo):
-	# client = members.MembersClient(...)
-	# success = 0
-	# for mid in member_ids:
-	#   client.UpdateMemberStatus(program_id=config["PROGRAM_ID"], member_id=mid, status="CHECKED_OUT")
-	#   success += 1
-	# return success
-	raise NotImplementedError("Integrate PassKit SDK: update member status to CHECKED_OUT")
+	headers = {
+		"Authorization": f"Bearer {config['API_KEY']}",
+		"Content-Type": "application/json",
+	}
+	
+	if config.get("PROJECT_KEY"):
+		headers["X-Project-Key"] = config["PROJECT_KEY"]
+	
+	success_count = 0
+	
+	for member_id in member_ids:
+		try:
+			# Update member status to CHECKED_OUT
+			url = f"{config['API_BASE']}/membership/members/{member_id}"
+			payload = {
+				"status": "CHECKED_OUT"
+			}
+			
+			response = requests.patch(url, headers=headers, json=payload, timeout=30)
+			response.raise_for_status()
+			success_count += 1
+			
+		except requests.exceptions.RequestException as e:
+			print(f"Failed to checkout member {member_id}: {e}")
+			continue
+	
+	return success_count
 
 
 def main():
