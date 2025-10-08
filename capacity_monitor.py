@@ -38,11 +38,10 @@ def get_checked_in_count(config: dict) -> int:
 	if config.get("PROJECT_KEY"):
 		headers["X-Project-Key"] = config["PROJECT_KEY"]
 	
-	# List members with CHECKED_IN status
+	# First, let's see what the actual API structure looks like
 	url = f"{config['API_BASE']}/membership/members"
 	params = {
-		"programId": config["PROGRAM_ID"],
-		"status": "CHECKED_IN"
+		"programId": config["PROGRAM_ID"]
 	}
 	
 	try:
@@ -50,9 +49,11 @@ def get_checked_in_count(config: dict) -> int:
 		response.raise_for_status()
 		data = response.json()
 		
-		# Count members in the response
-		members = data.get("members", [])
-		return len(members)
+		print(f"API Response structure: {data}")
+		
+		# For now, return 0 until we figure out the correct field
+		# TODO: Update this once we know the correct field for check-in status
+		return 0
 		
 	except requests.exceptions.RequestException as e:
 		raise RuntimeError(f"Failed to fetch members: {e}")
