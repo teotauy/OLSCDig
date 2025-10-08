@@ -27,10 +27,10 @@ jobs:
 
       - name: Run bulk checkout (guarded by timezone)
         env:
-          PROGRAM_ID: ${{ secrets.PROGRAM_ID }}
-          API_BASE: ${{ secrets.API_BASE_URL }}
-          PASSKIT_API_KEY: ${{ secrets.PASSKIT_API_KEY }}
-          PASSKIT_PROJECT_KEY: ${{ secrets.PASSKIT_PROJECT_KEY }}
+          PROGRAM_ID: ${{ secrets.PROGRAMID }}
+          API_BASE: ${{ secrets.APIBASEURL }}
+          PASSKIT_API_KEY: ${{ secrets.PASSKITAPIKEY }}
+          PASSKIT_PROJECT_KEY: ${{ secrets.PASSKITPROJECTKEY }}
           TIMEZONE: America/New_York
         run: |
           python bulk_checkout.py
