@@ -9,6 +9,6 @@ __pycache__/
 # Certs (never commit real certs)
 certs/
 
-# Pages build cache
-public/headcount.json
+# Pages build cache - allow headcount.json to be committed
+# public/headcount.json
 
