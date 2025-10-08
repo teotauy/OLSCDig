@@ -25,15 +25,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build headcount.json
-        env:
-          PROGRAM_ID:${{ secrets.PROGRAMID }}
-          API_BASE:${{ secrets.APIBASEURL }}
-          PASSKIT_API_KEY:${{ secrets.PASSKITAPIKEY }}
-          PASSKIT_PROJECT_KEY:${{ secrets.PASSKITPROJECTKEY }}
-          TIMEZONE: America/New_York
+      - name: Build headcount.json from CSV
         run: |
-          python scripts/build_headcount_json.py
+          python csv_headcount.py
 
       - name: Commit changes
         run: |
