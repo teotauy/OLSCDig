@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Liverpool OLSC - Live Headcount</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #c8102e 0%, #00a65a 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 30px;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #c8102e;
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .headcount {
+            background: linear-gradient(135deg, #c8102e 0%, #d81d42 100%);
+            color: white;
+            text-align: center;
+            padding: 40px 20px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(200,16,46,0.3);
+        }
+
+        .headcount-label {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+
+        .headcount-number {
+            font-size: 72px;
+            font-weight: bold;
+            line-height: 1;
+            margin-bottom: 10px;
+        }
+
+        .headcount-updated {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        .loading {
+            opacity: 0.6;
+        }
+
+        .countdown-pitch {
+            margin-top: 20px;
+            padding: 15px;
+            background: linear-gradient(180deg, #2d7a3e 0%, #1e5f2d 100%);
+            border-radius: 10px;
+            position: relative;
+            height: 60px;
+            overflow: hidden;
+        }
+
+        .pitch-lines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.3;
+        }
+
+        .halfway-line {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            width: 2px;
+            height: 100%;
+            background: white;
+        }
+
+        .goal {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 24px;
+        }
+
+        .ball {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 20px;
+            transition: left 1s linear;
+            filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.3));
+        }
+
+        .countdown-text {
+            text-align: center;
+            color: white;
+            font-size: 11px;
+            margin-top: 5px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+
+        @keyframes celebrate {
+            0%, 100% { transform: translateY(-50%) scale(1); }
+            50% { transform: translateY(-50%) scale(1.3) rotate(360deg); }
+        }
+
+        .ball.goal-scored {
+            animation: celebrate 0.5s ease-in-out;
+        }
+
+        .info-box {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 10px;
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+        }
+
+        .error {
+            background: #fee;
+            color: #c00;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 20px;
+            }
+
+            .headcount-number {
+                font-size: 64px;
+            }
+
+            .header h1 {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚽ Liverpool OLSC</h1>
+            <p>Live Headcount</p>
+        </div>
+
+        <div class="headcount" id="headcount">
+            <div class="headcount-label">Currently at the Pub</div>
+            <div class="headcount-number" id="count">--</div>
+            <div class="headcount-updated" id="updated">Loading...</div>
+        </div>
+
+        <div class="countdown-pitch">
+            <div class="pitch-lines">
+                <div class="halfway-line"></div>
+            </div>
+            <div class="ball" id="ball">⚽</div>
+            <div class="goal">🥅</div>
+        </div>
+        <div class="countdown-text">
+            Next refresh in: <span id="countdown">60</span>s
+        </div>
+
+        <div class="info-box">
+            📱 Read-only display • Updates every 60 seconds
+        </div>
+    </div>
+
+    <script>
+        // PassKit API Configuration
+        const CONFIG = {
+            API_BASE: 'https://api.pub2.passkit.io',
+            API_KEY: 'QHxrhw8Wi2T6W5lvN1ZxK35BYqvX6ynYnPvSbDaV36dYkczgwWCkKckDPtlRoq4VlC5f-M9vn4wVJejSqVOKEqFkrYJ2P6M2W7UtxH-mOnD5RBBjwCjmNuPGUGYQDwMFKogg08Su2eE-1PzKGipfslEkxRH078J4e0XFWRzfZc7jmLXBHYr47UNy0JLM4kmQPbktsK-nQdGvunwStmxyAIie6lKcjnVHw8L61tyL6nAsO1VsclmHe5UG5ImB3XD2Xl5naggXBjEz1p74k5lO85VovN1y9IEI6s5m-Rh_WZXVB3-BEV6Ft5xEKTHpHlqB',
+            PROJECT_KEY: 'f94c829556448ba780034221a0aa0a9c9a208792cfa20fa1c4e3ad71612a3a33',
+            PROGRAM_ID: '3yyTsbqwmtXaiKZ5qWhqTP'
+        };
+
+        let refreshInterval;
+        let countdownInterval;
+        let secondsLeft = 60;
+
+        function parseNDJSON(text) {
+            const members = [];
+            const lines = text.trim().split('\n');
+            for (const line of lines) {
+                if (line) {
+                    try {
+                        const data = JSON.parse(line);
+                        if (data.result) {
+                            members.push(data.result);
+                        }
+                    } catch (e) {
+                        console.error('Error parsing line:', e);
+                    }
+                }
+            }
+            return members;
+        }
+
+        function startCountdown() {
+            secondsLeft = 60;
+            const countdownEl = document.getElementById('countdown');
+            const ballEl = document.getElementById('ball');
+            
+            countdownEl.textContent = secondsLeft;
+            ballEl.style.left = '10px';
+            ballEl.classList.remove('goal-scored');
+            
+            if (countdownInterval) clearInterval(countdownInterval);
+            
+            countdownInterval = setInterval(() => {
+                secondsLeft--;
+                countdownEl.textContent = secondsLeft;
+                
+                // Move ball across pitch
+                const progress = (60 - secondsLeft) / 60;
+                const containerWidth = ballEl.parentElement.offsetWidth;
+                const maxLeft = containerWidth - 50;
+                ballEl.style.left = (10 + (maxLeft * progress)) + 'px';
+                
+                // GOAL! Animation
+                if (secondsLeft === 1) {
+                    ballEl.classList.add('goal-scored');
+                }
+                
+                if (secondsLeft <= 0) {
+                    secondsLeft = 60;
+                }
+            }, 1000);
+        }
+
+        async function fetchHeadcount() {
+            try {
+                const url = `${CONFIG.API_BASE}/members/member/list/${CONFIG.PROGRAM_ID}`;
+                
+                const payload = {
+                    filters: {
+                        limit: 1000,
+                        offset: 0,
+                        orderBy: 'created',
+                        orderAsc: true,
+                        filterGroups: [{
+                            condition: 'AND',
+                            fieldFilters: [{
+                                filterField: 'status',
+                                filterValue: 'CHECKED_IN',
+                                filterOperator: 'eq'
+                            }]
+                        }]
+                    }
+                };
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${CONFIG.API_KEY}`,
+                        'Content-Type': 'application/json',
+                        'X-Project-Key': CONFIG.PROJECT_KEY
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const text = await response.text();
+                const members = parseNDJSON(text);
+                
+                document.getElementById('count').textContent = members.length;
+                
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString('en-US', { 
+                    hour: 'numeric', 
+                    minute: '2-digit'
+                });
+                document.getElementById('updated').textContent = `Updated at ${timeStr}`;
+                
+            } catch (error) {
+                console.error('Error fetching headcount:', error);
+                document.getElementById('count').textContent = '?';
+                document.getElementById('updated').textContent = 'Error loading data';
+            }
+        }
+
+        // Initial load
+        fetchHeadcount();
+        startCountdown();
+
+        // Auto-refresh every 60 seconds
+        refreshInterval = setInterval(() => {
+            fetchHeadcount();
+            startCountdown();
+        }, 60000);
+
+        // Refresh when page becomes visible again (mobile)
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                fetchHeadcount();
+                startCountdown();
+            }
+        });
+    </script>
+</body>
+</html>
+
