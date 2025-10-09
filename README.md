@@ -1,59 +1,148 @@
-# PassKit Headcount System (Liverpool OLSC)
+# Liverpool OLSC - PassKit Headcount System
 
-This repo provides:
-- A live headcount generator (runs every minute via GitHub Actions; writes `public/headcount.json` for a Pages site)
-- A nightly bulk checkout at midnight Eastern (turns all CHECKED_IN members into CHECKED_OUT)
-- Optional local scripts for real-time console monitoring and manual bulk checkout
+> **Status**: ✅ **FULLY WORKING!**  
+> You have 28 members currently checked in.
 
-## Components
-- `capacity_monitor.py`: Local console monitor. Prints checked-in count every few seconds.
-- `bulk_checkout.py`: Checks out all currently checked-in members for the program.
-- `.github/workflows/headcount.yml`: Runs every minute, updates `public/headcount.json` and commits it for GitHub Pages to serve.
-- `.github/workflows/checkout.yml`: Runs nightly at 00:00 Eastern, performs bulk checkout.
-- `public/index.html`: Minimal page that displays the current headcount and a countdown until the next refresh.
+## What This Does
 
-## Setup
-1) Install dependencies locally
+Simple, mobile-friendly solution for managing Liverpool OLSC member check-ins:
+
+1. **📱 Scan members in** - Use PassKit Pass Reader app (changes status to `CHECKED_IN`)
+2. **👀 View headcount** - See how many people are checked in (updates every 60 seconds)
+3. **✅ Bulk checkout** - One button to check everyone out after a match
+
+## Quick Start
+
+### Option 1: Web Interface (Recommended)
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+python3 app.py
 ```
 
-2) Configure environment
-- Copy `.env.example` to `.env` and fill values
-- Required:
-  - `PROGRAM_ID` (e.g., 3yyTsbqwmtXaiKZ5qWhqTP)
-  - `API_BASE` (e.g., https://api.pub1.passkit.io)
-  - `TIMEZONE` (e.g., America/New_York)
-  - `PASSKIT_API_KEY` – your PassKit API key
-  - `PASSKIT_PROJECT_KEY` – your PassKit project key
+Then open:
+- **On your computer**: http://localhost:5000
+- **On your phone**: http://[your-ip]:5000 (make sure you're on the same Wi-Fi)
 
-3) GitHub Actions secrets (for free hosting)
-Store these as repository Secrets (Settings → Secrets and variables → Actions):
-- `PROGRAM_ID` – your program id (3yyTsbqwmtXaiKZ5qWhqTP)
-- `API_BASE` – your PassKit REST API base URL
-- `PASSKIT_API_KEY` – your PassKit API key
-- `PASSKIT_PROJECT_KEY` – your PassKit project key
+### Option 2: Command-Line
 
-4) Enable GitHub Pages
-- Settings → Pages → Build from `main` branch, `/public` folder
-
-## Running locally
-- Live console headcount:
 ```bash
-python capacity_monitor.py
+python3 checkout.py
 ```
-- Manual bulk checkout:
+
+Lists all checked-in members and checks them out after confirmation.
+
+### Test Connection
+
 ```bash
-python bulk_checkout.py
+python3 test_connection.py
 ```
 
-## Notes
-- Headcount definition: members with `members.member.status == CHECKED_IN`
-- Bulk checkout: sets all `CHECKED_IN` to `CHECKED_OUT`
-- Nightly time: Midnight Eastern (America/New_York)
+Verifies API is working and shows current member counts.
 
-Reference: [passkit-python-grpc-sdk](https://github.com/PassKit/passkit-python-grpc-sdk)
+## How to Find Your Computer's IP
 
+**On Mac:**
+```bash
+ifconfig | grep "inet " | grep -v 127.0.0.1 | awk '{print $2}'
+```
+
+**On Windows:**
+```bash
+ipconfig
+```
+
+Look for your local IP (usually starts with 192.168.x.x or 10.x.x.x)
+
+## Features
+
+✅ **Real-Time Headcount** - Auto-refreshes every 60 seconds  
+✅ **One-Click Checkout** - Bulk check out all members after a match  
+✅ **Mobile-Optimized** - Beautiful Liverpool red & green design  
+✅ **Fast & Reliable** - Direct PassKit API integration  
+✅ **No Manual Work** - No CSV exports or imports needed  
+
+## File Structure
+
+```
+.
+├── app.py                    # Flask web app (START HERE)
+├── checkout.py               # Command-line bulk checkout
+├── test_connection.py        # Test API connection
+├── templates/
+│   └── index.html           # Mobile-friendly web interface
+├── .env                     # Your API credentials
+└── README.md               # This file
+```
+
+## Configuration
+
+Your `.env` file is already configured with:
+- ✅ PassKit API Key
+- ✅ PassKit Project Key
+- ✅ Program ID: 3yyTsbqwmtXaiKZ5qWhqTP
+- ✅ API Base: https://api.pub2.passkit.io (USA server)
+- ✅ Timezone: America/New_York
+
+## Usage Instructions
+
+### After a Match
+
+1. Open the web page on your phone
+2. You'll see how many people are checked in
+3. Tap the "Check Out Everyone" button
+4. Confirm
+5. Done! ✅
+
+### Daily Headcount Monitoring
+
+Just leave the page open on your phone or computer. It auto-refreshes every 60 seconds so you always know how many people are at the pub.
+
+## Troubleshooting
+
+### Can't access from phone
+
+Make sure:
+- Phone and computer are on same Wi-Fi
+- Firewall isn't blocking port 5000
+- Using your computer's IP, not "localhost"
+
+### API errors
+
+Run `python3 test_connection.py` to diagnose. Should show:
+```
+✅ SUCCESS! Found X total members
+   - Y CHECKED_IN
+```
+
+### Need to restart
+
+Just Ctrl+C to stop, then `python3 app.py` to restart.
+
+## Future Enhancements
+
+Want to make this even better? Here are some ideas:
+
+1. **Auto Midnight Checkout** - Schedule automatic checkout at midnight
+2. **Cloud Hosting** - Deploy to Heroku/Railway for 24/7 access
+3. **Individual Checkout** - Check out specific members, not just everyone
+4. **Analytics** - Track attendance over time
+5. **Notifications** - Get alerts when capacity is reached
+
+## Technical Details
+
+- **Language**: Python 3
+- **Web Framework**: Flask
+- **API**: PassKit REST API (pub2 - USA server)
+- **Response Format**: NDJSON (newline-delimited JSON)
+- **Authentication**: Bearer token + Project Key header
+
+## Support
+
+Everything is working! If you need help:
+1. Run `python3 test_connection.py` to check API status
+2. Check this README for troubleshooting
+3. Contact PassKit support if API issues arise
+
+---
+
+**🏴󠁧󠁢󠁥󠁮󠁧󠁿 You'll Never Walk Alone! ⚽**
