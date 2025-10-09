@@ -3,7 +3,7 @@
 ## What This Does
 
 Creates a **public, read-only** headcount display at:
-`https://[your-username].github.io/DigID/`
+`https://teotauy.github.io/DigID/`
 
 - ✅ Shows live headcount
 - ✅ Auto-refreshes every 60 seconds
@@ -33,7 +33,7 @@ git push origin main
 
 ### 3. Enable GitHub Pages
 
-1. Go to your GitHub repo: https://github.com/[your-username]/DigID
+1. Go to your GitHub repo: https://github.com/teotauy/DigID
 2. Click **Settings** (top right)
 3. Click **Pages** (left sidebar)
 4. Under "Build and deployment":
@@ -50,7 +50,7 @@ GitHub will build and deploy your site automatically.
 
 Your live headcount will be at:
 ```
-https://[your-username].github.io/DigID/
+https://teotauy.github.io/DigID/
 ```
 
 Share this URL with anyone! They can see the headcount but can't check people out.
