@@ -47,22 +47,106 @@ def get_passkit_headers():
         "X-Project-Key": PASSKIT_CONFIG["PROJECT_KEY"]
     }
 
-def create_passkit_member(member_data):
+def check_member_exists(email, external_id=None):
+    """
+    Check if a member already exists in PassKit.
+    
+    Args:
+        email (str): Member's email address
+        external_id (str): Optional external ID to check
+        
+    Returns:
+        dict: Existing member data if found, None if not found
+    """
+    try:
+        # Search by email first
+        url = f"{PASSKIT_CONFIG['API_BASE']}/members/member/list/{PASSKIT_CONFIG['PROGRAM_ID']}"
+        
+        payload = {
+            "filters": {
+                "limit": 100,
+                "offset": 0,
+                "filterGroups": [{
+                    "condition": "AND",
+                    "fieldFilters": [{
+                        "filterField": "person.emailAddress",
+                        "filterValue": email,
+                        "filterOperator": "eq"
+                    }]
+                }]
+            }
+        }
+        
+        response = requests.post(url, headers=get_passkit_headers(), json=payload, timeout=30)
+        response.raise_for_status()
+        
+        # Parse NDJSON response
+        for line in response.text.strip().split('\n'):
+            if line:
+                try:
+                    data = json.loads(line)
+                    if 'result' in data:
+                        return data['result']
+                except json.JSONDecodeError:
+                    pass
+        
+        # If not found by email and external_id provided, check by external_id
+        if external_id:
+            payload["filters"]["filterGroups"][0]["fieldFilters"][0] = {
+                "filterField": "externalId",
+                "filterValue": external_id,
+                "filterOperator": "eq"
+            }
+            
+            response = requests.post(url, headers=get_passkit_headers(), json=payload, timeout=30)
+            response.raise_for_status()
+            
+            for line in response.text.strip().split('\n'):
+                if line:
+                    try:
+                        data = json.loads(line)
+                        if 'result' in data:
+                            return data['result']
+                    except json.JSONDecodeError:
+                        pass
+        
+        return None
+        
+    except Exception as e:
+        print(f"❌ Error checking member existence: {e}")
+        return None
+
+def create_passkit_member(member_data, send_welcome_email=True):
     """
     Create a new member in PassKit and return the pass URL.
     
     Args:
         member_data (dict): Member information from Squarespace form
+        send_welcome_email (bool): Whether to trigger PassKit's welcome email
         
     Returns:
         dict: Result with success status, member_id, and pass_url
     """
+    # Check if member already exists
+    existing_member = check_member_exists(member_data["email"], member_data.get("external_id"))
+    
+    if existing_member:
+        print(f"⚠️ Member already exists: {member_data['email']}")
+        return {
+            "success": True,
+            "member_id": existing_member.get("id"),
+            "pass_url": get_member_pass_url(existing_member.get("id")),
+            "member_data": member_data,
+            "already_exists": True,
+            "message": "Member already exists, no duplicate created"
+        }
+    
     url = f"{PASSKIT_CONFIG['API_BASE']}/members/member"
     
     # Prepare member data for PassKit
     payload = {
         "programId": PASSKIT_CONFIG["PROGRAM_ID"],
-        "externalId": member_data.get("external_id", f"sq_{member_data['email']}"),
+        "externalId": member_data.get("external_id", f"sq_{member_data['email']}_{int(datetime.now().timestamp())}"),
         "person": {
             "forename": member_data.get("first_name", ""),
             "surname": member_data.get("last_name", ""),
@@ -77,6 +161,10 @@ def create_passkit_member(member_data):
             "source": "Squarespace Form"
         }
     }
+    
+    # Try to trigger PassKit's built-in welcome email
+    if send_welcome_email:
+        payload["sendWelcomeEmail"] = True
     
     try:
         response = requests.post(url, headers=get_passkit_headers(), json=payload, timeout=30)
@@ -214,31 +302,114 @@ def send_welcome_email(member_data, pass_url, delay_hours=0):
     
     return True
 
-def process_squarespace_form_data(form_data):
+def process_squarespace_form_data(form_data, use_passkit_email=True):
     """
     Process form data from Squarespace webhook or CSV export.
     
     Args:
         form_data (dict): Form submission data from Squarespace
+        use_passkit_email (bool): Whether to use PassKit's built-in email or send custom
     """
     print(f"🔄 Processing new member: {form_data.get('email')}")
     
     # Create member in PassKit
-    result = create_passkit_member(form_data)
+    result = create_passkit_member(form_data, send_welcome_email=use_passkit_email)
     
     if result["success"]:
-        print(f"✅ Created PassKit member: {result['member_id']}")
-        
-        # Send welcome email
-        if result["pass_url"]:
-            send_welcome_email(form_data, result["pass_url"])
-            print(f"📧 Welcome email sent to {form_data['email']}")
+        if result.get("already_exists"):
+            print(f"⚠️ Member already exists: {result['message']}")
         else:
-            print(f"❌ Could not get pass URL for {form_data['email']}")
+            print(f"✅ Created PassKit member: {result['member_id']}")
+        
+        # Only send custom email if not using PassKit's built-in email
+        if not use_passkit_email and result["pass_url"] and not result.get("already_exists"):
+            send_welcome_email(form_data, result["pass_url"])
+            print(f"📧 Custom welcome email sent to {form_data['email']}")
+        elif use_passkit_email and not result.get("already_exists"):
+            print(f"📧 PassKit welcome email triggered for {form_data['email']}")
+        elif result.get("already_exists"):
+            print(f"ℹ️ No email sent - member already exists")
     else:
         print(f"❌ Failed to create member: {result['error']}")
     
     return result
+
+def process_multiple_memberships(transaction_data):
+    """
+    Process multiple memberships from a single Squarespace transaction.
+    
+    Args:
+        transaction_data (dict): Transaction data containing multiple members
+        
+    Expected format:
+    {
+        "transaction_id": "txn_123",
+        "customer_email": "primary@example.com",
+        "members": [
+            {
+                "email": "member1@example.com",
+                "first_name": "John",
+                "last_name": "Smith",
+                "phone": "+1234567890",
+                "membership_type": "Standard"
+            },
+            {
+                "email": "member2@example.com", 
+                "first_name": "Jane",
+                "last_name": "Smith",
+                "phone": "+1234567891",
+                "membership_type": "Standard"
+            }
+        ]
+    }
+    """
+    print(f"🛒 Processing transaction with {len(transaction_data['members'])} memberships")
+    print(f"📧 Primary customer: {transaction_data.get('customer_email')}")
+    
+    results = []
+    successful_creations = 0
+    duplicates_found = 0
+    errors = 0
+    
+    for i, member_data in enumerate(transaction_data["members"], 1):
+        print(f"\n👤 Processing member {i}/{len(transaction_data['members'])}: {member_data['email']}")
+        
+        # Add transaction context to member data
+        member_data["transaction_id"] = transaction_data.get("transaction_id")
+        member_data["transaction_position"] = i
+        member_data["total_members"] = len(transaction_data["members"])
+        
+        # Create external ID that includes transaction info to avoid duplicates
+        member_data["external_id"] = f"sq_{transaction_data.get('transaction_id', 'txn')}_{i}_{member_data['email']}"
+        
+        result = process_squarespace_form_data(member_data, use_passkit_email=True)
+        results.append(result)
+        
+        if result["success"]:
+            if result.get("already_exists"):
+                duplicates_found += 1
+            else:
+                successful_creations += 1
+        else:
+            errors += 1
+    
+    # Summary
+    print(f"\n📊 Transaction Processing Summary:")
+    print(f"  ✅ New members created: {successful_creations}")
+    print(f"  ⚠️ Duplicates found: {duplicates_found}")
+    print(f"  ❌ Errors: {errors}")
+    print(f"  📧 Total processed: {len(results)}")
+    
+    return {
+        "transaction_id": transaction_data.get("transaction_id"),
+        "results": results,
+        "summary": {
+            "successful_creations": successful_creations,
+            "duplicates_found": duplicates_found,
+            "errors": errors,
+            "total_processed": len(results)
+        }
+    }
 
 def process_csv_export(csv_file_path):
     """

@@ -27,15 +27,43 @@ def handle_squarespace_webhook():
     """
     Handle form submissions from Squarespace.
     
-    Expected payload format from Squarespace:
+    Expected payload formats:
+    
+    Single membership:
     {
         "formName": "Membership Application",
         "data": {
             "firstName": "John",
-            "lastName": "Smith",
+            "lastName": "Smith", 
             "email": "john@example.com",
             "phone": "+1234567890",
             "membershipType": "Premium"
+        },
+        "timestamp": "2025-01-09T14:30:00Z"
+    }
+    
+    Multiple memberships (one transaction):
+    {
+        "formName": "Family Membership",
+        "transactionId": "txn_123456",
+        "customerEmail": "primary@example.com",
+        "data": {
+            "members": [
+                {
+                    "firstName": "John",
+                    "lastName": "Smith",
+                    "email": "john@example.com",
+                    "phone": "+1234567890",
+                    "membershipType": "Standard"
+                },
+                {
+                    "firstName": "Jane", 
+                    "lastName": "Smith",
+                    "email": "jane@example.com",
+                    "phone": "+1234567891",
+                    "membershipType": "Standard"
+                }
+            ]
         },
         "timestamp": "2025-01-09T14:30:00Z"
     }
@@ -49,44 +77,107 @@ def handle_squarespace_webhook():
         
         print(f"📨 Received webhook: {payload.get('formName', 'Unknown Form')}")
         
-        # Extract form data
-        form_data = payload.get('data', {})
-        
-        if not form_data.get('email'):
-            return jsonify({"error": "No email address provided"}), 400
-        
-        # Map Squarespace form fields to our format
-        member_data = {
-            "email": form_data.get('email', ''),
-            "first_name": form_data.get('firstName', ''),
-            "last_name": form_data.get('lastName', ''),
-            "phone": form_data.get('phone', ''),
-            "membership_type": form_data.get('membershipType', 'Standard'),
-            "external_id": f"sq_{form_data.get('email', '')}",
-            "source": "Squarespace Webhook",
-            "submission_time": payload.get('timestamp', datetime.now().isoformat())
-        }
-        
-        # Process the member
-        result = process_squarespace_form_data(member_data)
-        
-        if result["success"]:
-            return jsonify({
-                "success": True,
-                "message": "Member created successfully",
-                "member_id": result["member_id"],
-                "pass_url": result["pass_url"]
-            }), 200
+        # Check if this is a multi-membership transaction
+        if payload.get('data', {}).get('members'):
+            # Multiple memberships in one transaction
+            return handle_multiple_memberships(payload)
         else:
-            return jsonify({
-                "success": False,
-                "message": "Failed to create member",
-                "error": result["error"]
-            }), 500
+            # Single membership
+            return handle_single_membership(payload)
             
     except Exception as e:
         print(f"❌ Webhook error: {e}")
         return jsonify({"error": str(e)}), 500
+
+def handle_single_membership(payload):
+    """Handle single membership submission."""
+    form_data = payload.get('data', {})
+    
+    if not form_data.get('email'):
+        return jsonify({"error": "No email address provided"}), 400
+    
+    # Map Squarespace form fields to our format
+    member_data = {
+        "email": form_data.get('email', ''),
+        "first_name": form_data.get('firstName', ''),
+        "last_name": form_data.get('lastName', ''),
+        "phone": form_data.get('phone', ''),
+        "membership_type": form_data.get('membershipType', 'Standard'),
+        "external_id": f"sq_{form_data.get('email', '')}_{int(datetime.now().timestamp())}",
+        "source": "Squarespace Webhook",
+        "submission_time": payload.get('timestamp', datetime.now().isoformat())
+    }
+    
+    # Process the member
+    result = process_squarespace_form_data(member_data, use_passkit_email=True)
+    
+    if result["success"]:
+        response_data = {
+            "success": True,
+            "message": "Member processed successfully",
+            "member_id": result["member_id"],
+            "pass_url": result["pass_url"]
+        }
+        
+        if result.get("already_exists"):
+            response_data["message"] = "Member already exists"
+            response_data["already_exists"] = True
+        
+        return jsonify(response_data), 200
+    else:
+        return jsonify({
+            "success": False,
+            "message": "Failed to create member",
+            "error": result["error"]
+        }), 500
+
+def handle_multiple_memberships(payload):
+    """Handle multiple memberships in one transaction."""
+    from squarespace_to_passkit import process_multiple_memberships
+    
+    # Extract transaction data
+    transaction_data = {
+        "transaction_id": payload.get('transactionId', f"txn_{int(datetime.now().timestamp())}"),
+        "customer_email": payload.get('customerEmail', ''),
+        "members": []
+    }
+    
+    # Process each member
+    for member_form in payload.get('data', {}).get('members', []):
+        member_data = {
+            "email": member_form.get('email', ''),
+            "first_name": member_form.get('firstName', ''),
+            "last_name": member_form.get('lastName', ''),
+            "phone": member_form.get('phone', ''),
+            "membership_type": member_form.get('membershipType', 'Standard')
+        }
+        
+        if member_data["email"]:
+            transaction_data["members"].append(member_data)
+        else:
+            print(f"⚠️ Skipping member with no email address")
+    
+    if not transaction_data["members"]:
+        return jsonify({"error": "No valid members provided"}), 400
+    
+    # Process the transaction
+    result = process_multiple_memberships(transaction_data)
+    
+    return jsonify({
+        "success": True,
+        "message": f"Processed {len(result['results'])} members",
+        "transaction_id": result["transaction_id"],
+        "summary": result["summary"],
+        "results": [
+            {
+                "email": r["member_data"]["email"],
+                "success": r["success"],
+                "member_id": r.get("member_id"),
+                "already_exists": r.get("already_exists", False)
+            }
+            for r in result["results"]
+        ]
+    }), 200
 
 @app.route('/webhook/test', methods=['GET', 'POST'])
 def test_webhook():

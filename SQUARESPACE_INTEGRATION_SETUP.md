@@ -78,12 +78,22 @@ This integration automatically creates PassKit members and sends welcome emails 
 
 ### Step 1: Prepare Your Squarespace Form
 
-Your Squarespace form should include these fields:
+#### Single Membership Form Fields:
 - **First Name** (required)
 - **Last Name** (required)
 - **Email Address** (required)
 - **Phone Number** (optional)
 - **Membership Type** (dropdown: Standard, Premium, etc.)
+
+#### Multiple Membership Form Fields:
+For family/group memberships, your form should collect:
+- **Primary Customer Email** (for transaction tracking)
+- **Member 1**: First Name, Last Name, Email, Phone, Membership Type
+- **Member 2**: First Name, Last Name, Email, Phone, Membership Type
+- **Member 3**: First Name, Last Name, Email, Phone, Membership Type
+- (Add more fields as needed)
+
+**Important:** Each member must have their own unique email address.
 
 ### Step 2: Set Up Email Service
 
@@ -219,6 +229,72 @@ Set up monitoring for:
 - **Pass creation** - Monitor PassKit API success
 - **Error rates** - Alert on failures
 
+## 🔧 Edge Cases & Special Handling
+
+### Multiple Memberships in One Transaction
+
+**Scenario:** Customer buys 2+ memberships (e.g., family membership)
+
+**How it works:**
+1. **Squarespace form** collects multiple member details
+2. **Webhook receives** transaction with multiple members
+3. **System processes** each member individually
+4. **Duplicate checking** prevents duplicate members
+5. **Welcome emails** sent to each member's email
+
+**Expected webhook payload:**
+```json
+{
+  "formName": "Family Membership",
+  "transactionId": "txn_123456",
+  "customerEmail": "primary@example.com",
+  "data": {
+    "members": [
+      {
+        "firstName": "John",
+        "lastName": "Smith",
+        "email": "john@example.com",
+        "phone": "+1234567890",
+        "membershipType": "Standard"
+      },
+      {
+        "firstName": "Jane",
+        "lastName": "Smith", 
+        "email": "jane@example.com",
+        "phone": "+1234567891",
+        "membershipType": "Standard"
+      }
+    ]
+  }
+}
+```
+
+### Duplicate Prevention
+
+**How duplicates are prevented:**
+1. **Email check** - Searches existing members by email
+2. **External ID check** - Uses transaction-based external IDs
+3. **No duplicate creation** - Returns existing member if found
+4. **No duplicate emails** - Skips sending welcome emails for existing members
+
+**External ID format:**
+- Single membership: `sq_email@example.com_timestamp`
+- Multiple memberships: `sq_txn_123456_1_email@example.com`
+
+### PassKit Welcome Email vs Custom Email
+
+**Two options available:**
+
+#### Option 1: PassKit Built-in Email (Recommended)
+- **Advantages:** Uses PassKit's professional templates, automatic delivery
+- **Setup:** Add `"sendWelcomeEmail": true` to member creation
+- **Result:** PassKit sends welcome email with pass download link
+
+#### Option 2: Custom Email
+- **Advantages:** Full control over content, Liverpool OLSC branding
+- **Setup:** Set `use_passkit_email=False` in processing
+- **Result:** Custom Liverpool OLSC branded email sent
+
 ## 🔧 Troubleshooting
 
 ### Common Issues
@@ -230,6 +306,14 @@ Set up monitoring for:
 - Verify webhook URL is accessible
 - Check firewall/network settings
 - Test with curl or Postman
+
+#### 2. Multiple Memberships Not Processing
+**Symptoms:** Only first member processed, others ignored
+**Solutions:**
+- Verify webhook payload includes `members` array
+- Check that each member has unique email
+- Ensure transaction ID is provided
+- Test with `test_multiple_memberships.py`
 
 #### 2. PassKit Member Creation Fails
 **Symptoms:** 400/401 errors from PassKit API
