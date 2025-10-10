@@ -224,7 +224,7 @@
                         <div class="button-description">Opens the local web interface with live headcount and checkout button</div>
                     </button>
                 </div>
-                <div class="command-example">python3 app.py</div>
+                <div class="command-example">python3 app.py<br>python3 run_with_logging.py app.py</div>
                 <p><strong>What it does:</strong> Starts the Flask web server on port 5000. Open http://localhost:5000 in your browser to see live headcount and bulk checkout.</p>
             </div>
 
@@ -237,7 +237,7 @@
                         <div class="button-description">Changes all CHECKED_IN members to CHECKED_OUT status</div>
                     </button>
                 </div>
-                <div class="command-example">python3 checkout.py</div>
+                <div class="command-example">python3 checkout.py<br>python3 run_with_logging.py checkout.py</div>
                 <p><strong>What it does:</strong> Lists all checked-in members and asks for confirmation before checking them all out. Use this after matches end.</p>
             </div>
 
@@ -255,7 +255,7 @@
                         <div class="button-description">Updates only members with "Some inferior side" placeholder</div>
                     </button>
                 </div>
-                <div class="command-example">python3 match_updates.py<br>python3 update_updating_members.py</div>
+                <div class="command-example">python3 match_updates.py<br>python3 run_with_logging.py match_updates.py<br><br>python3 update_updating_members.py<br>python3 run_with_logging.py update_updating_members.py</div>
                 <p><strong>What they do:</strong> First button updates all passes with next match. Second button only updates new members who still have the placeholder text.</p>
             </div>
 
@@ -280,9 +280,14 @@
                         Test API Connection
                         <div class="button-description">Verifies PassKit API is working and shows current counts</div>
                     </button>
+                    <button class="control-button" onclick="showCheckedInList()">
+                        <span class="status-indicator status-ready"></span>
+                        Show Checked-In Members
+                        <div class="button-description">Lists all currently checked-in members</div>
+                    </button>
                 </div>
-                <div class="command-example">python3 test_connection.py</div>
-                <p><strong>What it does:</strong> Tests your PassKit API connection and shows current member status counts.</p>
+                <div class="command-example">python3 test_connection.py<br>python3 run_with_logging.py test_connection.py</div>
+                <p><strong>What they do:</strong> First button tests your PassKit API connection. Second button shows current checked-in members list.</p>
             </div>
 
             <div class="warning">
@@ -297,8 +302,12 @@
 
             <div class="info-box">
                 <h3>📱 Current System Status</h3>
-                <p><strong>Automatic:</strong> Notifications check every 1 minute for headcount changes</p>
-                <p><strong>Manual:</strong> All other operations require you to trigger them</p>
+                <div id="system-status">
+                    <p><strong>🔔 Notifications:</strong> <span id="notifications-status">Checking...</span></p>
+                    <p><strong>🌐 Web App:</strong> <span id="webapp-status">Checking...</span></p>
+                    <p><strong>👥 Checked In:</strong> <span id="headcount-status">Loading...</span></p>
+                    <p><strong>💾 Status API:</strong> <span id="api-status">Not running</span></p>
+                </div>
                 <p><strong>Cost:</strong> $0 additional - everything runs on your existing setup</p>
             </div>
         </div>
@@ -311,12 +320,156 @@
     </div>
 
     <script>
+        let systemStatus = null;
+        
+        // Fetch system status on page load
+        async function fetchStatus() {
+            try {
+                // Try to connect to local status API
+                const response = await fetch('http://localhost:5002/api/status', {
+                    method: 'GET',
+                    timeout: 3000
+                });
+                
+                if (response.ok) {
+                    systemStatus = await response.json();
+                    updateStatusDisplay();
+                } else {
+                    throw new Error('Status API not available');
+                }
+            } catch (error) {
+                // Status API not running, show static version
+                console.log('Status API not available, showing static version');
+                showStaticStatus();
+            }
+        }
+        
+        function updateStatusDisplay() {
+            if (!systemStatus) return;
+            
+            // Update process status indicators
+            const notificationsStatus = systemStatus.processes['notifications.py'];
+            const appStatus = systemStatus.processes['app.py'];
+            
+            // Update system status section
+            document.getElementById('notifications-status').textContent = 
+                notificationsStatus.running ? `✅ Running (started ${notificationsStatus.started})` : '❌ Stopped';
+            document.getElementById('webapp-status').textContent = 
+                appStatus.running ? `✅ Running (started ${appStatus.started})` : '❌ Stopped';
+            document.getElementById('headcount-status').textContent = 
+                systemStatus.checked_in ? `${systemStatus.checked_in.count} people` : 'Unknown';
+            document.getElementById('api-status').textContent = '✅ Connected';
+            
+            // Update status indicators
+            document.querySelectorAll('.status-indicator').forEach(indicator => {
+                const button = indicator.closest('.control-button');
+                if (button) {
+                    const buttonText = button.textContent;
+                    if (buttonText.includes('Notifications')) {
+                        indicator.className = `status-indicator ${notificationsStatus.running ? 'status-running' : 'status-ready'}`;
+                        if (notificationsStatus.running) {
+                            button.querySelector('.button-description').textContent = 
+                                `Running (started ${notificationsStatus.started})`;
+                        }
+                    } else if (buttonText.includes('Web App')) {
+                        indicator.className = `status-indicator ${appStatus.running ? 'status-running' : 'status-ready'}`;
+                        if (appStatus.running) {
+                            button.querySelector('.button-description').textContent = 
+                                `Running (started ${appStatus.started})`;
+                        }
+                    }
+                }
+            });
+            
+            // Update last run times (only if not already updated)
+            const lastRuns = systemStatus.last_runs;
+            document.querySelectorAll('.control-button').forEach(button => {
+                const buttonText = button.textContent;
+                const description = button.querySelector('.button-description');
+                
+                // Only add last run time if not already present
+                if (!description.innerHTML.includes('Last run:')) {
+                    if (buttonText.includes('Check Everyone Out')) {
+                        description.innerHTML += `<br><small>Last run: ${lastRuns['checkout.py']}</small>`;
+                    } else if (buttonText.includes('Update All Passes')) {
+                        description.innerHTML += `<br><small>Last run: ${lastRuns['match_updates.py']}</small>`;
+                    } else if (buttonText.includes('Update New Members Only')) {
+                        description.innerHTML += `<br><small>Last run: ${lastRuns['update_updating_members.py']}</small>`;
+                    } else if (buttonText.includes('Test API Connection')) {
+                        description.innerHTML += `<br><small>Last run: ${lastRuns['test_connection.py']}</small>`;
+                    }
+                }
+            });
+        }
+        
+        function showStaticStatus() {
+            // Show static status when API is not available
+            document.querySelectorAll('.status-indicator').forEach(indicator => {
+                indicator.className = 'status-indicator status-ready';
+            });
+        }
+        
+        function showCheckedInMembers(data) {
+            // Create a modal to show checked-in members
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.8);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 1000;
+            `;
+            
+            const memberList = data.members.slice(0, 20).map(name => `• ${name}`).join('<br>');
+            const moreText = data.members.length > 20 ? `<br>... and ${data.members.length - 20} more` : '';
+            
+            modal.innerHTML = `
+                <div style="
+                    background: white;
+                    padding: 30px;
+                    border-radius: 15px;
+                    max-width: 500px;
+                    max-height: 80vh;
+                    overflow-y: auto;
+                    text-align: center;
+                ">
+                    <h3 style="color: #c8102e; margin-bottom: 20px;">👥 Currently Checked In</h3>
+                    <div style="
+                        background: #f8f9fa;
+                        padding: 20px;
+                        border-radius: 10px;
+                        margin: 20px 0;
+                        text-align: left;
+                        font-size: 14px;
+                        line-height: 1.6;
+                    ">
+                        <strong>Count: ${data.count} people</strong><br><br>
+                        ${memberList}${moreText}
+                    </div>
+                    <button onclick="this.parentElement.parentElement.remove()" style="
+                        background: #c8102e;
+                        color: white;
+                        border: none;
+                        padding: 10px 20px;
+                        border-radius: 8px;
+                        cursor: pointer;
+                        font-size: 16px;
+                    ">Close</button>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+        }
+        
         function runCommand(scriptName) {
-            // This would need to be connected to your local machine
-            // For now, just show what command would run
             const command = `python3 ${scriptName}`;
             
-            // Create a simple modal to show the command
+            // Create a modal to show the command
             const modal = document.createElement('div');
             modal.style.cssText = `
                 position: fixed;
@@ -347,8 +500,19 @@
                         border-radius: 8px;
                         font-family: monospace;
                         margin: 20px 0;
+                        word-break: break-all;
                     ">${command}</div>
                     <p style="margin-bottom: 20px;">Run this command in your terminal:</p>
+                    <button onclick="navigator.clipboard.writeText('${command}').then(() => alert('Copied!'))" style="
+                        background: #00a65a;
+                        color: white;
+                        border: none;
+                        padding: 10px 20px;
+                        border-radius: 8px;
+                        cursor: pointer;
+                        font-size: 16px;
+                        margin-right: 10px;
+                    ">📋 Copy</button>
                     <button onclick="this.parentElement.parentElement.remove()" style="
                         background: #c8102e;
                         color: white;
@@ -363,13 +527,27 @@
             
             document.body.appendChild(modal);
             
-            // Auto-close after 5 seconds
+            // Auto-close after 10 seconds
             setTimeout(() => {
                 if (modal.parentElement) {
                     modal.remove();
                 }
-            }, 5000);
+            }, 10000);
         }
+        
+        function showCheckedInList() {
+            if (systemStatus && systemStatus.checked_in) {
+                showCheckedInMembers(systemStatus.checked_in);
+            } else {
+                alert('Status API not available. Run "python3 status_api.py" to enable real-time status.');
+            }
+        }
+        
+        // Load status on page load
+        document.addEventListener('DOMContentLoaded', fetchStatus);
+        
+        // Refresh status every 30 seconds
+        setInterval(fetchStatus, 30000);
     </script>
 </body>
 </html>
