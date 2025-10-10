@@ -13,7 +13,13 @@ Simple, mobile-friendly solution for managing Liverpool OLSC member check-ins:
 
 ## Quick Start
 
-### Option 1: Web Interface (Recommended)
+### Option 1: GitHub Pages Control Panel (Easiest)
+
+Access the control panel from anywhere:
+- **Control Panel**: https://teotauy.github.io/OLSCDig/control-panel.html
+- **Read-only Headcount**: https://teotauy.github.io/OLSCDig/public/index.html
+
+### Option 2: Local Web Interface
 
 ```bash
 python3 app.py
@@ -23,7 +29,7 @@ Then open:
 - **On your computer**: http://localhost:5000
 - **On your phone**: http://[your-ip]:5000 (make sure you're on the same Wi-Fi)
 
-### Option 2: Command-Line
+### Option 3: Command-Line
 
 ```bash
 python3 checkout.py
@@ -61,6 +67,13 @@ Look for your local IP (usually starts with 192.168.x.x or 10.x.x.x)
 ✅ **Fast & Reliable** - Direct PassKit API integration  
 ✅ **No Manual Work** - No CSV exports or imports needed  
 
+## Documentation
+
+- **[📚 Complete Documentation](COMPREHENSIVE_README.md)** - Everything you need to know
+- **[🎛️ Control Panel Deployment](CONTROL_PANEL_DEPLOYMENT.md)** - GitHub Pages setup
+- **[⚽ Match Updates Setup](MATCH_UPDATES_SETUP.md)** - Automated fixture updates
+- **[🔔 Pushover Setup](PUSHOVER_SETUP.md)** - Notification system setup
+
 ## File Structure
 
 ```
@@ -68,6 +81,8 @@ Look for your local IP (usually starts with 192.168.x.x or 10.x.x.x)
 ├── app.py                    # Flask web app (START HERE)
 ├── checkout.py               # Command-line bulk checkout
 ├── test_connection.py        # Test API connection
+├── control-panel.html        # GitHub Pages control panel
+├── COMPREHENSIVE_README.md   # Complete documentation
 ├── templates/
 │   └── index.html           # Mobile-friendly web interface
 ├── .env                     # Your API credentials

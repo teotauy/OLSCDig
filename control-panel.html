@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Liverpool OLSC - Control Panel</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #c8102e 0%, #00a65a 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #c8102e 0%, #d81d42 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 16px;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section h2 {
+            color: #c8102e;
+            font-size: 22px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .section-icon {
+            font-size: 24px;
+            margin-right: 10px;
+        }
+
+        .button-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .control-button {
+            background: linear-gradient(135deg, #c8102e 0%, #d81d42 100%);
+            color: white;
+            border: none;
+            border-radius: 15px;
+            padding: 20px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(200, 16, 46, 0.3);
+            text-decoration: none;
+            display: block;
+            text-align: center;
+        }
+
+        .control-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(200, 16, 46, 0.4);
+        }
+
+        .control-button:active {
+            transform: translateY(0);
+        }
+
+        .button-description {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-top: 8px;
+            font-weight: 400;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-running {
+            background: #00a65a;
+            animation: pulse 2s infinite;
+        }
+
+        .status-ready {
+            background: #ffc107;
+        }
+
+        .status-disabled {
+            background: #6c757d;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .info-box {
+            background: #f8f9fa;
+            border-left: 4px solid #c8102e;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 10px 10px 0;
+        }
+
+        .info-box h3 {
+            color: #c8102e;
+            margin-bottom: 10px;
+        }
+
+        .command-example {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .warning strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .footer {
+            background: #f8f9fa;
+            padding: 20px 30px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        .footer a {
+            color: #c8102e;
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 600px) {
+            .button-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .container {
+                margin: 10px;
+                border-radius: 15px;
+            }
+            
+            .header, .content {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚽ Liverpool OLSC</h1>
+            <p>Control Panel - Manual Operations</p>
+        </div>
+
+        <div class="content">
+            <div class="info-box">
+                <h3>🎯 How This Works</h3>
+                <p>This control panel provides easy access to all manual operations. Each button will run the corresponding Python script on your local machine. Make sure your computer is running and you're connected to the internet.</p>
+            </div>
+
+            <div class="section">
+                <h2><span class="section-icon">🌐</span> Web Interface</h2>
+                <div class="button-grid">
+                    <button class="control-button" onclick="runCommand('app.py')">
+                        <span class="status-indicator status-ready"></span>
+                        Start Web App
+                        <div class="button-description">Opens the local web interface with live headcount and checkout button</div>
+                    </button>
+                </div>
+                <div class="command-example">python3 app.py</div>
+                <p><strong>What it does:</strong> Starts the Flask web server on port 5000. Open http://localhost:5000 in your browser to see live headcount and bulk checkout.</p>
+            </div>
+
+            <div class="section">
+                <h2><span class="section-icon">✅</span> Bulk Checkout</h2>
+                <div class="button-grid">
+                    <button class="control-button" onclick="runCommand('checkout.py')">
+                        <span class="status-indicator status-ready"></span>
+                        Check Everyone Out
+                        <div class="button-description">Changes all CHECKED_IN members to CHECKED_OUT status</div>
+                    </button>
+                </div>
+                <div class="command-example">python3 checkout.py</div>
+                <p><strong>What it does:</strong> Lists all checked-in members and asks for confirmation before checking them all out. Use this after matches end.</p>
+            </div>
+
+            <div class="section">
+                <h2><span class="section-icon">⚽</span> Match Updates</h2>
+                <div class="button-grid">
+                    <button class="control-button" onclick="runCommand('match_updates.py')">
+                        <span class="status-indicator status-ready"></span>
+                        Update All Passes
+                        <div class="button-description">Updates ALL passes with the next Liverpool match info</div>
+                    </button>
+                    <button class="control-button" onclick="runCommand('update_updating_members.py')">
+                        <span class="status-indicator status-ready"></span>
+                        Update New Members Only
+                        <div class="button-description">Updates only members with "Some inferior side" placeholder</div>
+                    </button>
+                </div>
+                <div class="command-example">python3 match_updates.py<br>python3 update_updating_members.py</div>
+                <p><strong>What they do:</strong> First button updates all passes with next match. Second button only updates new members who still have the placeholder text.</p>
+            </div>
+
+            <div class="section">
+                <h2><span class="section-icon">🔔</span> Notifications</h2>
+                <div class="button-grid">
+                    <button class="control-button" onclick="runCommand('notifications.py')">
+                        <span class="status-indicator status-running"></span>
+                        Start Notifications
+                        <div class="button-description">Starts the automatic headcount notification system</div>
+                    </button>
+                </div>
+                <div class="command-example">python3 notifications.py</div>
+                <p><strong>What it does:</strong> Runs continuously, checking headcount every minute and sending Pushover notifications when it changes.</p>
+            </div>
+
+            <div class="section">
+                <h2><span class="section-icon">🔧</span> Testing & Diagnostics</h2>
+                <div class="button-grid">
+                    <button class="control-button" onclick="runCommand('test_connection.py')">
+                        <span class="status-indicator status-ready"></span>
+                        Test API Connection
+                        <div class="button-description">Verifies PassKit API is working and shows current counts</div>
+                    </button>
+                </div>
+                <div class="command-example">python3 test_connection.py</div>
+                <p><strong>What it does:</strong> Tests your PassKit API connection and shows current member status counts.</p>
+            </div>
+
+            <div class="warning">
+                <strong>⚠️ Important Notes:</strong>
+                <ul style="margin: 10px 0 0 20px;">
+                    <li>These buttons run scripts on your local machine - make sure it's on and connected</li>
+                    <li>Some operations (like bulk checkout) require confirmation before proceeding</li>
+                    <li>Match updates fetch live data from football-data.org API</li>
+                    <li>Notifications run continuously until you stop them (Ctrl+C)</li>
+                </ul>
+            </div>
+
+            <div class="info-box">
+                <h3>📱 Current System Status</h3>
+                <p><strong>Automatic:</strong> Notifications check every 1 minute for headcount changes</p>
+                <p><strong>Manual:</strong> All other operations require you to trigger them</p>
+                <p><strong>Cost:</strong> $0 additional - everything runs on your existing setup</p>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Liverpool OLSC PassKit Integration System</p>
+            <p>Built with ❤️ for the greatest supporters club in the world</p>
+            <p><a href="https://github.com/teotauy/OLSCDig">View on GitHub</a> | <a href="README.md">Full Documentation</a></p>
+        </div>
+    </div>
+
+    <script>
+        function runCommand(scriptName) {
+            // This would need to be connected to your local machine
+            // For now, just show what command would run
+            const command = `python3 ${scriptName}`;
+            
+            // Create a simple modal to show the command
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.8);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 1000;
+            `;
+            
+            modal.innerHTML = `
+                <div style="
+                    background: white;
+                    padding: 30px;
+                    border-radius: 15px;
+                    max-width: 500px;
+                    text-align: center;
+                ">
+                    <h3 style="color: #c8102e; margin-bottom: 20px;">🚀 Running Command</h3>
+                    <div style="
+                        background: #2d3748;
+                        color: #e2e8f0;
+                        padding: 15px;
+                        border-radius: 8px;
+                        font-family: monospace;
+                        margin: 20px 0;
+                    ">${command}</div>
+                    <p style="margin-bottom: 20px;">Run this command in your terminal:</p>
+                    <button onclick="this.parentElement.parentElement.remove()" style="
+                        background: #c8102e;
+                        color: white;
+                        border: none;
+                        padding: 10px 20px;
+                        border-radius: 8px;
+                        cursor: pointer;
+                        font-size: 16px;
+                    ">Got it!</button>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            // Auto-close after 5 seconds
+            setTimeout(() => {
+                if (modal.parentElement) {
+                    modal.remove();
+                }
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
