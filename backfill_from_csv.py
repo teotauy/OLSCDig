@@ -33,7 +33,9 @@ MEMBERSHIP_PRODUCTS = [
     "liverpool olsc membership",
     "supporters club membership",
     "annual membership",
-    "yearly membership"
+    "yearly membership",
+    "lfc brooklyn",  # Your specific product name
+    "brooklyn membership"
 ]
 
 # Exclude these products (scarves, etc.)
@@ -218,16 +220,16 @@ def process_csv_backfill(csv_file_path):
             
             for row in reader:
                 # Check if this row contains a membership product
-                product_name = row.get("Product Name", "")
+                product_name = row.get("Lineitem name", "")
                 
                 if is_membership_product(product_name):
                     customer_data = {
-                        "email": row.get("Customer Email", ""),
-                        "first_name": row.get("Customer First Name", ""),
-                        "last_name": row.get("Customer Last Name", ""),
-                        "phone": row.get("Customer Phone", ""),
-                        "order_id": row.get("Order Number", ""),
-                        "order_date": row.get("Order Date", ""),
+                        "email": row.get("Email", ""),
+                        "first_name": row.get("Product Form: Name", "").split()[0] if row.get("Product Form: Name") else "",
+                        "last_name": " ".join(row.get("Product Form: Name", "").split()[1:]) if row.get("Product Form: Name") else "",
+                        "phone": row.get("Billing Phone", ""),
+                        "order_id": row.get("Order ID", ""),
+                        "order_date": row.get("Created at", ""),
                         "product_name": product_name
                     }
                     

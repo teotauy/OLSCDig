@@ -147,6 +147,7 @@ def create_passkit_member(member_data, send_welcome_email=True):
     payload = {
         "programId": PASSKIT_CONFIG["PROGRAM_ID"],
         "externalId": member_data.get("external_id", f"sq_{member_data['email']}_{int(datetime.now().timestamp())}"),
+        "tierId": "base",  # Required tier ID for membership
         "person": {
             "forename": member_data.get("first_name", ""),
             "surname": member_data.get("last_name", ""),
@@ -168,6 +169,11 @@ def create_passkit_member(member_data, send_welcome_email=True):
     
     try:
         response = requests.post(url, headers=get_passkit_headers(), json=payload, timeout=30)
+        
+        # Debug: Print the actual error response
+        if response.status_code != 200:
+            print(f"❌ PassKit API Error {response.status_code}: {response.text}")
+        
         response.raise_for_status()
         
         result = response.json()

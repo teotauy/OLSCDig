@@ -1,0 +1,66 @@
+{
+  "backfill_date": "2025-10-10T16:54:36.569287",
+  "csv_file": "orders.csv",
+  "total_membership_purchases": 9,
+  "unique_customers": 9,
+  "existing_members": 0,
+  "created_members": 0,
+  "failed_creations": 9,
+  "created_members_list": [],
+  "failed_creations_list": [
+    {
+      "success": false,
+      "error": "400 Client Error: Bad Request for url: https://api.pub2.passkit.io/members/member",
+      "email": "wilkiewong@yahoo.com",
+      "order_id": "00962"
+    },
+    {
+      "success": false,
+      "error": "400 Client Error: Bad Request for url: https://api.pub2.passkit.io/members/member",
+      "email": "jacob.steinfield@meninblazers.com",
+      "order_id": "00961"
+    },
+    {
+      "success": false,
+      "error": "400 Client Error: Bad Request for url: https://api.pub2.passkit.io/members/member",
+      "email": "alcantaradominick@gmail.com",
+      "order_id": "00960"
+    },
+    {
+      "success": false,
+      "error": "400 Client Error: Bad Request for url: https://api.pub2.passkit.io/members/member",
+      "email": "dtoubs33@gmail.com",
+      "order_id": "00959"
+    },
+    {
+      "success": false,
+      "error": "400 Client Error: Bad Request for url: https://api.pub2.passkit.io/members/member",
+      "email": "vanderterik99@gmail.com",
+      "order_id": "00958"
+    },
+    {
+      "success": false,
+      "error": "400 Client Error: Bad Request for url: https://api.pub2.passkit.io/members/member",
+      "email": "dillon.ches@gmail.com",
+      "order_id": "00957"
+    },
+    {
+      "success": false,
+      "error": "400 Client Error: Bad Request for url: https://api.pub2.passkit.io/members/member",
+      "email": "lemieux.jenna@gmail.com",
+      "order_id": "00956"
+    },
+    {
+      "success": false,
+      "error": "400 Client Error: Bad Request for url: https://api.pub2.passkit.io/members/member",
+      "email": "tim.n3lson@gmail.com",
+      "order_id": "00955"
+    },
+    {
+      "success": false,
+      "error": "400 Client Error: Bad Request for url: https://api.pub2.passkit.io/members/member",
+      "email": "menard.joew@gmail.com",
+      "order_id": "00954"
+    }
+  ]
+}
