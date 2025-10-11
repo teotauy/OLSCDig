@@ -18,18 +18,21 @@ This system provides automated management for Liverpool OLSC (Official Liverpool
 
 ### Core Components
 1. **PassKit API Integration** - Direct API calls to PassKit's REST endpoints
-2. **Flask Web Interface** - Local web app for headcount display and bulk operations
-3. **Pushover Notifications** - Real-time headcount updates via push notifications
-4. **Match Update System** - Automated Liverpool FC fixture updates on passes
-5. **GitHub Pages Control Panel** - Remote access to manual operations
+2. **Squarespace Integration** - Automated member creation from form submissions
+3. **Flask Web Interface** - Local web app for headcount display and bulk operations
+4. **Pushover Notifications** - Real-time headcount updates via push notifications
+5. **Match Update System** - Automated Liverpool FC fixture updates on passes
+6. **GitHub Pages Control Panel** - Remote access to manual operations
 
 ### Data Flow
 ```
+Squarespace Forms → Webhook Server → PassKit API
+                           ↓
 PassKit API ←→ Python Scripts ←→ Local Web App
-                    ↓
-              Pushover Notifications
-                    ↓
-              Member Phones (iOS/Android)
+                           ↓
+                   Pushover Notifications
+                           ↓
+                   Member Phones (iOS/Android)
 ```
 
 ## 📁 File Structure & Purpose
@@ -42,7 +45,11 @@ PassKit API ←→ Python Scripts ←→ Local Web App
 ├── match_updates.py                # ⚽ Updates ALL passes with next match
 ├── update_updating_members.py      # 🔄 Updates only new members
 ├── test_connection.py              # 🔧 API connection diagnostics
-└── team_abbreviations.py           # 📝 Team name abbreviations for passes
+├── team_abbreviations.py           # 📝 Team name abbreviations for passes
+├── squarespace_webhook.py          # 🛒 Webhook server for Squarespace forms
+├── squarespace_to_passkit.py       # 🔄 Core member creation logic
+├── process_orders_csv.py           # 📊 CSV backfill for missing members
+└── backfill_from_csv.py            # 📋 Alternative CSV processing
 ```
 
 ### Configuration & Documentation
@@ -63,6 +70,29 @@ PassKit API ←→ Python Scripts ←→ Local Web App
 └── public/
     └── index.html                 # 📱 Static headcount page
 ```
+
+## 🛒 Squarespace Integration (NEW!)
+
+**Complete automation from membership purchase to PassKit pass:**
+
+### How It Works
+1. **Member purchases membership** on Squarespace
+2. **Squarespace webhook** triggers `squarespace_webhook.py`
+3. **Member data processed** by `squarespace_to_passkit.py`
+4. **PassKit member created** with all form information
+5. **Welcome email sent** automatically with pass installation link
+6. **Match updates** applied when member adds pass
+
+### Key Features
+- ✅ **Multiple memberships per transaction** (spouse, family members)
+- ✅ **Duplicate prevention** (won't create existing members)
+- ✅ **Current year filtering** (25/26 memberships only)
+- ✅ **PassKit welcome emails** (automatic)
+- ✅ **Match placeholder** ("Some inferior side" until real match data)
+- ✅ **Form data integration** (name, email, phone, preferences)
+
+### Setup
+See **[Squarespace Integration Setup](SQUARESPACE_INTEGRATION_SETUP.md)** for complete setup instructions.
 
 ## 🚀 Quick Start Guide
 
