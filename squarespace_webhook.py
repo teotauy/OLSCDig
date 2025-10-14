@@ -20,7 +20,7 @@ load_dotenv()
 app = Flask(__name__)
 
 # Webhook security (optional but recommended)
-WEBHOOK_SECRET = os.getenv("SQUARESPACE_WEBHOOK_SECRET")
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
 
 @app.route('/webhook/squarespace', methods=['POST'])
 def handle_squarespace_webhook():

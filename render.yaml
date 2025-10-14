@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: olsc-webhook
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python3 squarespace_webhook.py
+    envVars:
+      - key: PASSKIT_PROGRAM_ID
+        sync: false
+      - key: PASSKIT_API_BASE
+        value: https://api.pub2.passkit.io
+      - key: PASSKIT_API_KEY
+        sync: false
+      - key: PASSKIT_PROJECT_KEY
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
+      - key: TIMEZONE
+        value: America/New_York

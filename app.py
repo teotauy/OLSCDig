@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from flask import Flask, render_template, jsonify, request
 from dotenv import load_dotenv
 import pytz
-from passkit_notifications import send_passkit_notification, scheduler, start_notification_scheduler
+# Notifications feature removed
 
 load_dotenv()
 
@@ -82,10 +82,7 @@ def index():
     """Main page with headcount display and checkout button."""
     return render_template('index.html')
 
-@app.route('/notifications')
-def notifications():
-    """Notifications management page."""
-    return render_template('notifications.html')
+# Notifications page removed
 
 @app.route('/api/headcount')
 def api_headcount():
@@ -164,86 +161,13 @@ def api_checkout():
             "error": str(e)
         }), 500
 
-@app.route('/api/send_notification', methods=['POST'])
-def api_send_notification():
-    """API endpoint to send PassKit push notification."""
-    try:
-        data = request.get_json()
-        message = data.get('message', '')
-        title = data.get('title', '⚽ Liverpool OLSC')
-        
-        if not message:
-            return jsonify({
-                'success': False,
-                'error': 'Message is required'
-            }), 400
-        
-        result = send_passkit_notification(message, title)
-        return jsonify(result)
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+# Notification APIs removed
 
-@app.route('/api/schedule_notification', methods=['POST'])
-def api_schedule_notification():
-    """API endpoint to schedule PassKit push notification."""
-    try:
-        data = request.get_json()
-        message = data.get('message', '')
-        title = data.get('title', '⚽ Liverpool OLSC')
-        scheduled_time_str = data.get('scheduled_time', '')
-        description = data.get('description', '')
-        
-        if not message or not scheduled_time_str:
-            return jsonify({
-                'success': False,
-                'error': 'Message and scheduled_time are required'
-            }), 400
-        
-        # Parse scheduled time
-        scheduled_time = datetime.fromisoformat(scheduled_time_str.replace('Z', '+00:00'))
-        
-        result = scheduler.schedule_notification(message, title, scheduled_time, description)
-        return jsonify(result)
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+ 
 
-@app.route('/api/scheduled_notifications')
-def api_scheduled_notifications():
-    """API endpoint to get list of scheduled notifications."""
-    try:
-        scheduled = scheduler.get_scheduled_notifications()
-        return jsonify({
-            'success': True,
-            'scheduled_notifications': scheduled
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+ 
 
-@app.route('/api/cancel_notification/<job_id>', methods=['POST'])
-def api_cancel_notification(job_id):
-    """API endpoint to cancel a scheduled notification."""
-    try:
-        success = scheduler.cancel_scheduled_notification(job_id)
-        return jsonify({
-            'success': success,
-            'message': 'Notification cancelled' if success else 'Notification not found'
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+ 
 
 if __name__ == '__main__':
     # Check if API credentials are set
@@ -255,8 +179,5 @@ if __name__ == '__main__':
     print(f"   Server starting at http://0.0.0.0:5000")
     print(f"   Access from your phone using your computer's IP address")
     print()
-    
-    # Start the notification scheduler
-    start_notification_scheduler()
     
     app.run(host='0.0.0.0', port=5000, debug=True)

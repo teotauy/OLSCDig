@@ -6,7 +6,7 @@
 
 ## 🎯 Project Overview
 
-This system provides automated management for Liverpool OLSC (Official Liverpool Supporters Club) member check-ins using PassKit digital passes. It handles real-time headcount monitoring, bulk checkout operations, match updates, and push notifications.
+This system provides automated management for Liverpool OLSC (Official Liverpool Supporters Club) member check-ins using PassKit digital passes. It handles real-time headcount monitoring, bulk checkout operations, and match updates.
 
 ### What Problem This Solves
 - **Manual Checkout Nightmare**: After matches, manually changing 50+ members from `CHECKED_IN` to `CHECKED_OUT` in PassKit
@@ -20,9 +20,8 @@ This system provides automated management for Liverpool OLSC (Official Liverpool
 1. **PassKit API Integration** - Direct API calls to PassKit's REST endpoints
 2. **Squarespace Integration** - Automated member creation from form submissions
 3. **Flask Web Interface** - Local web app for headcount display and bulk operations
-4. **Pushover Notifications** - Real-time headcount updates via push notifications
-5. **Match Update System** - Automated Liverpool FC fixture updates on passes
-6. **GitHub Pages Control Panel** - Remote access to manual operations
+4. **Match Update System** - Automated Liverpool FC fixture updates on passes
+5. **GitHub Pages Control Panel** - Remote access to manual operations
 
 ### Data Flow
 ```
@@ -41,7 +40,7 @@ PassKit API ←→ Python Scripts ←→ Local Web App
 ```
 ├── app.py                          # 🌐 Flask web interface (main entry point)
 ├── checkout.py                     # ✅ Bulk checkout command-line tool
-├── notifications.py                # 🔔 Push notification system (auto-runs)
+├── notifications.py                # 🔔 Pushover headcount notifier (optional)
 ├── match_updates.py                # ⚽ Updates ALL passes with next match
 ├── update_updating_members.py      # 🔄 Updates only new members
 ├── test_connection.py              # 🔧 API connection diagnostics
@@ -128,10 +127,7 @@ See **[Squarespace Integration Setup](SQUARESPACE_INTEGRATION_SETUP.md)** for co
 
 #### Start the System
 ```bash
-# Start notifications (runs continuously)
-python3 notifications.py
-
-# In another terminal, start web interface
+# Start web interface
 python3 app.py
 ```
 
@@ -174,17 +170,10 @@ python3 app.py
 ```bash
 python3 notifications.py
 ```
-**What it does**: Runs continuously, checking headcount every minute and sending notifications when it changes
+**What it does**: Local web app for headcount and bulk checkout
 
-## 🔔 Notification System
-
-### How It Works
-- **Frequency**: Checks every 1 minute
-- **Trigger**: Only sends notifications when headcount changes
-- **Platform**: Pushover (works on iOS and Android)
-- **Cost**: $5 one-time fee for unlimited notifications
-
-### Notification Types
+## 🔔 Pushover Headcount Notifier (Optional)
+If you opt-in to Pushover, you can run `notifications.py` locally to receive headcount change alerts. This is separate from PassKit and requires no changes to passes.
 - **0 people**: "🏴󠁧󠁢󠁥󠁮󠁧󠁿 No one checked in" (silent)
 - **1-9 people**: "⚽ X people at the pub" (default sound)
 - **10-19 people**: "🔥 X people - getting busy!" (cosmic sound)
@@ -275,7 +264,7 @@ PUSHOVER_API_TOKEN=your_api_token_here
 # Test API connection
 python3 test_connection.py
 
-# Check if notifications are working
+# (Optional) Start headcount notifier
 python3 notifications.py
 
 # Verify environment variables
