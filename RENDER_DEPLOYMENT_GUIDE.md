@@ -56,6 +56,8 @@ TIMEZONE=America/New_York
    - **Method**: POST
    - **Format**: JSON
 
+**⚠️ Important**: The webhook will automatically filter for membership products only. Scarf orders and other non-membership products will be ignored.
+
 ### 2.2 Test the Connection
 1. Make a test purchase (or use existing order)
 2. Check Render logs for webhook activity

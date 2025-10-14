@@ -12,20 +12,27 @@ from datetime import datetime
 WEBHOOK_URL = "http://localhost:5003/webhook/squarespace"  # Local testing
 # WEBHOOK_URL = "https://olsc-webhook.onrender.com/webhook/squarespace"  # Render URL
 
-def test_single_membership():
-    """Test single membership webhook."""
-    print("🧪 Testing single membership webhook...")
+def test_membership_order():
+    """Test membership order webhook."""
+    print("🧪 Testing membership order webhook...")
     
+    timestamp = int(datetime.now().timestamp())
     payload = {
-        "formName": "Membership Application",
-        "data": {
+        "orderId": f"order_{timestamp}",
+        "customer": {
+            "email": f"testuser{timestamp}@example.com",
             "firstName": "Test",
             "lastName": "User",
-            "email": f"testuser{int(datetime.now().timestamp())}@example.com",
-            "phone": "+1234567890",
-            "membershipType": "Standard"
+            "phone": "+1234567890"
         },
-        "timestamp": datetime.now().isoformat()
+        "lineItems": [
+            {
+                "productName": "LFC Brooklyn 25/26 Membership",
+                "quantity": 1,
+                "variantName": "Standard Membership"
+            }
+        ],
+        "createdOn": datetime.now().isoformat()
     }
     
     try:
@@ -33,6 +40,38 @@ def test_single_membership():
         print(f"Status: {response.status_code}")
         print(f"Response: {response.json()}")
         return response.status_code == 200
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
+
+def test_scarf_order():
+    """Test non-membership order (should be ignored)."""
+    print("🧪 Testing scarf order (should be ignored)...")
+    
+    timestamp = int(datetime.now().timestamp())
+    payload = {
+        "orderId": f"order_{timestamp}",
+        "customer": {
+            "email": f"testuser{timestamp}@example.com",
+            "firstName": "Test",
+            "lastName": "User"
+        },
+        "lineItems": [
+            {
+                "productName": "LFC Brooklyn Scarf",
+                "quantity": 1,
+                "variantName": "Red Scarf"
+            }
+        ],
+        "createdOn": datetime.now().isoformat()
+    }
+    
+    try:
+        response = requests.post(WEBHOOK_URL, json=payload, timeout=30)
+        print(f"Status: {response.status_code}")
+        print(f"Response: {response.json()}")
+        # Should return 200 but with "ignored" status
+        return response.status_code == 200 and response.json().get("status") == "ignored"
     except Exception as e:
         print(f"Error: {e}")
         return False
@@ -105,16 +144,18 @@ def main():
         return
     
     # Test webhook endpoints
-    single_ok = test_single_membership()
+    membership_ok = test_membership_order()
+    scarf_ok = test_scarf_order()
     multiple_ok = test_multiple_memberships()
     
     print("\n" + "=" * 40)
     print("📊 Test Results:")
     print(f"Health Check: {'✅' if health_ok else '❌'}")
-    print(f"Single Membership: {'✅' if single_ok else '❌'}")
+    print(f"Membership Order: {'✅' if membership_ok else '❌'}")
+    print(f"Scarf Order (ignored): {'✅' if scarf_ok else '❌'}")
     print(f"Multiple Memberships: {'✅' if multiple_ok else '❌'}")
     
-    if all([health_ok, single_ok, multiple_ok]):
+    if all([health_ok, membership_ok, scarf_ok, multiple_ok]):
         print("\n🎉 All tests passed!")
     else:
         print("\n⚠️ Some tests failed. Check the logs above.")

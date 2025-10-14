@@ -25,47 +25,24 @@ WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
 @app.route('/webhook/squarespace', methods=['POST'])
 def handle_squarespace_webhook():
     """
-    Handle form submissions from Squarespace.
+    Handle order completions from Squarespace e-commerce.
     
-    Expected payload formats:
-    
-    Single membership:
+    Expected payload format for Squarespace e-commerce:
     {
-        "formName": "Membership Application",
-        "data": {
+        "orderId": "order_123456",
+        "customer": {
+            "email": "customer@example.com",
             "firstName": "John",
-            "lastName": "Smith", 
-            "email": "john@example.com",
-            "phone": "+1234567890",
-            "membershipType": "Premium"
+            "lastName": "Smith"
         },
-        "timestamp": "2025-01-09T14:30:00Z"
-    }
-    
-    Multiple memberships (one transaction):
-    {
-        "formName": "Family Membership",
-        "transactionId": "txn_123456",
-        "customerEmail": "primary@example.com",
-        "data": {
-            "members": [
-                {
-                    "firstName": "John",
-                    "lastName": "Smith",
-                    "email": "john@example.com",
-                    "phone": "+1234567890",
-                    "membershipType": "Standard"
-                },
-                {
-                    "firstName": "Jane", 
-                    "lastName": "Smith",
-                    "email": "jane@example.com",
-                    "phone": "+1234567891",
-                    "membershipType": "Standard"
-                }
-            ]
-        },
-        "timestamp": "2025-01-09T14:30:00Z"
+        "lineItems": [
+            {
+                "productName": "LFC Brooklyn 25/26 Membership",
+                "quantity": 1,
+                "variantName": "Standard Membership"
+            }
+        ],
+        "createdOn": "2025-01-09T14:30:00Z"
     }
     """
     try:
@@ -75,64 +52,126 @@ def handle_squarespace_webhook():
         if not payload:
             return jsonify({"error": "No payload received"}), 400
         
-        print(f"📨 Received webhook: {payload.get('formName', 'Unknown Form')}")
+        print(f"📨 Received webhook for order: {payload.get('orderId', 'Unknown Order')}")
         
-        # Check if this is a multi-membership transaction
-        if payload.get('data', {}).get('members'):
-            # Multiple memberships in one transaction
-            return handle_multiple_memberships(payload)
-        else:
-            # Single membership
-            return handle_single_membership(payload)
+        # Check if this order contains membership products
+        if not is_membership_order(payload):
+            print("ℹ️ Order does not contain membership products - skipping")
+            return jsonify({
+                "status": "ignored",
+                "message": "No membership products in order"
+            }), 200
+        
+        # Process the membership order
+        return handle_membership_order(payload)
             
     except Exception as e:
         print(f"❌ Webhook error: {e}")
         return jsonify({"error": str(e)}), 500
 
-def handle_single_membership(payload):
-    """Handle single membership submission."""
-    form_data = payload.get('data', {})
+def is_membership_order(payload):
+    """Check if the order contains membership products."""
+    # Define membership product names/patterns
+    MEMBERSHIP_PRODUCTS = [
+        "membership",
+        "lfc brooklyn",
+        "brooklyn membership",
+        "25/26",
+        "26/27"
+    ]
     
-    if not form_data.get('email'):
-        return jsonify({"error": "No email address provided"}), 400
+    line_items = payload.get('lineItems', [])
     
-    # Map Squarespace form fields to our format
-    member_data = {
-        "email": form_data.get('email', ''),
-        "first_name": form_data.get('firstName', ''),
-        "last_name": form_data.get('lastName', ''),
-        "phone": form_data.get('phone', ''),
-        "membership_type": form_data.get('membershipType', 'Standard'),
-        "external_id": f"sq_{form_data.get('email', '')}_{int(datetime.now().timestamp())}",
-        "source": "Squarespace Webhook",
-        "submission_time": payload.get('timestamp', datetime.now().isoformat())
-    }
-    
-    # Process the member
-    result = process_squarespace_form_data(member_data, use_passkit_email=True)
-    
-    if result["success"]:
-        response_data = {
-            "success": True,
-            "message": "Member processed successfully",
-            "member_id": result["member_id"],
-            "pass_url": result["pass_url"]
-        }
+    for item in line_items:
+        product_name = item.get('productName', '').lower()
         
-        if result.get("already_exists"):
-            response_data["message"] = "Member already exists"
-            response_data["already_exists"] = True
-        
-        return jsonify(response_data), 200
-    else:
-        return jsonify({
-            "success": False,
-            "message": "Failed to create member",
-            "error": result["error"]
-        }), 500
+        # Check if any membership keyword is in the product name
+        if any(keyword in product_name for keyword in MEMBERSHIP_PRODUCTS):
+            print(f"✅ Found membership product: {item.get('productName')}")
+            return True
+    
+    return False
 
+def handle_membership_order(payload):
+    """Handle Squarespace e-commerce order with membership products."""
+    customer = payload.get('customer', {})
+    line_items = payload.get('lineItems', [])
+    
+    if not customer.get('email'):
+        return jsonify({"error": "No customer email address provided"}), 400
+    
+    # Extract customer info
+    customer_email = customer.get('email', '')
+    customer_name = f"{customer.get('firstName', '')} {customer.get('lastName', '')}".strip()
+    
+    # Process each membership product in the order
+    results = []
+    
+    for item in line_items:
+        product_name = item.get('productName', '')
+        quantity = item.get('quantity', 1)
+        
+        # Only process membership products (already filtered by is_membership_order)
+        if any(keyword in product_name.lower() for keyword in ["membership", "lfc brooklyn", "brooklyn membership", "25/26", "26/27"]):
+            
+            # Create member data
+            member_data = {
+                "email": customer_email,
+                "first_name": customer.get('firstName', ''),
+                "last_name": customer.get('lastName', ''),
+                "phone": customer.get('phone', ''),
+                "membership_type": extract_membership_type(product_name),
+                "external_id": f"sq_{customer_email}_{payload.get('orderId', '')}_{int(datetime.now().timestamp())}",
+                "source": "Squarespace Order",
+                "order_id": payload.get('orderId', ''),
+                "product_name": product_name,
+                "submission_time": payload.get('createdOn', datetime.now().isoformat())
+            }
+            
+            # Process the member
+            result = process_squarespace_form_data(member_data, use_passkit_email=True)
+            results.append({
+                "product": product_name,
+                "result": result
+            })
+    
+    # Return summary
+    successful = sum(1 for r in results if r["result"]["success"])
+    total = len(results)
+    
+    return jsonify({
+        "success": True,
+        "message": f"Processed {successful}/{total} membership products",
+        "order_id": payload.get('orderId', ''),
+        "customer_email": customer_email,
+        "results": [
+            {
+                "product": r["product"],
+                "success": r["result"]["success"],
+                "member_id": r["result"].get("member_id"),
+                "already_exists": r["result"].get("already_exists", False),
+                "error": r["result"].get("error")
+            }
+            for r in results
+        ]
+    }), 200
+
+def extract_membership_type(product_name):
+    """Extract membership type from product name."""
+    product_lower = product_name.lower()
+    
+    if "premium" in product_lower:
+        return "Premium"
+    elif "standard" in product_lower:
+        return "Standard"
+    elif "family" in product_lower:
+        return "Family"
+    else:
+        return "Standard"
+
+# Legacy function - kept for compatibility but not used for e-commerce orders
 def handle_multiple_memberships(payload):
-    """Handle multiple memberships in one transaction."""
+    """Handle multiple memberships in one transaction (legacy form-based)."""
     from squarespace_to_passkit import process_multiple_memberships
     
     # Extract transaction data
