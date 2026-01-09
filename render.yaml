@@ -2,6 +2,7 @@ services:
   - type: web
     name: olsc-webhook
     env: python
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python3 squarespace_webhook.py
     envVars:
@@ -21,6 +22,7 @@ services:
   - type: web
     name: olsc-web-app
     env: python
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python3 app.py
     envVars:
