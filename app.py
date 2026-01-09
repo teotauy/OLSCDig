@@ -540,8 +540,9 @@ def api_update_match():
 if __name__ == '__main__':
     # Check if API credentials are set
     if not config['API_KEY'] or not config['PROJECT_KEY']:
-        print("❌ Error: PASSKIT_API_KEY and PASSKIT_PROJECT_KEY must be set in .env file")
-        exit(1)
+        print("⚠️  Warning: PASSKIT_API_KEY and PASSKIT_PROJECT_KEY not set")
+        print("   Some features may not work until environment variables are configured")
+        print("   Set these in Render dashboard → Environment tab")
     
     port = int(os.getenv('PORT', 5000))
     
