@@ -81,7 +81,27 @@ def get_liverpool_fixtures():
             # Format date and time for pass display
             local_time = match_date.astimezone(pytz.timezone(PASSKIT_CONFIG["TIMEZONE"]))
             date_str = local_time.strftime("%b %d")
-            time_str = local_time.strftime("%I:%M %p")
+            
+            # Format time with AM/PM (no minutes if :00, minimal digits)
+            hour = local_time.hour
+            minute = local_time.minute
+            
+            # Determine AM/PM
+            am_pm = "AM" if hour < 12 else "PM"
+            
+            # Convert to 12-hour format
+            if hour == 0:
+                display_hour = 12
+            elif hour <= 12:
+                display_hour = hour
+            else:
+                display_hour = hour - 12
+            
+            # Format time string
+            if minute == 0:
+                time_str = f"{display_hour}{am_pm}"
+            else:
+                time_str = f"{display_hour}:{minute:02d}{am_pm}"
             
             # Create optimized pass display format
             pass_display = format_match_display(opponent, date_str, time_str)
@@ -93,7 +113,7 @@ def get_liverpool_fixtures():
                 "venue": venue,
                 "is_home": is_home,
                 "full_date": local_time.strftime("%A, %B %d"),
-                "kickoff": local_time.strftime("%I:%M %p"),
+                "kickoff": time_str,
                 "pass_display": pass_display
             })
         
@@ -160,6 +180,9 @@ def update_pass_fields(match_data):
             if not member_id:
                 failed_count += 1
                 continue
+            
+            # Update ALL passes with the next match
+            # (removed the filter to update everyone)
             
             # Update pass using PUT method with passOverrides
             # We need to include the person data to avoid validation errors

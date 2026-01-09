@@ -9,8 +9,8 @@ import json
 from datetime import datetime
 
 # Test webhook URL (update this to your Render URL)
-WEBHOOK_URL = "http://localhost:5003/webhook/squarespace"  # Local testing
-# WEBHOOK_URL = "https://olsc-webhook.onrender.com/webhook/squarespace"  # Render URL
+# WEBHOOK_URL = "http://localhost:5003/webhook/squarespace"  # Local testing
+WEBHOOK_URL = "https://olsc-webhook.onrender.com/webhook/squarespace"  # Render URL
 
 def test_membership_order():
     """Test membership order webhook."""

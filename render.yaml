@@ -17,3 +17,24 @@ services:
         sync: false
       - key: TIMEZONE
         value: America/New_York
+
+  - type: web
+    name: olsc-web-app
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python3 app.py
+    envVars:
+      - key: PROGRAM_ID
+        sync: false
+      - key: API_BASE
+        value: https://api.pub2.passkit.io
+      - key: PASSKIT_API_KEY
+        sync: false
+      - key: PASSKIT_PROJECT_KEY
+        sync: false
+      - key: TIMEZONE
+        value: America/New_York
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: FLASK_SECRET_KEY
+        sync: false

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Liverpool OLSC - Headcount</title>
+    <title>Liverpool OLSC - Live Headcount</title>
     <style>
         * {
             margin: 0;
@@ -37,7 +37,7 @@
 
         .header h1 {
             color: #c8102e;
-            font-size: 24px;
+            font-size: 28px;
             margin-bottom: 5px;
         }
 
@@ -50,91 +50,34 @@
             background: linear-gradient(135deg, #c8102e 0%, #d81d42 100%);
             color: white;
             text-align: center;
-            padding: 40px 20px;
+            padding: 50px 20px;
             border-radius: 15px;
             margin-bottom: 20px;
             box-shadow: 0 5px 15px rgba(200,16,46,0.3);
         }
 
         .headcount-label {
-            font-size: 14px;
+            font-size: 16px;
             text-transform: uppercase;
             letter-spacing: 2px;
             opacity: 0.9;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
         }
 
         .headcount-number {
-            font-size: 72px;
+            font-size: 96px;
             font-weight: bold;
             line-height: 1;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
         }
 
         .headcount-updated {
-            font-size: 12px;
+            font-size: 14px;
             opacity: 0.8;
         }
 
         .loading {
             opacity: 0.6;
-        }
-
-        .checkout-btn {
-            width: 100%;
-            padding: 18px;
-            background: #00a65a;
-            color: white;
-            border: none;
-            border-radius: 12px;
-            font-size: 18px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            box-shadow: 0 4px 12px rgba(0,166,90,0.3);
-            margin-bottom: 15px;
-        }
-
-        .checkout-btn:hover {
-            background: #008d4c;
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(0,166,90,0.4);
-        }
-
-        .checkout-btn:active {
-            transform: translateY(0);
-        }
-
-        .checkout-btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
-
-        .status-message {
-            padding: 12px;
-            border-radius: 8px;
-            margin-top: 15px;
-            text-align: center;
-            font-size: 14px;
-            display: none;
-        }
-
-        .status-message.success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-
-        .status-message.error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-
-        .status-message.show {
-            display: block;
         }
 
         .auto-refresh {
@@ -207,18 +150,21 @@
             animation: celebrate 0.5s ease-in-out;
         }
 
-        .spinner {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255,255,255,.3);
-            border-radius: 50%;
-            border-top-color: white;
-            animation: spin 1s ease-in-out infinite;
+        .admin-link {
+            text-align: center;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
         }
 
-        @keyframes spin {
-            to { transform: rotate(360deg); }
+        .admin-link a {
+            color: #c8102e;
+            text-decoration: none;
+            font-size: 12px;
+        }
+
+        .admin-link a:hover {
+            text-decoration: underline;
         }
 
         @media (max-width: 480px) {
@@ -227,11 +173,11 @@
             }
 
             .headcount-number {
-                font-size: 64px;
+                font-size: 80px;
             }
 
             .header h1 {
-                font-size: 20px;
+                font-size: 24px;
             }
         }
     </style>
@@ -240,11 +186,7 @@
     <div class="container">
         <div class="header">
             <h1>🏴󠁧󠁢󠁥󠁮󠁧󠁿 Liverpool OLSC</h1>
-            <p>Admin Panel</p>
-            <p style="margin-top: 10px; font-size: 12px;">
-                <a href="/add-member" style="color: #c8102e; text-decoration: none; margin-right: 15px;">+ Add Member</a>
-                <a href="/update-match" style="color: #c8102e; text-decoration: none;">⚽ Update Match</a>
-            </p>
+            <p>Live Headcount</p>
         </div>
 
         <div class="headcount" id="headcount">
@@ -252,12 +194,6 @@
             <div class="headcount-number" id="count">--</div>
             <div class="headcount-updated" id="updated">Loading...</div>
         </div>
-
-        <button class="checkout-btn" id="checkoutBtn" onclick="checkoutAll()">
-            Check Out Everyone
-        </button>
-
-        <div class="status-message" id="statusMessage"></div>
 
         <div class="countdown-pitch">
             <div class="pitch-lines">
@@ -268,6 +204,10 @@
         </div>
         <div class="countdown-text">
             <span id="countdown">60</span>s until next refresh
+        </div>
+
+        <div class="admin-link">
+            <a href="/admin">Admin Panel</a>
         </div>
     </div>
 
@@ -322,79 +262,15 @@
                         minute: '2-digit'
                     });
                     document.getElementById('updated').textContent = `Updated at ${timeStr}`;
-                    
-                    // Update button state
-                    const btn = document.getElementById('checkoutBtn');
-                    if (data.count === 0) {
-                        btn.disabled = true;
-                        btn.textContent = 'No One Checked In';
-                    } else {
-                        btn.disabled = false;
-                        btn.textContent = `Check Out ${data.count} ${data.count === 1 ? 'Person' : 'People'}`;
-                    }
                 } else {
-                    showStatus('Error loading headcount', 'error');
+                    document.getElementById('count').textContent = '?';
+                    document.getElementById('updated').textContent = 'Error loading';
                 }
             } catch (error) {
-                showStatus('Connection error', 'error');
+                document.getElementById('count').textContent = '?';
+                document.getElementById('updated').textContent = 'Connection error';
                 console.error('Error fetching headcount:', error);
             }
-        }
-
-        async function checkoutAll() {
-            const btn = document.getElementById('checkoutBtn');
-            const originalText = btn.textContent;
-            
-            // Confirm action
-            if (!confirm('Are you sure you want to check out everyone?')) {
-                return;
-            }
-            
-            // Disable button and show loading
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner"></span>';
-            
-            try {
-                const response = await fetch('/api/checkout', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    if (data.checked_out === 0) {
-                        showStatus('No one was checked in', 'success');
-                    } else {
-                        showStatus(`Successfully checked out ${data.checked_out} ${data.checked_out === 1 ? 'person' : 'people'}!`, 'success');
-                    }
-                    
-                    // Refresh headcount immediately
-                    await fetchHeadcount();
-                } else {
-                    showStatus('Error during checkout', 'error');
-                    btn.disabled = false;
-                    btn.textContent = originalText;
-                }
-            } catch (error) {
-                showStatus('Connection error', 'error');
-                btn.disabled = false;
-                btn.textContent = originalText;
-                console.error('Error during checkout:', error);
-            }
-        }
-
-        function showStatus(message, type) {
-            const statusDiv = document.getElementById('statusMessage');
-            statusDiv.textContent = message;
-            statusDiv.className = `status-message ${type} show`;
-            
-            // Hide after 5 seconds
-            setTimeout(() => {
-                statusDiv.classList.remove('show');
-            }, 5000);
         }
 
         // Initial load
@@ -415,10 +291,7 @@
             }
         });
     </script>
-
-    <div style="text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
-        <a href="/" style="color: #c8102e; text-decoration: none; font-size: 12px;">← Public View</a>
-    </div>
 </body>
 </html>
+
 

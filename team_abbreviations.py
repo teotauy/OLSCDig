@@ -8,9 +8,11 @@ TEAM_ABBREVIATIONS = {
     # Premier League teams
     "Arsenal FC": "Arsenal",
     "Aston Villa FC": "Aston Villa", 
+    "AFC Bournemouth": "Bournemouth",
     "Bournemouth": "Bournemouth",
     "Brentford FC": "Brentford",
     "Brighton & Hove Albion FC": "Brighton",
+    "Burnley FC": "Burnley",
     "Chelsea FC": "Chelsea",
     "Crystal Palace FC": "Crystal Palace",
     "Everton FC": "Everton",
@@ -25,6 +27,7 @@ TEAM_ABBREVIATIONS = {
     "Nottingham Forest FC": "Forest",
     "Sheffield United FC": "Sheffield",
     "Southampton FC": "Southampton",
+    "Sunderland AFC": "Sunderland",
     "Tottenham Hotspur FC": "Spurs",
     "Watford FC": "Watford",
     "West Ham United FC": "West Ham",
@@ -39,6 +42,7 @@ TEAM_ABBREVIATIONS = {
     "Juventus FC": "Juventus",
     "AC Milan": "AC Milan",
     "Inter Milan": "Inter",
+    "FC Internazionale Milano": "Inter",
     "AS Roma": "Roma",
     "Napoli": "Napoli",
     "Borussia Dortmund": "Dortmund",
@@ -49,6 +53,8 @@ TEAM_ABBREVIATIONS = {
     "Benfica": "Benfica",
     "Celtic FC": "Celtic",
     "Rangers FC": "Rangers",
+    "Olympique de Marseille": "Marseille",
+    "Qarabağ Ağdam FK": "Qarabag",
     
     # Add more as needed
 }
@@ -62,11 +68,15 @@ def format_match_display(opponent, date_str, time_str):
     # Abbreviate opponent
     short_opponent = abbreviate_team_name(opponent)
     
-    # Use MM/DD format
+    # Use M/D format (no leading zeros for single digits)
     formatted_date = date_str.replace("Oct ", "10/").replace("Nov ", "11/").replace("Dec ", "12/")
-    formatted_date = formatted_date.replace("Jan ", "01/").replace("Feb ", "02/").replace("Mar ", "03/")
-    formatted_date = formatted_date.replace("Apr ", "04/").replace("May ", "05/").replace("Jun ", "06/")
-    formatted_date = formatted_date.replace("Jul ", "07/").replace("Aug ", "08/").replace("Sep ", "09/")
+    formatted_date = formatted_date.replace("Jan ", "1/").replace("Feb ", "2/").replace("Mar ", "3/")
+    formatted_date = formatted_date.replace("Apr ", "4/").replace("May ", "5/").replace("Jun ", "6/")
+    formatted_date = formatted_date.replace("Jul ", "7/").replace("Aug ", "8/").replace("Sep ", "9/")
+    
+    # Remove leading zero from day (e.g., "12/06" -> "12/6", "1/05" -> "1/5")
+    if "/0" in formatted_date:
+        formatted_date = formatted_date.replace("/0", "/")
     
     # Format: "Man U | 10/19 11:30 AM"
     return f"{short_opponent} | {formatted_date} {time_str}"

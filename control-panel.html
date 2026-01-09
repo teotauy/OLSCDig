@@ -275,7 +275,7 @@
             <div class="section">
                 <h2><span class="section-icon">🔧</span> Testing & Diagnostics</h2>
                 <div class="button-grid">
-                    <button class="control-button" onclick="runCommand('test_connection.py')">
+                    <button class="control-button" onclick="runCommand('status_api.py')">
                         <span class="status-indicator status-ready"></span>
                         Test API Connection
                         <div class="button-description">Verifies PassKit API is working and shows current counts</div>
@@ -286,7 +286,7 @@
                         <div class="button-description">Lists all currently checked-in members</div>
                     </button>
                 </div>
-                <div class="command-example">python3 test_connection.py<br>python3 run_with_logging.py test_connection.py</div>
+                <div class="command-example">python3 status_api.py<br>python3 run_with_logging.py status_api.py</div>
                 <p><strong>What they do:</strong> First button tests your PassKit API connection. Second button shows current checked-in members list.</p>
             </div>
 
@@ -396,7 +396,7 @@
                     } else if (buttonText.includes('Update New Members Only')) {
                         description.innerHTML += `<br><small>Last run: ${lastRuns['update_updating_members.py']}</small>`;
                     } else if (buttonText.includes('Test API Connection')) {
-                        description.innerHTML += `<br><small>Last run: ${lastRuns['test_connection.py']}</small>`;
+                        description.innerHTML += `<br><small>Last run: ${lastRuns['status_api.py']}</small>`;
                     }
                 }
             });

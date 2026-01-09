@@ -80,15 +80,28 @@ def check_member_exists(email, external_id=None):
         response = requests.post(url, headers=get_passkit_headers(), json=payload, timeout=30)
         response.raise_for_status()
         
-        # Parse NDJSON response
-        for line in response.text.strip().split('\n'):
+        # Parse NDJSON response - handle both 'result' wrapper and direct member data
+        response_text = response.text.strip()
+        if not response_text:
+            return None
+            
+        for line in response_text.split('\n'):
             if line:
                 try:
                     data = json.loads(line)
+                    # Check if data is wrapped in 'result' key
                     if 'result' in data:
-                        return data['result']
-                except json.JSONDecodeError:
-                    pass
+                        member = data['result']
+                        # Verify this is actually the member we're looking for
+                        if member.get('person', {}).get('emailAddress', '').lower() == email.lower():
+                            return member
+                    # Check if data is the member object directly (fallback)
+                    elif 'person' in data and data.get('person', {}).get('emailAddress', '').lower() == email.lower():
+                        return data
+                except json.JSONDecodeError as e:
+                    # Log but continue parsing other lines
+                    print(f"⚠️ Warning: Failed to parse line in member search response: {e}")
+                    continue
         
         # If not found by email and external_id provided, check by external_id
         if external_id:
@@ -101,19 +114,38 @@ def check_member_exists(email, external_id=None):
             response = requests.post(url, headers=get_passkit_headers(), json=payload, timeout=30)
             response.raise_for_status()
             
-            for line in response.text.strip().split('\n'):
-                if line:
-                    try:
-                        data = json.loads(line)
-                        if 'result' in data:
-                            return data['result']
-                    except json.JSONDecodeError:
-                        pass
+            response_text = response.text.strip()
+            if response_text:
+                for line in response_text.split('\n'):
+                    if line:
+                        try:
+                            data = json.loads(line)
+                            # Check if data is wrapped in 'result' key
+                            if 'result' in data:
+                                member = data['result']
+                                # Verify external ID matches
+                                if member.get('externalId') == external_id:
+                                    return member
+                            # Check if data is the member object directly
+                            elif data.get('externalId') == external_id:
+                                return data
+                        except json.JSONDecodeError as e:
+                            print(f"⚠️ Warning: Failed to parse line in external ID search response: {e}")
+                            continue
         
         return None
         
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Network error checking member existence for {email}: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            print(f"   Response status: {e.response.status_code}")
+            print(f"   Response body: {e.response.text[:200]}")
+        # Return None on error - caller should handle this appropriately
+        return None
     except Exception as e:
-        print(f"❌ Error checking member existence: {e}")
+        print(f"❌ Unexpected error checking member existence for {email}: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def create_passkit_member(member_data, send_welcome_email=True):
@@ -127,11 +159,17 @@ def create_passkit_member(member_data, send_welcome_email=True):
     Returns:
         dict: Result with success status, member_id, and pass_url
     """
-    # Check if member already exists
+    # DUPLICATE PREVENTION: Check if member already exists before creating
+    print(f"🔍 Checking for duplicate member: {member_data['email']}")
     existing_member = check_member_exists(member_data["email"], member_data.get("external_id"))
     
     if existing_member:
-        print(f"⚠️ Member already exists: {member_data['email']}")
+        existing_email = existing_member.get('person', {}).get('emailAddress', 'unknown')
+        existing_id = existing_member.get('id', 'unknown')
+        print(f"⚠️ DUPLICATE DETECTED - Member already exists:")
+        print(f"   Email: {existing_email}")
+        print(f"   Member ID: {existing_id}")
+        print(f"   ✅ Skipping creation to prevent duplicate")
         return {
             "success": True,
             "member_id": existing_member.get("id"),
@@ -140,6 +178,8 @@ def create_passkit_member(member_data, send_welcome_email=True):
             "already_exists": True,
             "message": "Member already exists, no duplicate created"
         }
+    
+    print(f"✅ No duplicate found - proceeding with member creation for {member_data['email']}")
     
     url = f"{PASSKIT_CONFIG['API_BASE']}/members/member"
     

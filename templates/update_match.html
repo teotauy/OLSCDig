@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Update Match - Liverpool OLSC</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #c8102e 0%, #00a65a 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 30px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #c8102e;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .match-info {
+            background: #f8f9fa;
+            border-left: 4px solid #c8102e;
+            padding: 20px;
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 20px;
+        }
+
+        .match-info h3 {
+            color: #c8102e;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        .match-detail {
+            margin: 8px 0;
+            font-size: 14px;
+        }
+
+        .match-detail strong {
+            color: #333;
+            display: inline-block;
+            width: 80px;
+        }
+
+        .pass-display {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 16px;
+            text-align: center;
+            margin: 15px 0;
+            font-weight: 600;
+        }
+
+        .update-btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #c8102e 0%, #d81d42 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 12px rgba(200,16,46,0.3);
+            margin-top: 10px;
+        }
+
+        .update-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(200,16,46,0.4);
+        }
+
+        .update-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status-message {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .status-message.show {
+            display: block;
+        }
+
+        .status-message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status-message.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .links {
+            text-align: center;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .links a {
+            color: #c8102e;
+            text-decoration: none;
+            font-size: 14px;
+            margin: 0 10px;
+        }
+
+        .links a:hover {
+            text-decoration: underline;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .result-box {
+            background: #f8f9fa;
+            border-left: 4px solid #00a65a;
+            padding: 15px;
+            border-radius: 0 8px 8px 0;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+
+        .result-box strong {
+            color: #00a65a;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚽ Update Next Match</h1>
+            <p>Update all passes with the next Liverpool match</p>
+        </div>
+
+        <div class="status-message" id="statusMessage"></div>
+
+        <div id="matchInfo" style="display: none;">
+            <div class="match-info">
+                <h3>Next Match</h3>
+                <div class="match-detail">
+                    <strong>Opponent:</strong> <span id="opponent">-</span>
+                </div>
+                <div class="match-detail">
+                    <strong>Date:</strong> <span id="date">-</span>
+                </div>
+                <div class="match-detail">
+                    <strong>Time:</strong> <span id="time">-</span>
+                </div>
+                <div class="match-detail">
+                    <strong>Venue:</strong> <span id="venue">-</span>
+                </div>
+                <div class="pass-display" id="passDisplay">-</div>
+            </div>
+
+            <button class="update-btn" id="updateBtn">
+                Update All Passes
+            </button>
+        </div>
+
+        <div id="loading" style="text-align: center; padding: 40px;">
+            <div class="spinner" style="margin: 0 auto;"></div>
+            <p style="margin-top: 15px; color: #666;">Loading match info...</p>
+        </div>
+
+        <div id="resultBox" style="display: none;"></div>
+
+        <div class="links">
+            <a href="/add-member">Add Member</a>
+            <a href="/">Headcount</a>
+            <a href="/logout">Logout</a>
+        </div>
+    </div>
+
+    <script>
+        const updateBtn = document.getElementById('updateBtn');
+        const statusMessage = document.getElementById('statusMessage');
+        const resultBox = document.getElementById('resultBox');
+        const matchInfo = document.getElementById('matchInfo');
+        const loading = document.getElementById('loading');
+
+        function showStatus(message, type) {
+            statusMessage.textContent = message;
+            statusMessage.className = `status-message ${type} show`;
+            
+            setTimeout(() => {
+                statusMessage.classList.remove('show');
+            }, 5000);
+        }
+
+        function showResult(data) {
+            resultBox.innerHTML = `
+                <strong>✅ Update Complete!</strong><br>
+                Successfully updated: ${data.success_count} passes<br>
+                Failed: ${data.failed_count} passes<br>
+                Match: ${data.match.opponent} on ${data.match.full_date} at ${data.match.kickoff}
+            `;
+            resultBox.style.display = 'block';
+        }
+
+        async function loadMatchInfo() {
+            try {
+                const response = await fetch('/api/next-match');
+                
+                if (response.status === 401) {
+                    window.location.href = '/login?next=/update-match';
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    const match = data.match;
+                    document.getElementById('opponent').textContent = match.opponent;
+                    document.getElementById('date').textContent = match.full_date;
+                    document.getElementById('time').textContent = match.kickoff;
+                    document.getElementById('venue').textContent = match.venue;
+                    document.getElementById('passDisplay').textContent = match.pass_display;
+                    
+                    loading.style.display = 'none';
+                    matchInfo.style.display = 'block';
+                } else {
+                    loading.innerHTML = `<p style="color: #721c24;">Error: ${data.error}</p>`;
+                }
+            } catch (error) {
+                loading.innerHTML = `<p style="color: #721c24;">Connection error. Please try again.</p>`;
+                console.error('Error:', error);
+            }
+        }
+
+        updateBtn.addEventListener('click', async () => {
+            if (!confirm('Update all passes with this match info? This will update all members.')) {
+                return;
+            }
+
+            updateBtn.disabled = true;
+            updateBtn.innerHTML = '<span class="spinner"></span> Updating...';
+
+            try {
+                const response = await fetch('/api/update-match', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.status === 401) {
+                    window.location.href = '/login?next=/update-match';
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    showStatus(data.message, 'success');
+                    showResult(data);
+                } else {
+                    showStatus(data.error || 'Error updating passes', 'error');
+                }
+            } catch (error) {
+                showStatus('Connection error. Please try again.', 'error');
+                console.error('Error:', error);
+            } finally {
+                updateBtn.disabled = false;
+                updateBtn.textContent = 'Update All Passes';
+            }
+        });
+
+        // Load match info on page load
+        loadMatchInfo();
+    </script>
+</body>
+</html>
+
+

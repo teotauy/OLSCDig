@@ -102,7 +102,7 @@ def send_pushover_notification(message, title="⚽ Liverpool OLSC", sound="defau
         print(f"Error sending Pushover notification: {e}")
         return False
 
-def send_headcount_update():
+def send_headcount_update(include_timestamp=True):
     """Send current headcount update."""
     members = get_checked_in_members()
     
@@ -117,6 +117,8 @@ def send_headcount_update():
     
     count = len(members)
     priority = 0  # Default priority
+    now = datetime.now(pytz.timezone(PASSKIT_CONFIG["TIMEZONE"]))
+    time_str = now.strftime("%I:%M %p")
     
     # Determine message and sound based on count
     if count == 0:
@@ -132,6 +134,10 @@ def send_headcount_update():
         message = f"🚨 {count} people - PACKED!"
         sound = "siren"
         priority = 1  # High priority for busy times
+    
+    # Add timestamp to message
+    if include_timestamp:
+        message += f" ({time_str})"
     
     send_pushover_notification(message, sound=sound, priority=priority)
 
@@ -223,21 +229,32 @@ def main():
     print("Press Ctrl+C to stop")
     
     last_count = None
+    last_log_time = None
+    check_interval = 60  # Check every 60 seconds (1 minute)
+    log_interval = 600  # Log status every 10 minutes even if no change (console only, no notification)
     
     try:
         while True:
-            # Check for new headcount every 10 minutes
             members = get_checked_in_members()
             if members is not None:
                 current_count = len(members)
+                now = datetime.now()
                 
-                # Only send update if count changed
+                # Send update if count changed
                 if last_count != current_count:
+                    print(f"[{now.strftime('%H:%M:%S')}] Count changed: {last_count} → {current_count}")
                     send_headcount_update()
                     last_count = current_count
+                    last_log_time = now
+                # Just log that we checked (every 10 minutes to avoid spam) - console only, no notification
+                elif last_log_time is None or (now - last_log_time).total_seconds() >= log_interval:
+                    print(f"[{now.strftime('%H:%M:%S')}] Monitoring... {current_count} people checked in (no change)")
+                    last_log_time = now
+            else:
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Error fetching members - will retry")
             
             # Sleep for 1 minute
-            time.sleep(60)  # 60 seconds = 1 minute
+            time.sleep(check_interval)
             
     except KeyboardInterrupt:
         print("\n👋 Stopping notifications...")

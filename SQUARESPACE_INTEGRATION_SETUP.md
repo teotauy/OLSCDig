@@ -272,14 +272,31 @@ Set up monitoring for:
 ### Duplicate Prevention
 
 **How duplicates are prevented:**
-1. **Email check** - Searches existing members by email
-2. **External ID check** - Uses transaction-based external IDs
-3. **No duplicate creation** - Returns existing member if found
-4. **No duplicate emails** - Skips sending welcome emails for existing members
+1. **Email check** - Searches existing members by email address (case-insensitive)
+2. **External ID check** - Uses transaction-based external IDs as secondary check
+3. **Verification** - Confirms found member actually matches the email/external_id before returning
+4. **No duplicate creation** - Returns existing member if found, skips creation
+5. **No duplicate emails** - Skips sending welcome emails for existing members
+6. **Robust error handling** - Handles API response format variations and network errors gracefully
 
 **External ID format:**
 - Single membership: `sq_email@example.com_timestamp`
 - Multiple memberships: `sq_txn_123456_1_email@example.com`
+
+**Recent Improvements (January 2025):**
+- ✅ **Enhanced verification** - Now verifies that found members actually match the search criteria
+- ✅ **Better error handling** - Improved logging and error messages for debugging
+- ✅ **Response format flexibility** - Handles both wrapped (`result` key) and direct member data formats
+- ✅ **Detailed logging** - Clear console output showing when duplicates are detected and prevented
+- ✅ **Case-insensitive matching** - Email comparisons are now case-insensitive for better reliability
+
+**How it works:**
+1. Before creating a new member, the system calls `check_member_exists(email, external_id)`
+2. The function searches PassKit API for existing members matching the email
+3. If found, it verifies the member's email matches (case-insensitive comparison)
+4. If external_id is provided, it also checks for matches by external ID
+5. If a match is found, creation is skipped and the existing member is returned
+6. Clear logging shows: `⚠️ DUPLICATE DETECTED - Member already exists` with member details
 
 ### PassKit Welcome Email vs Custom Email
 
@@ -323,7 +340,19 @@ Set up monitoring for:
 - Ensure PassKit pass template is correct
 - Check for duplicate external IDs
 
-#### 3. Welcome Emails Not Sending
+#### 3. Duplicate Members Being Created
+**Symptoms:** Same member appears multiple times in PassKit
+**Solutions:**
+- Check console logs for duplicate detection messages
+- Verify `check_member_exists()` function is being called
+- Check API response format - system now handles both wrapped and direct formats
+- Review error logs for API connection issues that might cause silent failures
+- The improved duplicate checking (January 2025) now includes:
+  - Email verification (case-insensitive)
+  - External ID verification
+  - Better error handling and logging
+
+#### 4. Welcome Emails Not Sending
 **Symptoms:** Members created but no emails received
 **Solutions:**
 - Verify email service configuration
@@ -393,6 +422,86 @@ For global supporters:
 - **Admin efficiency** - Reduced manual work
 - **Error reduction** - Fewer data entry mistakes
 - **Growth support** - Handle increased membership volume
+
+## 🔧 Technical Details: Duplicate Prevention Improvements (January 2025)
+
+### What Was Changed
+
+The duplicate checking functionality in `squarespace_to_passkit.py` was enhanced to be more robust and reliable.
+
+### Code Changes
+
+#### 1. Enhanced `check_member_exists()` Function
+
+**Location:** `squarespace_to_passkit.py`, lines 50-149
+
+**Improvements:**
+- **Verification Logic**: Now verifies that found members actually match the search criteria (email/external_id) before returning them
+- **Case-Insensitive Matching**: Email comparisons are now case-insensitive using `.lower()` for better reliability
+- **Response Format Handling**: Handles both response formats:
+  - Wrapped format: `{"result": {member_data}}`
+  - Direct format: `{member_data}`
+- **Better Error Handling**: 
+  - Separates network errors from parsing errors
+  - Provides detailed error messages with response status codes
+  - Includes stack traces for unexpected errors
+- **Improved Logging**: Warns about parsing failures but continues processing other lines
+
+**Before:**
+```python
+# Simple check - no verification
+if 'result' in data:
+    return data['result']
+```
+
+**After:**
+```python
+# Verify the member actually matches
+if 'result' in data:
+    member = data['result']
+    if member.get('person', {}).get('emailAddress', '').lower() == email.lower():
+        return member
+```
+
+#### 2. Enhanced `create_passkit_member()` Function
+
+**Location:** `squarespace_to_passkit.py`, lines 151-182
+
+**Improvements:**
+- **Clear Logging**: Added explicit logging when duplicate checks run
+- **Detailed Duplicate Messages**: Shows member ID and email when duplicates are detected
+- **Visual Indicators**: Uses emoji indicators (🔍, ⚠️, ✅) for better visibility in logs
+
+**New Log Output:**
+```
+🔍 Checking for duplicate member: user@example.com
+⚠️ DUPLICATE DETECTED - Member already exists:
+   Email: user@example.com
+   Member ID: abc123xyz
+   ✅ Skipping creation to prevent duplicate
+```
+
+### Why These Changes Were Needed
+
+1. **Silent Failures**: The original code could fail silently if API responses changed format
+2. **False Positives**: No verification that found members actually matched the search criteria
+3. **Limited Error Visibility**: Errors were caught but not logged with enough detail for debugging
+4. **Case Sensitivity**: Email matching was case-sensitive, which could miss duplicates with different casing
+
+### Testing the Improvements
+
+To verify duplicate prevention is working:
+
+1. **Check Console Output**: Look for `🔍 Checking for duplicate member` messages
+2. **Verify Duplicate Detection**: Try adding a member that already exists - you should see `⚠️ DUPLICATE DETECTED`
+3. **Review Error Logs**: If duplicates are still being created, check for error messages in the console
+
+### Files Modified
+
+- `squarespace_to_passkit.py` - Enhanced duplicate checking functions
+- `SQUARESPACE_INTEGRATION_SETUP.md` - Updated documentation (this file)
+- `COMPREHENSIVE_README.md` - Updated feature descriptions
+- `FINAL_WORKING_STATE.md` - Updated status information
 
 ---
 

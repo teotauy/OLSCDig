@@ -10,14 +10,16 @@ import os
 import requests
 import json
 from datetime import datetime, timedelta
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 from dotenv import load_dotenv
 import pytz
+from team_abbreviations import format_match_display, abbreviate_team_name
 # Notifications feature removed
 
 load_dotenv()
 
 app = Flask(__name__)
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'change-this-secret-key-in-production')
 
 # Configuration
 config = {
@@ -50,6 +52,114 @@ def parse_ndjson(response_text):
                 pass  # Skip invalid lines
     return members
 
+def check_member_exists(email):
+    """Check if a member already exists in PassKit by email."""
+    try:
+        url = f"{config['API_BASE']}/members/member/list/{config['PROGRAM_ID']}"
+        
+        payload = {
+            "filters": {
+                "limit": 500,
+                "offset": 0,
+                "orderBy": "created",
+                "orderAsc": False
+            }
+        }
+        
+        response = requests.post(url, headers=get_passkit_headers(), json=payload, timeout=30)
+        response.raise_for_status()
+        
+        email_lower = email.lower()
+        for line in response.text.strip().split('\n'):
+            if line:
+                try:
+                    data = json.loads(line)
+                    member = None
+                    if 'result' in data:
+                        member = data['result']
+                    elif 'person' in data:
+                        member = data
+                    
+                    if member:
+                        member_email = member.get('person', {}).get('emailAddress', '')
+                        if member_email.lower() == email_lower:
+                            return member
+                except json.JSONDecodeError:
+                    pass
+        
+        return None
+    except Exception as e:
+        print(f"Error checking member existence: {e}")
+        return None
+
+def create_member(first_name, last_name, email, phone=""):
+    """Create a new member in PassKit."""
+    # Check if member already exists
+    existing_member = check_member_exists(email)
+    
+    if existing_member:
+        return {
+            "success": True,
+            "member_id": existing_member.get("id"),
+            "already_exists": True,
+            "message": "Member already exists"
+        }
+    
+    # Create new member
+    url = f"{config['API_BASE']}/members/member"
+    
+    external_id = f"manual_{email}_{int(datetime.now().timestamp())}"
+    
+    payload = {
+        "programId": config["PROGRAM_ID"],
+        "externalId": external_id,
+        "tierId": "base",
+        "person": {
+            "forename": first_name,
+            "surname": last_name,
+            "displayName": f"{first_name} {last_name}".strip(),
+            "emailAddress": email,
+            "mobileNumber": phone
+        },
+        "metaData": {
+            "nextMatch": "Some inferior side",
+            "membershipType": "Standard",
+            "joinDate": datetime.now().strftime("%Y-%m-%d"),
+            "source": "Web Interface"
+        },
+        "sendWelcomeEmail": True
+    }
+    
+    try:
+        response = requests.post(url, headers=get_passkit_headers(), json=payload, timeout=30)
+        
+        if response.status_code != 200:
+            return {
+                "success": False,
+                "error": f"API Error {response.status_code}: {response.text}"
+            }
+        
+        response.raise_for_status()
+        result = response.json()
+        member_id = result.get("id")
+        
+        pass_url = f"https://pub2.passkit.io/pass/{config['PROGRAM_ID']}/{member_id}"
+        
+        return {
+            "success": True,
+            "member_id": member_id,
+            "pass_url": pass_url,
+            "email": email,
+            "name": f"{first_name} {last_name}"
+        }
+        
+    except requests.exceptions.RequestException as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "email": email
+        }
+
 def get_checked_in_members():
     """Fetch all CHECKED_IN members from PassKit API."""
     url = f"{config['API_BASE']}/members/member/list/{config['PROGRAM_ID']}"
@@ -77,10 +187,58 @@ def get_checked_in_members():
     
     return parse_ndjson(response.text)
 
+def require_password():
+    """Check if user is authenticated."""
+    admin_password = os.getenv('ADMIN_PASSWORD', 'admin123')  # Change this!
+    if not session.get('authenticated'):
+        return False
+    return True
+
 @app.route('/')
 def index():
-    """Main page with headcount display and checkout button."""
+    """Public landing page with headcount display."""
+    return render_template('landing.html')
+
+@app.route('/admin')
+def admin_index():
+    """Admin page with headcount display and checkout button."""
     return render_template('index.html')
+
+@app.route('/add-member')
+def add_member_page():
+    """Page for adding new members (password protected)."""
+    if not require_password():
+        return redirect(url_for('login'))
+    return render_template('add_member.html')
+
+@app.route('/update-match')
+def update_match_page():
+    """Page for updating match info (password protected)."""
+    if not require_password():
+        return redirect(url_for('login'))
+    return render_template('update_match.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Login page for member addition."""
+    admin_password = os.getenv('ADMIN_PASSWORD', 'admin123')  # Change this!
+    
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+        if password == admin_password:
+            session['authenticated'] = True
+            next_page = request.args.get('next', url_for('add_member_page'))
+            return redirect(next_page)
+        else:
+            return render_template('login.html', error='Incorrect password')
+    
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    """Logout and clear session."""
+    session.pop('authenticated', None)
+    return redirect(url_for('index'))
 
 # Notifications page removed
 
@@ -161,6 +319,216 @@ def api_checkout():
             "error": str(e)
         }), 500
 
+@app.route('/api/add-member', methods=['POST'])
+def api_add_member():
+    """API endpoint to add a new member."""
+    if not require_password():
+        return jsonify({
+            "status": "error",
+            "error": "Authentication required"
+        }), 401
+    
+    try:
+        data = request.get_json()
+        first_name = data.get('first_name', '').strip()
+        last_name = data.get('last_name', '').strip()
+        email = data.get('email', '').strip()
+        phone = data.get('phone', '').strip()
+        
+        if not first_name or not last_name or not email:
+            return jsonify({
+                "status": "error",
+                "error": "First name, last name, and email are required"
+            }), 400
+        
+        result = create_member(first_name, last_name, email, phone)
+        
+        if result['success']:
+            if result.get('already_exists'):
+                return jsonify({
+                    "status": "success",
+                    "message": "Member already exists",
+                    "member_id": result.get('member_id'),
+                    "already_exists": True
+                })
+            else:
+                return jsonify({
+                    "status": "success",
+                    "message": "Member created successfully",
+                    "member_id": result.get('member_id'),
+                    "pass_url": result.get('pass_url'),
+                    "name": result.get('name'),
+                    "email": result.get('email')
+                })
+        else:
+            return jsonify({
+                "status": "error",
+                "error": result.get('error', 'Unknown error')
+            }), 500
+    
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "error": str(e)
+        }), 500
+
+def get_liverpool_fixtures():
+    """Get Liverpool FC fixtures from football-data.org API."""
+    API_KEY = "7e9f8206e9db47fa8a4b15b783a7543b"
+    headers = {"X-Auth-Token": API_KEY}
+    team_id = 64  # Liverpool FC
+    
+    try:
+        url = f"https://api.football-data.org/v4/teams/{team_id}/matches"
+        params = {"status": "SCHEDULED", "limit": 5}
+        
+        response = requests.get(url, headers=headers, params=params, timeout=30)
+        response.raise_for_status()
+        
+        data = response.json()
+        fixtures = data.get("matches", [])
+        
+        upcoming_matches = []
+        for match in fixtures:
+            home_team = match["homeTeam"]["name"]
+            away_team = match["awayTeam"]["name"]
+            match_date = datetime.fromisoformat(match["utcDate"].replace("Z", "+00:00"))
+            
+            if home_team == "Liverpool FC":
+                opponent = away_team
+                venue = "Anfield"
+                is_home = True
+            else:
+                opponent = home_team
+                venue = match.get("venue", "Away")
+                is_home = False
+            
+            local_time = match_date.astimezone(pytz.timezone(config["TIMEZONE"]))
+            date_str = local_time.strftime("%b %d")
+            
+            hour = local_time.hour
+            minute = local_time.minute
+            am_pm = "AM" if hour < 12 else "PM"
+            
+            if hour == 0:
+                display_hour = 12
+            elif hour <= 12:
+                display_hour = hour
+            else:
+                display_hour = hour - 12
+            
+            if minute == 0:
+                time_str = f"{display_hour}{am_pm}"
+            else:
+                time_str = f"{display_hour}:{minute:02d}{am_pm}"
+            
+            pass_display = format_match_display(opponent, date_str, time_str)
+            
+            upcoming_matches.append({
+                "opponent": opponent,
+                "date": date_str,
+                "time": time_str,
+                "venue": venue,
+                "is_home": is_home,
+                "full_date": local_time.strftime("%A, %B %d"),
+                "kickoff": time_str,
+                "pass_display": pass_display
+            })
+        
+        return upcoming_matches
+    except Exception as e:
+        print(f"Error fetching fixtures: {e}")
+        return []
+
+@app.route('/api/next-match')
+def api_next_match():
+    """API endpoint to get next match info."""
+    if not require_password():
+        return jsonify({"status": "error", "error": "Authentication required"}), 401
+    
+    try:
+        fixtures = get_liverpool_fixtures()
+        if fixtures:
+            return jsonify({"status": "success", "match": fixtures[0]})
+        return jsonify({"status": "error", "error": "No upcoming matches found"}), 404
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+@app.route('/api/update-match', methods=['POST'])
+def api_update_match():
+    """API endpoint to update all passes with next match."""
+    if not require_password():
+        return jsonify({"status": "error", "error": "Authentication required"}), 401
+    
+    try:
+        fixtures = get_liverpool_fixtures()
+        if not fixtures:
+            return jsonify({"status": "error", "error": "No upcoming matches found"}), 404
+        
+        match_data = fixtures[0]
+        
+        # Get all passes
+        url = f"{config['API_BASE']}/members/member/list/{config['PROGRAM_ID']}"
+        payload = {
+            "filters": {
+                "limit": 1000,
+                "offset": 0,
+                "orderBy": "created",
+                "orderAsc": True
+            }
+        }
+        
+        response = requests.post(url, headers=get_passkit_headers(), json=payload, timeout=30)
+        response.raise_for_status()
+        
+        passes = parse_ndjson(response.text)
+        update_url = f"{config['API_BASE']}/members/member"
+        
+        success_count = 0
+        failed_count = 0
+        
+        for pass_data in passes:
+            member_id = pass_data.get("id")
+            if not member_id:
+                failed_count += 1
+                continue
+            
+            person_data = pass_data.get("person", {})
+            update_payload = {
+                "programId": config["PROGRAM_ID"],
+                "id": member_id,
+                "person": {
+                    "displayName": person_data.get("displayName", "Unknown"),
+                    "emailAddress": person_data.get("emailAddress", ""),
+                    "surname": person_data.get("surname", ""),
+                    "forename": person_data.get("forename", "")
+                },
+                "metaData": {
+                    "nextMatch": match_data['pass_display']
+                }
+            }
+            
+            if pass_data.get("externalId"):
+                update_payload["externalId"] = pass_data.get("externalId")
+            
+            try:
+                update_response = requests.put(update_url, headers=get_passkit_headers(), json=update_payload, timeout=30)
+                update_response.raise_for_status()
+                success_count += 1
+            except Exception as e:
+                failed_count += 1
+        
+        return jsonify({
+            "status": "success",
+            "message": f"Updated {success_count} passes",
+            "match": match_data,
+            "success_count": success_count,
+            "failed_count": failed_count
+        })
+    
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
 # Notification APIs removed
 
  
@@ -175,9 +543,11 @@ if __name__ == '__main__':
         print("❌ Error: PASSKIT_API_KEY and PASSKIT_PROJECT_KEY must be set in .env file")
         exit(1)
     
+    port = int(os.getenv('PORT', 5000))
+    
     print("🏴󠁧󠁢󠁥󠁮󠁧󠁿  Liverpool OLSC - PassKit Manager")
-    print(f"   Server starting at http://0.0.0.0:5000")
+    print(f"   Server starting at http://0.0.0.0:{port}")
     print(f"   Access from your phone using your computer's IP address")
     print()
     
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=port, debug=False)

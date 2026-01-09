@@ -1,6 +1,7 @@
 # Liverpool OLSC - PassKit Integration System
 
 > **Status**: ✅ **FULLY WORKING!**  
+> **Last Updated**: January 2025  
 > Complete automation from Squarespace to PassKit with real-time management
 
 ## What This Does
@@ -8,11 +9,12 @@
 Complete Liverpool OLSC member management system:
 
 1. **🛒 Squarespace → PassKit Automation** - New memberships automatically create PassKit members and send welcome emails
-2. **📱 Scan members in** - Use PassKit Pass Reader app (changes status to `CHECKED_IN`)
-3. **👀 View headcount** - See how many people are checked in (updates every 60 seconds)
-4. **✅ Bulk checkout** - One button to check everyone out after a match
-5. **⚽ Match Updates** - Automatic Liverpool FC fixture updates on all passes
-6. **🔔 Push Notifications** - Real-time headcount updates via Pushover
+2. **👤 Web-Based Member Addition** - Add members through a secure web interface (password protected)
+3. **📱 Scan members in** - Use PassKit Pass Reader app (changes status to `CHECKED_IN`)
+4. **👀 View headcount** - See how many people are checked in (updates every 60 seconds)
+5. **✅ Bulk checkout** - One button to check everyone out after a match
+6. **⚽ Match Updates** - Automatic Liverpool FC fixture updates on all passes
+7. **🔔 Push Notifications** - Real-time headcount updates via Pushover
 
 ## Quick Start
 
@@ -32,6 +34,11 @@ Then open:
 - **On your computer**: http://localhost:5000
 - **On your phone**: http://[your-ip]:5000 (make sure you're on the same Wi-Fi)
 
+**Features:**
+- **Headcount Display** - Live count of checked-in members
+- **Bulk Checkout** - Check everyone out with one click
+- **Add Members** - Password-protected interface at `/add-member`
+
 ### Option 3: Command-Line
 
 ```bash
@@ -43,10 +50,43 @@ Lists all checked-in members and checks them out after confirmation.
 ### Test Connection
 
 ```bash
-python3 test_connection.py
+python3 status_api.py
 ```
 
 Verifies API is working and shows current member counts.
+
+### Quick Add Members
+
+**Option A: Web Interface (Recommended)**
+1. Start the web app: `python3 app.py`
+2. Go to http://localhost:5000/add-member
+3. Login with your password (set `ADMIN_PASSWORD` in `.env`)
+4. Fill in the form and submit
+
+**Option B: Command Line Script**
+1. Edit `quick_add_members.py` and add members to the `MEMBERS` list:
+   ```python
+   MEMBERS = [
+       {
+           "first_name": "John",
+           "last_name": "Doe",
+           "email": "john@example.com",
+           "phone": ""  # Optional
+       }
+   ]
+   ```
+
+2. Run the script:
+   ```bash
+   python3 quick_add_members.py
+   ```
+
+**Duplicate Prevention:**
+- Automatically checks for existing members before creating
+- Searches through the most recent 500 members by email (case-insensitive)
+- Prevents duplicate member creation
+- Skips welcome emails for existing members
+- Perfect for clubs with a few hundred members
 
 ## How to Find Your Computer's IP
 
@@ -88,7 +128,8 @@ Look for your local IP (usually starts with 192.168.x.x or 10.x.x.x)
 .
 ├── app.py                    # Flask web app (START HERE)
 ├── checkout.py               # Command-line bulk checkout
-├── test_connection.py        # Test API connection
+├── quick_add_members.py      # Quick manual member addition tool
+├── status_api.py             # Test API connection & system status
 ├── control-panel.html        # GitHub Pages control panel
 ├── COMPREHENSIVE_README.md   # Complete documentation
 ├── templates/
@@ -131,7 +172,7 @@ Make sure:
 
 ### API errors
 
-Run `python3 test_connection.py` to diagnose. Should show:
+Run `python3 status_api.py` to diagnose. Should show:
 ```
 ✅ SUCCESS! Found X total members
    - Y CHECKED_IN
@@ -162,7 +203,7 @@ Want to make this even better? Here are some ideas:
 ## Support
 
 Everything is working! If you need help:
-1. Run `python3 test_connection.py` to check API status
+1. Run `python3 status_api.py` to check API status
 2. Check this README for troubleshooting
 3. Contact PassKit support if API issues arise
 

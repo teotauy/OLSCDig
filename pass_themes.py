@@ -14,7 +14,7 @@ import requests
 import json
 from datetime import datetime
 from dotenv import load_dotenv
-from team_abbreviations import get_liverpool_fixtures
+# from team_abbreviations import get_liverpool_fixtures
 
 # Load environment variables
 load_dotenv()
@@ -115,28 +115,10 @@ def get_theme_for_match(fixture_data=None):
         dict: Theme configuration for the match
     """
     try:
-        if not fixture_data:
-            # Fetch next match
-            fixtures = get_liverpool_fixtures()
-            if not fixtures:
-                print("⚠️ No upcoming matches found, using default home theme")
-                return LIVERPOOL_THEMES['home']
-            
-            fixture_data = fixtures[0]
-        
-        # Detect match location
-        location = detect_match_location(fixture_data)
-        
-        # Return appropriate theme
-        if location == 'home':
-            print("🏠 Home match detected - using Liverpool Red theme")
-            return LIVERPOOL_THEMES['home']
-        elif location == 'away':
-            print("✈️ Away match detected - using Liverpool Green theme")
-            return LIVERPOOL_THEMES['away']
-        else:
-            print("❓ Match location unknown - using default home theme")
-            return LIVERPOOL_THEMES['home']
+        # For now, just return away theme (green) since next match is away
+        # You can manually specify 'home' or 'away' when calling update_all_passes_theme()
+        print("✈️ Using Liverpool Green theme (away)")
+        return LIVERPOOL_THEMES['away']
             
     except Exception as e:
         print(f"❌ Error getting theme for match: {e}")

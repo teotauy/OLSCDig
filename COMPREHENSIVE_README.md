@@ -40,10 +40,11 @@ PassKit API ←→ Python Scripts ←→ Local Web App
 ```
 ├── app.py                          # 🌐 Flask web interface (main entry point)
 ├── checkout.py                     # ✅ Bulk checkout command-line tool
+├── quick_add_members.py            # 👤 Quick manual member addition tool
 ├── notifications.py                # 🔔 Pushover headcount notifier (optional)
 ├── match_updates.py                # ⚽ Updates ALL passes with next match
 ├── update_updating_members.py      # 🔄 Updates only new members
-├── test_connection.py              # 🔧 API connection diagnostics
+├── status_api.py                   # 🔧 API connection diagnostics & system status
 ├── team_abbreviations.py           # 📝 Team name abbreviations for passes
 ├── squarespace_webhook.py          # 🛒 Webhook server for Squarespace forms
 ├── squarespace_to_passkit.py       # 🔄 Core member creation logic
@@ -84,11 +85,20 @@ PassKit API ←→ Python Scripts ←→ Local Web App
 
 ### Key Features
 - ✅ **Multiple memberships per transaction** (spouse, family members)
-- ✅ **Duplicate prevention** (won't create existing members)
+- ✅ **Robust duplicate prevention** (verified email/external ID matching, won't create existing members)
 - ✅ **Current year filtering** (25/26 memberships only)
 - ✅ **PassKit welcome emails** (automatic)
 - ✅ **Match placeholder** ("Some inferior side" until real match data)
 - ✅ **Form data integration** (name, email, phone, preferences)
+
+**Duplicate Prevention Details:**
+- Checks existing members by email (case-insensitive) before creation
+- Verifies found members match search criteria to prevent false positives
+- Handles API response format variations gracefully
+- Provides detailed logging when duplicates are detected
+- Skips welcome emails for existing members
+
+**Note**: The PassKit API doesn't support filtering by email address directly. Both `squarespace_to_passkit.py` and `quick_add_members.py` implement duplicate checking by fetching recent members and searching through them in Python. This works perfectly for clubs with a few hundred members (searches most recent 500 members).
 
 ### Setup
 See **[Squarespace Integration Setup](SQUARESPACE_INTEGRATION_SETUP.md)** for complete setup instructions.
@@ -120,7 +130,7 @@ See **[Squarespace Integration Setup](SQUARESPACE_INTEGRATION_SETUP.md)** for co
 
 4. **Test connection**
    ```bash
-   python3 test_connection.py
+   python3 status_api.py
    ```
 
 ### Daily Operations
@@ -160,13 +170,69 @@ python3 update_updating_members.py
 ```
 **What it does**: Updates only members who still have "Some inferior side" placeholder text
 
-### 3. Web Interface
+### 3. Quick Add Members (Manual Addition)
+**When to use**: For manually adding individual members outside of Squarespace automation
+
+```bash
+python3 quick_add_members.py
+```
+
+**How it works**:
+1. Edit `quick_add_members.py` and add members to the `MEMBERS` list:
+   ```python
+   MEMBERS = [
+       {
+           "first_name": "John",
+           "last_name": "Doe",
+           "email": "john@example.com",
+           "phone": ""  # Optional
+       }
+   ]
+   ```
+2. Run the script - it will create members and send welcome emails
+
+**Duplicate Prevention**:
+- ✅ Automatically checks for existing members before creating
+- ✅ Searches through the most recent 500 members by email (case-insensitive)
+- ✅ Prevents duplicate member creation
+- ✅ Skips welcome emails for existing members
+- ✅ Perfect for clubs with a few hundred members
+
+**Technical Details**:
+- The PassKit API doesn't support filtering by email address directly
+- The script fetches the most recent 500 members and searches through them in Python
+- This approach works well for smaller clubs (few hundred members)
+- If a member was added long ago and there are 500+ newer members, the duplicate check might not catch it (rare edge case)
+
+**Output Example**:
+```
+🏆 Liverpool OLSC - Quick Add New Members
+=============================================
+📝 Ready to add 1 members:
+  1. John Doe (john@example.com)
+
+🚀 Adding members...
+
+👤 Adding member: John Doe (john@example.com)
+✅ Member created successfully!
+   Member ID: 3v1TAPjaxn0PZ8KMtRKIyt
+   Pass URL: https://pub2.passkit.io/pass/3yyTsbqwmtXaiKZ5qWhqTP/3v1TAPjaxn0PZ8KMtRKIyt
+   📧 Welcome email triggered
+
+📊 Summary:
+  ✅ New members created: 1
+  ⚠️ Already existed: 0
+  ❌ Failed: 0
+  📧 Total processed: 1
+```
+
+### 4. Web Interface
 ```bash
 python3 app.py
 ```
 **What it does**: Starts Flask server with live headcount and bulk checkout button
 
-### 4. Notifications System
+### 5. Notifications System
 ```bash
 python3 notifications.py
 ```
@@ -236,7 +302,7 @@ PUSHOVER_API_TOKEN=your_api_token_here
 **Solution**: 
 - Verify API keys in `.env` file
 - Check if using correct server (pub1 vs pub2)
-- Run `python3 test_connection.py` for diagnostics
+- Run `python3 status_api.py` for diagnostics
 
 #### 2. Match Updates Not Showing on Passes
 **Symptoms**: API returns 200 OK but pass doesn't update
@@ -261,8 +327,8 @@ PUSHOVER_API_TOKEN=your_api_token_here
 
 ### Diagnostic Commands
 ```bash
-# Test API connection
-python3 test_connection.py
+# Test API connection and system status
+python3 status_api.py
 
 # (Optional) Start headcount notifier
 python3 notifications.py

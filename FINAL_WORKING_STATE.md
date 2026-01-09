@@ -18,7 +18,7 @@
 2. **Member creation** - `squarespace_to_passkit.py` with tierId fix
 3. **CSV backfill** - `process_orders_csv.py` for historical orders
 4. **Multiple memberships** - Handle spouse/family purchases
-5. **Duplicate prevention** - Won't create existing members
+5. **Enhanced duplicate prevention** - Robust checking with verification and detailed logging (updated January 2025)
 6. **Welcome emails** - Automatic PassKit welcome emails
 
 ### ✅ **Proven Results**

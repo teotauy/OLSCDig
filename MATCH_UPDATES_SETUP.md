@@ -32,8 +32,9 @@ python3 match_updates.py
 
 1. **Fetches Liverpool fixtures** from football-data.org API
 2. **Finds next match** (upcoming fixture)
-3. **Updates all passes** with match information
-4. **Sends push notification** to all members
+3. **Smart update** - Only updates passes with placeholder text "Some inferior side"
+4. **Skips already-updated passes** - Won't overwrite passes that already have real match info
+5. **Sends push notification** to all members (if enabled)
 
 ## Automation Options
 
@@ -69,12 +70,14 @@ The system can prepare push notifications but will NOT send them without approva
 
 ## Pass Fields Updated
 
-The following fields will be updated on all passes:
-- `nextMatch` - "vs [Opponent]"
-- `matchDate` - "Oct 15"
-- `matchTime` - "3:00 PM"
-- `venue` - "Anfield" or "Away"
-- `isHomeMatch` - "Yes" or "No"
+The following fields will be updated on passes that still have the placeholder:
+- `nextMatch` - "Man U | 10/19 11:30 AM" (formatted display)
+
+**Smart Update Logic:**
+- ✅ **Updates passes** with "Some inferior side" placeholder
+- ⏭️ **Skips passes** that already have real match information
+- 🎯 **Efficient** - Only processes passes that need updating
+- 📊 **Reports** - Shows count of passes updated vs skipped
 
 ## Troubleshooting
 
