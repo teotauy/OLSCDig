@@ -326,6 +326,26 @@ def main():
     print(f"🏟️ Venue: {next_match['venue']}")
     print(f"🏠 Home: {'Yes' if next_match['is_home'] else 'No'}")
     
+    # Show what will be displayed on passes
+    print("\n" + "=" * 50)
+    print("📱 TEXT THAT WILL APPEAR ON PASSES:")
+    print("=" * 50)
+    print(f"   '{next_match['pass_display']}'")
+    print("=" * 50)
+    print(f"   Length: {len(next_match['pass_display'])} characters")
+    print()
+    
+    # Ask for confirmation
+    while True:
+        confirm = input("✅ Confirm update? (yes/no): ").strip().lower()
+        if confirm in ['yes', 'y']:
+            break
+        elif confirm in ['no', 'n']:
+            print("❌ Update cancelled by user")
+            return
+        else:
+            print("⚠️  Please enter 'yes' or 'no'")
+    
     # Update passes
     print("\n📱 Updating passes...")
     success = update_pass_fields(next_match)
