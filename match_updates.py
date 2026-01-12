@@ -36,6 +36,7 @@ def get_liverpool_fixtures():
     """
     Get Liverpool FC fixtures from football-data.org API.
     Returns upcoming matches with opponent, date, time, venue.
+    Uses UK timezone as source of truth for Premier League matches.
     """
     # Free tier API key (you can get your own at football-data.org)
     API_KEY = "7e9f8206e9db47fa8a4b15b783a7543b"
@@ -61,12 +62,21 @@ def get_liverpool_fixtures():
         data = response.json()
         fixtures = data.get("matches", [])
         
+        # Debug: Print raw UTC times
+        print(f"📡 Fetched {len(fixtures)} fixtures from football-data.org")
+        for match in fixtures[:1]:  # Print first match for debugging
+            print(f"   Raw UTC time: {match.get('utcDate')}")
+        
         # Process fixtures
         upcoming_matches = []
         for match in fixtures:
             home_team = match["homeTeam"]["name"]
             away_team = match["awayTeam"]["name"]
             match_date = datetime.fromisoformat(match["utcDate"].replace("Z", "+00:00"))
+            
+            # Check for manual override BEFORE processing
+            date_key = match_date.strftime("%Y-%m-%d")
+            override = check_manual_override(date_key)
             
             # Determine if Liverpool is home or away
             if home_team == "Liverpool FC":
@@ -78,11 +88,44 @@ def get_liverpool_fixtures():
                 venue = match.get("venue", "Away")
                 is_home = False
             
-            # Format date and time for pass display
-            local_time = match_date.astimezone(pytz.timezone(PASSKIT_CONFIG["TIMEZONE"]))
+            # If override exists, use it
+            if override:
+                # Parse override date to get full date string
+                current_year = match_date.year
+                override_date = datetime.strptime(f"{override['date']} {current_year}", "%m/%d %Y")
+                full_date = override_date.strftime("%A, %B %d")
+                
+                upcoming_matches.append({
+                    "opponent": override["opponent"],
+                    "date": override["date"],
+                    "time": override["time"],
+                    "venue": venue,
+                    "is_home": is_home,
+                    "full_date": full_date,
+                    "kickoff": override["time"],
+                    "pass_display": override["pass_display"]
+                })
+                continue
+            
+            # Convert UTC to UK time first (Premier League matches are scheduled in UK time)
+            # Premier League matches are always scheduled in UK local time
+            uk_timezone = pytz.timezone("Europe/London")
+            uk_time = match_date.astimezone(uk_timezone)
+            
+            # Debug output
+            if match == fixtures[0]:  # Only for first match
+                print(f"   UK time: {uk_time.strftime('%Y-%m-%d %H:%M %Z')}")
+            
+            # Convert UK time to display timezone (EST)
+            display_timezone = pytz.timezone(PASSKIT_CONFIG["TIMEZONE"])
+            local_time = uk_time.astimezone(display_timezone)
+            
+            if match == fixtures[0]:  # Only for first match
+                print(f"   Display time ({PASSKIT_CONFIG['TIMEZONE']}): {local_time.strftime('%Y-%m-%d %H:%M %Z')}")
+            
             date_str = local_time.strftime("%b %d")
             
-            # Format time with AM/PM (no minutes if :00, minimal digits)
+            # Format time with AM/PM - always show minutes for accuracy
             hour = local_time.hour
             minute = local_time.minute
             
@@ -97,11 +140,8 @@ def get_liverpool_fixtures():
             else:
                 display_hour = hour - 12
             
-            # Format time string
-            if minute == 0:
-                time_str = f"{display_hour}{am_pm}"
-            else:
-                time_str = f"{display_hour}:{minute:02d}{am_pm}"
+            # Format time string - always show minutes for accuracy
+            time_str = f"{display_hour}:{minute:02d}{am_pm}"
             
             # Create optimized pass display format
             pass_display = format_match_display(opponent, date_str, time_str)
@@ -123,11 +163,28 @@ def get_liverpool_fixtures():
         print(f"Error fetching fixtures: {e}")
         return []
 
+def check_manual_override(match_date_str):
+    """Check if there's a manual override for this match date."""
+    try:
+        override_file = os.path.join(os.path.dirname(__file__), "match_overrides.json")
+        if os.path.exists(override_file):
+            with open(override_file, 'r') as f:
+                overrides = json.load(f)
+                if overrides.get("enabled") and "overrides" in overrides:
+                    # Check for override by date (format: YYYY-MM-DD)
+                    if match_date_str in overrides["overrides"]:
+                        override = overrides["overrides"][match_date_str]
+                        print(f"⚠️  Using manual override for {match_date_str}: {override.get('note', '')}")
+                        return override
+    except Exception as e:
+        print(f"Warning: Could not load match overrides: {e}")
+    return None
+
 def get_next_match():
     """Get the next upcoming match."""
     fixtures = get_liverpool_fixtures()
     if fixtures:
-        return fixtures[0]  # Next match
+        return fixtures[0]  # Next match (already processed with override check)
     return None
 
 def update_pass_fields(match_data):

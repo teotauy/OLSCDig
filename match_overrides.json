@@ -1,0 +1,12 @@
+{
+  "overrides": {
+    "2026-01-17": {
+      "opponent": "Burnley",
+      "time": "2:45PM",
+      "date": "1/17",
+      "pass_display": "Burnley | 1/17 2:45PM",
+      "note": "Manual override - API shows incorrect time"
+    }
+  },
+  "enabled": true
+}
