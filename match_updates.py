@@ -125,7 +125,7 @@ def get_liverpool_fixtures():
             
             date_str = local_time.strftime("%b %d")
             
-            # Format time with AM/PM - always show minutes for accuracy
+            # Format time with AM/PM - drop :00 for exact hours
             hour = local_time.hour
             minute = local_time.minute
             
@@ -140,8 +140,11 @@ def get_liverpool_fixtures():
             else:
                 display_hour = hour - 12
             
-            # Format time string - always show minutes for accuracy
-            time_str = f"{display_hour}:{minute:02d}{am_pm}"
+            # Format time string
+            if minute == 0:
+                time_str = f"{display_hour} {am_pm}"
+            else:
+                time_str = f"{display_hour}:{minute:02d}{am_pm}"
             
             # Create optimized pass display format
             pass_display = format_match_display(opponent, date_str, time_str)
