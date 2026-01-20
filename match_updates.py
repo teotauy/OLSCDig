@@ -144,7 +144,7 @@ def get_liverpool_fixtures():
             if minute == 0:
                 time_str = f"{display_hour} {am_pm}"
             else:
-                time_str = f"{display_hour}:{minute:02d}{am_pm}"
+                time_str = f"{display_hour}:{minute:02d} {am_pm}"
             
             # Create optimized pass display format
             pass_display = format_match_display(opponent, date_str, time_str)
