@@ -26,9 +26,39 @@ PASSKIT_CONFIG = {
 # ADD YOUR NEW MEMBERS HERE:
 MEMBERS = [
     {
+        "first_name": "Jack",
+        "last_name": "Moulton",
+        "email": "jackmoulton17@gmail.com",
+        "phone": ""
+    },
+    {
+        "first_name": "Shane",
+        "last_name": "Johnson",
+        "email": "shnjhnsn@gmail.com",
+        "phone": ""
+    },
+    {
         "first_name": "Jamie",
         "last_name": "Laughlin",
         "email": "jamielaughlin@live.co.uk",
+        "phone": ""
+    },
+    {
+        "first_name": "Cody",
+        "last_name": "Saben",
+        "email": "saben.cody@gmail.com",
+        "phone": ""
+    },
+    {
+        "first_name": "Thomas",
+        "last_name": "Schwenn",
+        "email": "thomas.a.schwenn@gmail.com",
+        "phone": ""
+    },
+    {
+        "first_name": "Rich",
+        "last_name": "Custodio",
+        "email": "richcus3@gmail.com",
         "phone": ""
     }
 ]

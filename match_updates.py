@@ -6,6 +6,7 @@ Automatically updates pass fields with upcoming match information.
 
 import os
 import json
+import sys
 import requests
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -338,16 +339,20 @@ def main():
     print(f"   Length: {len(next_match['pass_display'])} characters")
     print()
     
-    # Ask for confirmation
-    while True:
-        confirm = input("✅ Confirm update? (yes/no): ").strip().lower()
-        if confirm in ['yes', 'y']:
-            break
-        elif confirm in ['no', 'n']:
-            print("❌ Update cancelled by user")
-            return
-        else:
-            print("⚠️  Please enter 'yes' or 'no'")
+    # Ask for confirmation (auto-confirm in non-interactive mode)
+    if not sys.stdin.isatty():
+        confirm = "yes"
+        print("✅ Auto-confirming update (non-interactive)")
+    else:
+        while True:
+            confirm = input("✅ Confirm update? (yes/no): ").strip().lower()
+            if confirm in ['yes', 'y']:
+                break
+            elif confirm in ['no', 'n']:
+                print("❌ Update cancelled by user")
+                return
+            else:
+                print("⚠️  Please enter 'yes' or 'no'")
     
     # Update passes
     print("\n📱 Updating passes...")
