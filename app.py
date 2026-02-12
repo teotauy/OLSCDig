@@ -14,6 +14,7 @@ from flask import Flask, render_template, jsonify, request, session, redirect, u
 from dotenv import load_dotenv
 import pytz
 from team_abbreviations import format_match_display, abbreviate_team_name
+from match_updates import get_next_match
 # Notifications feature removed
 
 load_dotenv()
@@ -372,101 +373,31 @@ def api_add_member():
             "error": str(e)
         }), 500
 
-def get_liverpool_fixtures():
-    """Get Liverpool FC fixtures from football-data.org API."""
-    API_KEY = "7e9f8206e9db47fa8a4b15b783a7543b"
-    headers = {"X-Auth-Token": API_KEY}
-    team_id = 64  # Liverpool FC
-    
-    try:
-        url = f"https://api.football-data.org/v4/teams/{team_id}/matches"
-        params = {"status": "SCHEDULED", "limit": 5}
-        
-        response = requests.get(url, headers=headers, params=params, timeout=30)
-        response.raise_for_status()
-        
-        data = response.json()
-        fixtures = data.get("matches", [])
-        
-        upcoming_matches = []
-        for match in fixtures:
-            home_team = match["homeTeam"]["name"]
-            away_team = match["awayTeam"]["name"]
-            match_date = datetime.fromisoformat(match["utcDate"].replace("Z", "+00:00"))
-            
-            if home_team == "Liverpool FC":
-                opponent = away_team
-                venue = "Anfield"
-                is_home = True
-            else:
-                opponent = home_team
-                venue = match.get("venue", "Away")
-                is_home = False
-            
-            local_time = match_date.astimezone(pytz.timezone(config["TIMEZONE"]))
-            date_str = local_time.strftime("%b %d")
-            
-            hour = local_time.hour
-            minute = local_time.minute
-            am_pm = "AM" if hour < 12 else "PM"
-            
-            if hour == 0:
-                display_hour = 12
-            elif hour <= 12:
-                display_hour = hour
-            else:
-                display_hour = hour - 12
-            
-            if minute == 0:
-                time_str = f"{display_hour}{am_pm}"
-            else:
-                time_str = f"{display_hour}:{minute:02d}{am_pm}"
-            
-            pass_display = format_match_display(opponent, date_str, time_str)
-            
-            upcoming_matches.append({
-                "opponent": opponent,
-                "date": date_str,
-                "time": time_str,
-                "venue": venue,
-                "is_home": is_home,
-                "full_date": local_time.strftime("%A, %B %d"),
-                "kickoff": time_str,
-                "pass_display": pass_display
-            })
-        
-        return upcoming_matches
-    except Exception as e:
-        print(f"Error fetching fixtures: {e}")
-        return []
-
 @app.route('/api/next-match')
 def api_next_match():
-    """API endpoint to get next match info."""
+    """API endpoint to get next match info. Uses same logic as match_updates.py (overrides + UK time)."""
     if not require_password():
         return jsonify({"status": "error", "error": "Authentication required"}), 401
     
     try:
-        fixtures = get_liverpool_fixtures()
-        if fixtures:
-            return jsonify({"status": "success", "match": fixtures[0]})
+        next_match = get_next_match()
+        if next_match:
+            return jsonify({"status": "success", "match": next_match})
         return jsonify({"status": "error", "error": "No upcoming matches found"}), 404
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
 
 @app.route('/api/update-match', methods=['POST'])
 def api_update_match():
-    """API endpoint to update all passes with next match."""
+    """API endpoint to update all passes with next match. Uses same logic as match_updates.py."""
     if not require_password():
         return jsonify({"status": "error", "error": "Authentication required"}), 401
     
     try:
-        fixtures = get_liverpool_fixtures()
-        if not fixtures:
+        match_data = get_next_match()
+        if not match_data:
             return jsonify({"status": "error", "error": "No upcoming matches found"}), 404
-        
-        match_data = fixtures[0]
-        
+
         # Get all passes
         url = f"{config['API_BASE']}/members/member/list/{config['PROGRAM_ID']}"
         payload = {
