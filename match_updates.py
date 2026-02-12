@@ -35,9 +35,8 @@ def get_passkit_headers():
 
 def get_liverpool_fixtures():
     """
-    Get Liverpool FC fixtures from football-data.org API.
-    Returns upcoming matches with opponent, date, time, venue.
-    Uses UK timezone as source of truth for Premier League matches.
+    Get Liverpool FC fixtures from football-data.org API (all competitions).
+    Returns upcoming matches sorted by date; display time is in configured TIMEZONE.
     """
     # Free tier API key (you can get your own at football-data.org)
     API_KEY = "7e9f8206e9db47fa8a4b15b783a7543b"
@@ -46,22 +45,22 @@ def get_liverpool_fixtures():
         "X-Auth-Token": API_KEY
     }
     
-    # Liverpool FC team ID in Premier League
     team_id = 64  # Liverpool FC
     
     try:
-        # Get upcoming fixtures
+        # All scheduled matches (no competition filter) - get enough to include FA Cup, PL, etc.
         url = f"https://api.football-data.org/v4/teams/{team_id}/matches"
         params = {
             "status": "SCHEDULED",
-            "limit": 5  # Next 5 matches
+            "limit": 25
         }
         
         response = requests.get(url, headers=headers, params=params, timeout=30)
         response.raise_for_status()
         
         data = response.json()
-        fixtures = data.get("matches", [])
+        # Sort by kickoff so the chronologically next match is first (e.g. FA Cup before later PL)
+        fixtures = sorted(data.get("matches", []), key=lambda m: m["utcDate"])
         
         # Debug: Print raw UTC times
         print(f"📡 Fetched {len(fixtures)} fixtures from football-data.org")
@@ -108,20 +107,11 @@ def get_liverpool_fixtures():
                 })
                 continue
             
-            # Convert UTC to UK time first (Premier League matches are scheduled in UK time)
-            # Premier League matches are always scheduled in UK local time
-            uk_timezone = pytz.timezone("Europe/London")
-            uk_time = match_date.astimezone(uk_timezone)
-            
-            # Debug output
-            if match == fixtures[0]:  # Only for first match
-                print(f"   UK time: {uk_time.strftime('%Y-%m-%d %H:%M %Z')}")
-            
-            # Convert UK time to display timezone (EST)
+            # All displayed times in configured timezone (e.g. America/New_York)
             display_timezone = pytz.timezone(PASSKIT_CONFIG["TIMEZONE"])
-            local_time = uk_time.astimezone(display_timezone)
+            local_time = match_date.astimezone(display_timezone)
             
-            if match == fixtures[0]:  # Only for first match
+            if match == fixtures[0]:
                 print(f"   Display time ({PASSKIT_CONFIG['TIMEZONE']}): {local_time.strftime('%Y-%m-%d %H:%M %Z')}")
             
             date_str = local_time.strftime("%b %d")
