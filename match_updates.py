@@ -94,7 +94,7 @@ def get_liverpool_fixtures():
                 current_year = match_date.year
                 override_date = datetime.strptime(f"{override['date']} {current_year}", "%m/%d %Y")
                 full_date = override_date.strftime("%A, %B %d")
-                
+                sort_key = match_date.strftime("%Y-%m-%dT%H:%M:%S")
                 upcoming_matches.append({
                     "opponent": override["opponent"],
                     "date": override["date"],
@@ -103,7 +103,8 @@ def get_liverpool_fixtures():
                     "is_home": is_home,
                     "full_date": full_date,
                     "kickoff": override["time"],
-                    "pass_display": override["pass_display"]
+                    "pass_display": override["pass_display"],
+                    "sort_key": sort_key,
                 })
                 continue
             
@@ -140,6 +141,7 @@ def get_liverpool_fixtures():
             # Create optimized pass display format
             pass_display = format_match_display(opponent, date_str, time_str)
             
+            sort_key = match_date.strftime("%Y-%m-%dT%H:%M:%S")
             upcoming_matches.append({
                 "opponent": opponent,
                 "date": date_str,
@@ -148,9 +150,55 @@ def get_liverpool_fixtures():
                 "is_home": is_home,
                 "full_date": local_time.strftime("%A, %B %d"),
                 "kickoff": time_str,
-                "pass_display": pass_display
+                "pass_display": pass_display,
+                "sort_key": sort_key,
             })
         
+        # Add override-only matches (e.g. FA Cup not in API) and sort by date
+        display_tz = pytz.timezone(PASSKIT_CONFIG["TIMEZONE"])
+        api_dates = {m["sort_key"][:10] for m in upcoming_matches}
+        now_utc = datetime.now(pytz.UTC)
+        try:
+            override_file = os.path.join(os.path.dirname(__file__), "match_overrides.json")
+            if os.path.exists(override_file):
+                with open(override_file, 'r') as f:
+                    overrides_data = json.load(f)
+                if overrides_data.get("enabled") and "overrides" in overrides_data:
+                    current_year = now_utc.year
+                    for date_key, override in overrides_data["overrides"].items():
+                        if date_key in api_dates:
+                            continue
+                        time_str = (override.get("time") or "12:00 PM").strip()
+                        try:
+                            t = datetime.strptime(time_str, "%I:%M %p").time()
+                        except ValueError:
+                            try:
+                                t = datetime.strptime(time_str, "%I:%M%p").time()
+                            except ValueError:
+                                t = datetime.strptime("12:00", "%H:%M").time()
+                        d = datetime.strptime(date_key, "%Y-%m-%d").date()
+                        dt_local = display_tz.localize(datetime.combine(d, t))
+                        sort_key_utc = dt_local.astimezone(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%S")
+                        if sort_key_utc < now_utc.strftime("%Y-%m-%dT%H:%M:%S"):
+                            continue
+                        override_date = datetime.strptime(date_key, "%Y-%m-%d")
+                        full_date = override_date.strftime("%A, %B %d")
+                        upcoming_matches.append({
+                            "opponent": override["opponent"],
+                            "date": override["date"],
+                            "time": override["time"],
+                            "venue": "Away",
+                            "is_home": False,
+                            "full_date": full_date,
+                            "kickoff": override["time"],
+                            "pass_display": override["pass_display"],
+                            "sort_key": sort_key_utc,
+                        })
+        except Exception as e:
+            print(f"Warning: Could not add override-only matches: {e}")
+        upcoming_matches.sort(key=lambda m: m.get("sort_key", ""))
+        for m in upcoming_matches:
+            m.pop("sort_key", None)
         return upcoming_matches
         
     except Exception as e:

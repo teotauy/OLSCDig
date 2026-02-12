@@ -1,5 +1,12 @@
 {
   "overrides": {
+    "2026-02-14": {
+      "opponent": "Brighton",
+      "time": "3 PM",
+      "date": "2/14",
+      "pass_display": "Brighton | 2/14 3 PM",
+      "note": "FA Cup - not in API"
+    },
     "2026-02-08": {
       "opponent": "Manchester City",
       "time": "11:30 AM",
