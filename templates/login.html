@@ -101,6 +101,31 @@
             border: 1px solid #f5c6cb;
         }
 
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .divider { margin: 20px 0; border-top: 1px solid #eee; }
+
+        .google-btn {
+            display: block;
+            text-align: center;
+            padding: 12px;
+            background: #fff;
+            color: #333;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 15px;
+            text-decoration: none;
+            margin-bottom: 16px;
+        }
+        .google-btn:hover { border-color: #c8102e; color: #c8102e; }
+
         .back-link {
             text-align: center;
             margin-top: 20px;
@@ -127,8 +152,11 @@
         {% if error %}
         <div class="error">{{ error }}</div>
         {% endif %}
+        {% if reset %}
+        <div class="success">Password reset. Log in with your new password.</div>
+        {% endif %}
 
-        <form method="POST" action="/login">
+        <form method="POST" action="{{ url_for('login') }}">
             <div class="form-group">
                 <label for="password">Password</label>
                 <input type="password" id="password" name="password" required autofocus>
@@ -137,7 +165,14 @@
             <button type="submit" class="submit-btn">Login</button>
         </form>
 
+        {% if google_enabled %}
+        <div class="divider"></div>
+        <a href="{{ url_for('login_google') }}" class="google-btn">Sign in with Google</a>
+        {% endif %}
+
         <div class="back-link">
+            <a href="{{ url_for('forgot_password') }}">Forgot password?</a>
+            <span style="color: #999;"> · </span>
             <a href="/">← Back to Headcount</a>
         </div>
     </div>

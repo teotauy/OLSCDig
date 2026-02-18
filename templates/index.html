@@ -221,6 +221,23 @@
             to { transform: rotate(360deg); }
         }
 
+        .nav-footer {
+            text-align: center;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .nav-footer a {
+            color: #c8102e;
+            text-decoration: none;
+            font-size: 12px;
+        }
+
+        .nav-footer a:hover {
+            text-decoration: underline;
+        }
+
         @media (max-width: 480px) {
             .container {
                 padding: 20px;
@@ -268,6 +285,10 @@
         </div>
         <div class="countdown-text">
             <span id="countdown">60</span>s until next refresh
+        </div>
+
+        <div class="nav-footer">
+            <a href="/">← Public View</a>
         </div>
     </div>
 
@@ -368,7 +389,19 @@
                     if (data.checked_out === 0) {
                         showStatus('No one was checked in', 'success');
                     } else {
-                        showStatus(`Successfully checked out ${data.checked_out} ${data.checked_out === 1 ? 'person' : 'people'}!`, 'success');
+                        let msg = `Successfully checked out ${data.checked_out} ${data.checked_out === 1 ? 'person' : 'people'}!`;
+                        if (data.report_email_sent && data.report_email_to) {
+                            msg += ` Report emailed to ${data.report_email_to}`;
+                        }
+                        showStatus(msg, 'success');
+                        if (data.report_filename && data.report_csv) {
+                            const blob = new Blob([data.report_csv], { type: 'text/csv;charset=utf-8' });
+                            const a = document.createElement('a');
+                            a.href = URL.createObjectURL(blob);
+                            a.download = data.report_filename;
+                            a.click();
+                            URL.revokeObjectURL(a.href);
+                        }
                     }
                     
                     // Refresh headcount immediately
@@ -415,10 +448,6 @@
             }
         });
     </script>
-
-    <div style="text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
-        <a href="/" style="color: #c8102e; text-decoration: none; font-size: 12px;">← Public View</a>
-    </div>
 </body>
 </html>
 

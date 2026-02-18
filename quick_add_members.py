@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
 Quick script to add new members to the PassKit system.
-Just edit the MEMBERS list below with your new members and run the script.
+
+How to add members: edit the MEMBERS list below (first name, last name, email, optional phone),
+then run:  python3 quick_add_members.py
+The script creates new members in PassKit, triggers welcome emails, and skips anyone already in the system.
 """
 
 import os
@@ -59,6 +62,12 @@ MEMBERS = [
         "first_name": "Rich",
         "last_name": "Custodio",
         "email": "richcus3@gmail.com",
+        "phone": ""
+    },
+    {
+        "first_name": "John",
+        "last_name": "Devanney",
+        "email": "jdevanney@mac.com",
         "phone": ""
     }
 ]

@@ -171,25 +171,27 @@ python3 update_updating_members.py
 **What it does**: Updates only members who still have "Some inferior side" placeholder text
 
 ### 3. Quick Add Members (Manual Addition)
-**When to use**: For manually adding individual members outside of Squarespace automation
+**When to use**: For manually adding individual members outside of Squarespace automation.
 
-```bash
-python3 quick_add_members.py
-```
-
-**How it works**:
-1. Edit `quick_add_members.py` and add members to the `MEMBERS` list:
-   ```python
-   MEMBERS = [
-       {
-           "first_name": "John",
-           "last_name": "Doe",
-           "email": "john@example.com",
-           "phone": ""  # Optional
-       }
-   ]
+**How to add members (going forward):**
+1. **Edit** `quick_add_members.py` and append to the `MEMBERS` list (first name, last name, email, optional phone).
+2. **Run** the script so it creates them in PassKit and sends welcome emails:
+   ```bash
+   python3 quick_add_members.py
    ```
-2. Run the script - it will create members and send welcome emails
+   The script checks for existing members by email and only creates new ones; it reports created vs already existed.
+
+**Example list entry:**
+```python
+MEMBERS = [
+    {
+        "first_name": "John",
+        "last_name": "Doe",
+        "email": "john@example.com",
+        "phone": ""  # Optional
+    }
+]
+```
 
 **Duplicate Prevention**:
 - ✅ Automatically checks for existing members before creating
@@ -254,10 +256,11 @@ If you opt-in to Pushover, you can run `notifications.py` locally to receive hea
 ## ⚽ Match Update System
 
 ### How It Works
-1. **Data Source**: football-data.org API (free tier)
-2. **Team**: Liverpool FC (Team ID: 64)
-3. **Format**: "Man U | 10/19 11:30 AM" (optimized for pass display)
-4. **Field**: Updates `metaData.nextMatch` in PassKit
+1. **Data Source**: football-data.org API (free tier) – Premier League fixtures only
+2. **Manual overrides**: `match_overrides.json` overrides or adds matches (FA Cup, League Cup, wrong API times). See **[MATCH_OVERRIDES.md](MATCH_OVERRIDES.md)** for when and how to add them
+3. **Team**: Liverpool FC (Team ID: 64)
+4. **Format**: "Brighton | 2/14 3 PM" style (optimized for pass display)
+5. **Field**: Updates `metaData.nextMatch` on all passes
 
 ### Team Abbreviations
 The system automatically abbreviates team names to fit on passes:
@@ -272,7 +275,9 @@ The system automatically abbreviates team names to fit on passes:
 - **Update Script**: `update_updating_members.py` finds and updates these members
 - **Frequency**: Run manually when new members join
 
-## 🔐 API Configuration
+## 🔐 API Configuration & Web Login
+
+**Web app login** supports password (plain or bcrypt hash), **Forgot password** (recovery code locally; on Render, set new env and redeploy), and optional **Sign in with Google**. Rate limiting applies (5 attempts per 15 min per IP). See **[WEB_APP_DEPLOYMENT.md](WEB_APP_DEPLOYMENT.md#login--security)** for `ADMIN_PASSWORD_HASH`, `ADMIN_RECOVERY_CODE`, and Google OAuth setup.
 
 ### Required Environment Variables (.env)
 ```bash
@@ -297,12 +302,11 @@ PUSHOVER_API_TOKEN=your_api_token_here
 
 ### Common Issues
 
-#### 1. API Connection Failures
-**Symptoms**: 401 Unauthorized, 404 Not Found
+#### 1. API Connection Failures (401 Unauthorized)
+**Symptoms**: 401 Unauthorized, 404 Not Found; or on **Render** web app: "401 Client Error: Unauthorized for url: ...api.pub2.passkit.io..." or headcount shows "Error loading".
 **Solution**: 
-- Verify API keys in `.env` file
-- Check if using correct server (pub1 vs pub2)
-- Run `python3 status_api.py` for diagnostics
+- **Local:** Verify API keys in `.env` file; check pub1 vs pub2; run `python3 status_api.py`
+- **Render:** Set `PASSKIT_API_KEY` and `PASSKIT_PROJECT_KEY` in the service Environment (same values as your working `.env`). No leading/trailing spaces. Save and let the service redeploy. See **[WEB_APP_DEPLOYMENT.md](WEB_APP_DEPLOYMENT.md)#troubleshooting** for step-by-step 401 and headcount fix.
 
 #### 2. Match Updates Not Showing on Passes
 **Symptoms**: API returns 200 OK but pass doesn't update

@@ -30,11 +30,13 @@ python3 match_updates.py
 
 ## How It Works
 
-1. **Fetches Liverpool fixtures** from football-data.org API
-2. **Finds next match** (upcoming fixture)
-3. **Smart update** - Only updates passes with placeholder text "Some inferior side"
-4. **Skips already-updated passes** - Won't overwrite passes that already have real match info
-5. **Sends push notification** to all members (if enabled)
+1. **Fetches Liverpool fixtures** from football-data.org API (Premier League only; other competitions are not in the API)
+2. **Applies manual overrides** from `match_overrides.json` – replaces API data for matching dates and adds **override-only** matches (e.g. FA Cup) so the true next match can be from any competition
+3. **Sorts by kickoff** and takes the earliest as the next match
+4. **Updates ALL passes** with that next match (same text on every pass)
+5. **Sends push notification** to all members (if enabled – currently disabled)
+
+**Manual overrides:** For FA Cup, League Cup, or when the API time is wrong, see **[MATCH_OVERRIDES.md](MATCH_OVERRIDES.md)** for how to add or edit `match_overrides.json`.
 
 ## Automation Options
 
@@ -70,14 +72,8 @@ The system can prepare push notifications but will NOT send them without approva
 
 ## Pass Fields Updated
 
-The following fields will be updated on passes that still have the placeholder:
-- `nextMatch` - "Man U | 10/19 11:30 AM" (formatted display)
-
-**Smart Update Logic:**
-- ✅ **Updates passes** with "Some inferior side" placeholder
-- ⏭️ **Skips passes** that already have real match information
-- 🎯 **Efficient** - Only processes passes that need updating
-- 📊 **Reports** - Shows count of passes updated vs skipped
+- **Field:** `metaData.nextMatch` (e.g. "Brighton | 2/14 3 PM", "Man U | 10/19 11:30 AM")
+- **Scope:** All passes are updated to the same next-match text each time you run the update (web or CLI).
 
 ## Troubleshooting
 
@@ -95,12 +91,17 @@ The following fields will be updated on passes that still have the placeholder:
 - Free tier allows 10 requests per minute
 - Paid tier allows 100 requests per minute
 
+## Match Overrides (FA Cup, wrong times, etc.)
+
+The API only returns Premier League fixtures. For FA Cup, League Cup, or to fix wrong kickoff times, use **match_overrides.json**. See **[MATCH_OVERRIDES.md](MATCH_OVERRIDES.md)** for when and how to add overrides and the current list.
+
 ## Next Steps
 
-1. **Get API key** from football-data.org
+1. **Get API key** from football-data.org (or use the one in the script)
 2. **Test the system** with `python3 match_updates.py`
-3. **Set up automation** with cron job
-4. **Customize notification messages** as needed
+3. **Add overrides** for any non-PL or wrong-time matches (see MATCH_OVERRIDES.md)
+4. **Set up automation** with cron job (optional)
+5. **Customize notification messages** as needed (optional)
 
 ---
 

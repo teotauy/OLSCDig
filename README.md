@@ -24,8 +24,11 @@ Access the control panel from anywhere:
 - **Control Panel**: https://teotauy.github.io/OLSCDig/control-panel.html
 - **Read-only Headcount**: https://teotauy.github.io/OLSCDig/public/index.html
 
-### Option 2: Local Web Interface
+### Option 2: Web App (Render or local)
 
+**Deployed (Render):** If you've deployed with the blueprint, use your Render URL (e.g. `https://olsc-web-app.onrender.com`). If you get 401 or "Error loading" on headcount, see [WEB_APP_DEPLOYMENT.md](WEB_APP_DEPLOYMENT.md#troubleshooting).
+
+**Local:**
 ```bash
 python3 app.py
 ```
@@ -60,26 +63,19 @@ Verifies API is working and shows current member counts.
 **Option A: Web Interface (Recommended)**
 1. Start the web app: `python3 app.py`
 2. Go to http://localhost:5000/add-member
-3. Login with your password (set `ADMIN_PASSWORD` in `.env`)
+3. Log in with your password (set `ADMIN_PASSWORD` in `.env`), or use **Forgot password?** / **Sign in with Google** if configured (see [WEB_APP_DEPLOYMENT.md](WEB_APP_DEPLOYMENT.md#login--security))
 4. Fill in the form and submit
 
-**Option B: Command Line Script**
-1. Edit `quick_add_members.py` and add members to the `MEMBERS` list:
-   ```python
-   MEMBERS = [
-       {
-           "first_name": "John",
-           "last_name": "Doe",
-           "email": "john@example.com",
-           "phone": ""  # Optional
-       }
-   ]
-   ```
+**Option B: Command Line Script (edit list, then run)**
 
-2. Run the script:
+This is the standard way to add one or more members from your machine:
+
+1. **Edit** `quick_add_members.py` and add people to the `MEMBERS` list (first name, last name, email, optional phone).
+2. **Run** the script so it creates them in PassKit and triggers welcome emails:
    ```bash
    python3 quick_add_members.py
    ```
+   The script skips anyone who already exists (by email) and reports how many were created vs already existed.
 
 **Duplicate Prevention:**
 - Automatically checks for existing members before creating
@@ -116,10 +112,12 @@ Look for your local IP (usually starts with 192.168.x.x or 10.x.x.x)
 ## Documentation
 
 - **[📚 Complete Documentation](COMPREHENSIVE_README.md)** - Everything you need to know
+- **[🌐 Web App on Render](WEB_APP_DEPLOYMENT.md)** - Deploy so you can use the app from your phone (and fix 401 / headcount "Error loading")
+- **[⚽ Match Updates Setup](MATCH_UPDATES_SETUP.md)** - Update all passes with next match (CLI and web)
+- **[⚽ Match Overrides](MATCH_OVERRIDES.md)** - FA Cup, League Cup, wrong times: when and how to edit `match_overrides.json`
 - **[🛒 Squarespace Integration Setup](SQUARESPACE_INTEGRATION_SETUP.md)** - Automated member onboarding
 - **[🔄 Backfill Missing Members Guide](BACKFILL_MISSING_MEMBERS_GUIDE.md)** - Process historical orders
 - **[🎛️ Control Panel Deployment](CONTROL_PANEL_DEPLOYMENT.md)** - GitHub Pages setup
-- **[⚽ Match Updates Setup](MATCH_UPDATES_SETUP.md)** - Automated fixture updates
 - **[🔔 Pushover Setup](PUSHOVER_SETUP.md)** - Notification system setup
 
 ## File Structure
@@ -170,13 +168,10 @@ Make sure:
 - Firewall isn't blocking port 5000
 - Using your computer's IP, not "localhost"
 
-### API errors
+### API errors (401, headcount "Error loading")
 
-Run `python3 status_api.py` to diagnose. Should show:
-```
-✅ SUCCESS! Found X total members
-   - Y CHECKED_IN
-```
+- **Local:** Run `python3 status_api.py` to diagnose. Should show total members and CHECKED_IN count.
+- **Render (web app):** If you see "401 Unauthorized" or headcount "Error loading", set `PASSKIT_API_KEY` and `PASSKIT_PROJECT_KEY` in Render → olsc-web-app → Environment (same as your `.env`). See [WEB_APP_DEPLOYMENT.md](WEB_APP_DEPLOYMENT.md#troubleshooting).
 
 ### Need to restart
 

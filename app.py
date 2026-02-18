@@ -9,10 +9,20 @@ Provides mobile-friendly buttons for bulk checkout and live headcount.
 import os
 import requests
 import json
+import csv
+import io
+import smtplib
+import time
+import secrets
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 from datetime import datetime, timedelta
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 from dotenv import load_dotenv
 import pytz
+import bcrypt
 from team_abbreviations import format_match_display, abbreviate_team_name
 from match_updates import get_next_match
 # Notifications feature removed
@@ -21,6 +31,69 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'change-this-secret-key-in-production')
+# Secure session cookies
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
+
+# Auth: stored hash file (gitignored); fallback to env
+HASH_FILE = os.path.join(os.path.dirname(__file__), '.admin_hash')
+LOGIN_RATE_LIMIT_WINDOW = 900   # 15 minutes
+LOGIN_RATE_LIMIT_MAX = 5
+_login_attempts = {}  # ip -> [timestamp, ...]
+
+def _get_stored_hash():
+    """Read admin password hash from file or env. File takes precedence."""
+    if os.path.isfile(HASH_FILE):
+        try:
+            with open(HASH_FILE, 'r') as f:
+                return f.read().strip()
+        except Exception:
+            pass
+    return os.getenv('ADMIN_PASSWORD_HASH')
+
+def _verify_password(password):
+    """Verify password against stored hash or plain ADMIN_PASSWORD."""
+    if not password:
+        return False
+    stored_hash = _get_stored_hash()
+    if stored_hash:
+        try:
+            return bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8'))
+        except Exception:
+            return False
+    plain = os.getenv('ADMIN_PASSWORD')
+    if plain:
+        return secrets.compare_digest(password, plain)
+    return False
+
+def _set_password_hash(bcrypt_hash_bytes):
+    """Write hash to file (for recovery flow). Caller passes bytes from bcrypt.hashpw."""
+    try:
+        with open(HASH_FILE, 'w') as f:
+            f.write(bcrypt_hash_bytes.decode('ascii'))
+        return True
+    except Exception:
+        return False
+
+def _is_login_rate_limited(ip):
+    """True if this IP has exceeded login attempts in the window."""
+    now = time.time()
+    if ip not in _login_attempts:
+        return False
+    # Keep only attempts within the window
+    _login_attempts[ip] = [t for t in _login_attempts[ip] if now - t < LOGIN_RATE_LIMIT_WINDOW]
+    return len(_login_attempts[ip]) >= LOGIN_RATE_LIMIT_MAX
+
+def _record_login_attempt(ip, success):
+    if success:
+        _login_attempts.pop(ip, None)
+        return
+    now = time.time()
+    _login_attempts.setdefault(ip, [])
+    _login_attempts[ip].append(now)
+    # Prune old
+    _login_attempts[ip] = [t for t in _login_attempts[ip] if now - t < LOGIN_RATE_LIMIT_WINDOW]
 
 # Configuration
 config = {
@@ -189,11 +262,8 @@ def get_checked_in_members():
     return parse_ndjson(response.text)
 
 def require_password():
-    """Check if user is authenticated."""
-    admin_password = os.getenv('ADMIN_PASSWORD', 'admin123')  # Change this!
-    if not session.get('authenticated'):
-        return False
-    return True
+    """Check if user is authenticated (password or Google OAuth)."""
+    return bool(session.get('authenticated'))
 
 @app.route('/')
 def index():
@@ -221,24 +291,114 @@ def update_match_page():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Login page for member addition."""
-    admin_password = os.getenv('ADMIN_PASSWORD', 'admin123')  # Change this!
-    
+    """Login page for member addition. Rate-limited; supports password hash or plain env."""
+    ip = request.remote_addr or 'unknown'
     if request.method == 'POST':
+        if _is_login_rate_limited(ip):
+            return render_template('login.html', error='Too many attempts. Try again in 15 minutes.')
         password = request.form.get('password', '')
-        if password == admin_password:
+        if _verify_password(password):
+            _record_login_attempt(ip, success=True)
             session['authenticated'] = True
             next_page = request.args.get('next', url_for('add_member_page'))
             return redirect(next_page)
-        else:
-            return render_template('login.html', error='Incorrect password')
-    
-    return render_template('login.html')
+        _record_login_attempt(ip, success=False)
+        return render_template('login.html', error='Incorrect password')
+    error = request.args.get('error')
+    return render_template('login.html', google_enabled=bool(os.getenv('GOOGLE_CLIENT_ID')), reset=request.args.get('reset'), error=error)
+
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    """Forgot password: show instructions (Render) or recovery-code form (local)."""
+    recovery_code = os.getenv('ADMIN_RECOVERY_CODE')
+    if request.method == 'POST' and recovery_code:
+        code = (request.form.get('recovery_code') or '').strip()
+        new_password = request.form.get('new_password') or ''
+        confirm = request.form.get('confirm_password') or ''
+        if not secrets.compare_digest(code, recovery_code):
+            return render_template('forgot_password.html', recovery_enabled=True, error='Invalid recovery code')
+        if len(new_password) < 8:
+            return render_template('forgot_password.html', recovery_enabled=True, error='Password must be at least 8 characters')
+        if new_password != confirm:
+            return render_template('forgot_password.html', recovery_enabled=True, error='Passwords do not match')
+        hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
+        if _set_password_hash(hashed):
+            return redirect(url_for('login', reset='1'))
+        return render_template('forgot_password.html', recovery_enabled=True, error='Could not save new password (e.g. read-only filesystem). Use Render Environment to set ADMIN_PASSWORD.')
+    return render_template('forgot_password.html', recovery_enabled=bool(recovery_code))
+
+@app.route('/login/google')
+def login_google():
+    """Redirect to Google OAuth. Requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET."""
+    client_id = os.getenv('GOOGLE_CLIENT_ID')
+    if not client_id:
+        return redirect(url_for('login'))
+    redirect_uri = url_for('login_google_callback', _external=True)
+    state = secrets.token_urlsafe(32)
+    session['oauth_state'] = state
+    url = (
+        'https://accounts.google.com/o/oauth2/v2/auth'
+        '?client_id={}&redirect_uri={}&response_type=code&scope=openid%20email&state={}'
+    ).format(client_id, redirect_uri, state)
+    return redirect(url)
+
+@app.route('/login/callback')
+def login_google_callback():
+    """Handle Google OAuth callback; set session and redirect."""
+    client_id = os.getenv('GOOGLE_CLIENT_ID')
+    client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
+    if not client_id or not client_secret:
+        return redirect(url_for('login', error='Google login not configured'))
+    state = request.args.get('state')
+    if not state or state != session.get('oauth_state'):
+        session.pop('oauth_state', None)
+        return redirect(url_for('login', error='Invalid state'))
+    session.pop('oauth_state', None)
+    code = request.args.get('code')
+    if not code:
+        return redirect(url_for('login', error='Missing code'))
+    redirect_uri = url_for('login_google_callback', _external=True)
+    token_resp = requests.post(
+        'https://oauth2.googleapis.com/token',
+        data={
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'code': code,
+            'grant_type': 'authorization_code',
+            'redirect_uri': redirect_uri,
+        },
+        headers={'Content-Type': 'application/x-www-form-urlencoded'},
+        timeout=10,
+    )
+    if token_resp.status_code != 200:
+        return redirect(url_for('login', error='Google sign-in failed'))
+    token_data = token_resp.json()
+    access_token = token_data.get('access_token')
+    if not access_token:
+        return redirect(url_for('login', error='Google sign-in failed'))
+    user_resp = requests.get(
+        'https://www.googleapis.com/oauth2/v2/userinfo',
+        headers={'Authorization': f'Bearer {access_token}'},
+        timeout=10,
+    )
+    if user_resp.status_code != 200:
+        session['authenticated'] = True
+        return redirect(request.args.get('next', url_for('add_member_page')))
+    user_data = user_resp.json()
+    allowed = os.getenv('ALLOWED_GOOGLE_EMAILS', '').strip()
+    if allowed:
+        email = (user_data.get('email') or '').lower()
+        if email not in [e.strip().lower() for e in allowed.split(',') if e.strip()]:
+            return redirect(url_for('login', error='This Google account is not allowed'))
+    session['authenticated'] = True
+    next_page = request.args.get('next', url_for('add_member_page'))
+    return redirect(next_page)
 
 @app.route('/logout')
 def logout():
     """Logout and clear session."""
     session.pop('authenticated', None)
+    session.pop('oauth_state', None)
     return redirect(url_for('index'))
 
 # Notifications page removed
@@ -265,9 +425,65 @@ def api_headcount():
             "status": "error"
         }), 500
 
+def _member_check_in_time(member):
+    """Try to get check-in timestamp from PassKit member object if available."""
+    for key in ('currentCheckInStartedAt', 'checkInTime', 'lastCheckInAt', 'checkedInAt'):
+        val = member.get(key)
+        if val:
+            try:
+                if isinstance(val, str) and 'T' in val:
+                    dt = datetime.fromisoformat(val.replace('Z', '+00:00'))
+                    tz = pytz.timezone(config.get('TIMEZONE', 'America/New_York'))
+                    return dt.astimezone(tz).strftime('%Y-%m-%d %I:%M %p')
+                return str(val)
+            except Exception:
+                return str(val)
+    return ""
+
+def _build_checkout_report(members, checked_out_at_str):
+    """Build CSV of who was checked out (name, email, check-in time if any, checked_out_at)."""
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["Name", "Email", "Checked in at", "Checked out at"])
+    for m in members:
+        person = m.get("person") or {}
+        name = person.get("displayName") or (person.get("forename", "") + " " + person.get("surname", "")).strip() or "Unknown"
+        email = person.get("emailAddress") or ""
+        check_in = _member_check_in_time(m)
+        w.writerow([name, email, check_in, checked_out_at_str])
+    return out.getvalue()
+
+def _send_checkout_report_email(to_email, csv_content, filename):
+    """Email the checkout CSV to to_email using SMTP from env. Returns True if sent."""
+    host = os.getenv("SMTP_HOST")
+    user = os.getenv("SMTP_USER")
+    password = os.getenv("SMTP_PASSWORD")
+    if not all([host, user, password]):
+        return False
+    port = int(os.getenv("SMTP_PORT", "587"))
+    from_addr = os.getenv("EMAIL_FROM", user)
+    msg = MIMEMultipart()
+    msg["Subject"] = f"Checkout report: {filename}"
+    msg["From"] = from_addr
+    msg["To"] = to_email
+    msg.attach(MIMEText(f"Checkout report attached ({filename}).", "plain"))
+    part = MIMEBase("application", "octet-stream")
+    part.set_payload(csv_content.encode("utf-8"))
+    encoders.encode_base64(part)
+    part.add_header("Content-Disposition", "attachment", filename=filename)
+    msg.attach(part)
+    try:
+        with smtplib.SMTP(host, port) as server:
+            server.starttls()
+            server.login(user, password)
+            server.sendmail(from_addr, [to_email], msg.as_string())
+        return True
+    except Exception:
+        return False
+
 @app.route('/api/checkout', methods=['POST'])
 def api_checkout():
-    """API endpoint to checkout all CHECKED_IN members."""
+    """API endpoint to checkout all CHECKED_IN members. Generates a report of who was checked out."""
     try:
         # Get all checked-in members
         members = get_checked_in_members()
@@ -276,23 +492,40 @@ def api_checkout():
             return jsonify({
                 "status": "success",
                 "message": "No members to checkout",
-                "checked_out": 0
+                "checked_out": 0,
+                "report_filename": None,
+                "report_csv": None,
             })
         
+        tz = pytz.timezone(config.get("TIMEZONE", "America/New_York"))
+        checked_out_at = datetime.now(tz)
+        checked_out_at_str = checked_out_at.strftime("%Y-%m-%d %I:%M %p")
+        report_csv = _build_checkout_report(members, checked_out_at_str)
+        report_filename = f"checkout_{checked_out_at.strftime('%Y-%m-%d_%H-%M-%S')}.csv"
+
+        report_email_sent = False
+        to_email = os.getenv("CHECKOUT_REPORT_EMAIL", "").strip()
+        if to_email:
+            report_email_sent = _send_checkout_report_email(to_email, report_csv, report_filename)
+
+        # Optionally write to disk (e.g. for local runs)
+        try:
+            report_dir = os.path.join(os.path.dirname(__file__), "checkout_reports")
+            os.makedirs(report_dir, exist_ok=True)
+            path = os.path.join(report_dir, report_filename)
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                f.write(report_csv)
+        except Exception:
+            pass
+
         # Checkout each member using the checkOut endpoint
         checkout_url = f"{config['API_BASE']}/members/member/checkOut"
-        
         success_count = 0
         failed = []
-        
+
         for member in members:
             member_id = member.get("id")
-            
-            # Payload for checkout (use memberId, not id!)
-            checkout_payload = {
-                "memberId": member_id
-            }
-            
+            checkout_payload = {"memberId": member_id}
             try:
                 checkout_response = requests.post(
                     checkout_url,
@@ -306,14 +539,17 @@ def api_checkout():
                 person = member.get('person', {})
                 name = person.get('displayName', 'Unknown')
                 failed.append({"name": name, "id": member_id, "error": str(e)})
-        
+
         return jsonify({
             "status": "success",
             "checked_out": success_count,
             "total": len(members),
-            "failed": failed
+            "failed": failed,
+            "report_filename": report_filename,
+            "report_csv": report_csv,
+            "report_email_sent": report_email_sent,
+            "report_email_to": to_email if report_email_sent else None,
         })
-    
     except Exception as e:
         return jsonify({
             "status": "error",
