@@ -38,11 +38,12 @@ def get_liverpool_fixtures():
     Get Liverpool FC fixtures from football-data.org API (all competitions).
     Returns upcoming matches sorted by date; display time is in configured TIMEZONE.
     """
-    # Free tier API key (you can get your own at football-data.org)
-    API_KEY = "7e9f8206e9db47fa8a4b15b783a7543b"
-    
+    # Set FOOTBALL_DATA_API_KEY in .env (get a key at https://www.football-data.org/)
+    api_key = os.getenv("FOOTBALL_DATA_API_KEY")
+    if not api_key:
+        raise ValueError("FOOTBALL_DATA_API_KEY is not set in environment")
     headers = {
-        "X-Auth-Token": API_KEY
+        "X-Auth-Token": api_key
     }
     
     team_id = 64  # Liverpool FC

@@ -111,6 +111,7 @@ Look for your local IP (usually starts with 192.168.x.x or 10.x.x.x)
 
 ## Documentation
 
+- **[🗺️ Feature Roadmap](ROADMAP.md)** - What’s done, optional, and planned
 - **[📚 Complete Documentation](COMPREHENSIVE_README.md)** - Everything you need to know
 - **[🌐 Web App on Render](WEB_APP_DEPLOYMENT.md)** - Deploy so you can use the app from your phone (and fix 401 / headcount "Error loading")
 - **[⚽ Match Updates Setup](MATCH_UPDATES_SETUP.md)** - Update all passes with next match (CLI and web)

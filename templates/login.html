@@ -14,6 +14,9 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background: linear-gradient(135deg, #c8102e 0%, #00a65a 100%);
+            background-image: url("{{ url_for('static', filename='background.png') }}"), linear-gradient(135deg, #c8102e 0%, #00a65a 100%);
+            background-size: cover, auto;
+            background-position: center, 0 0;
             min-height: 100vh;
             display: flex;
             justify-content: center;
@@ -145,7 +148,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🏴󠁧󠁢󠁥󠁮󠁧󠁿 OLSC Brooklyn</h1>
+            <h1>⚽ OLSC Brooklyn</h1>
             <p>Member Management Login</p>
         </div>
 

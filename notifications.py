@@ -15,9 +15,9 @@ import pytz
 # Load environment variables
 load_dotenv()
 
-# Pushover configuration
-PUSHOVER_USER_KEY = "uxsqmcnqrjzzsy82uaogdjctczyvix"  # Your user key
-PUSHOVER_API_TOKEN = os.getenv("PUSHOVER_API_TOKEN")  # You'll need to create this
+# Pushover configuration (set in .env / Render)
+PUSHOVER_USER_KEY = os.getenv("PUSHOVER_USER_KEY")
+PUSHOVER_API_TOKEN = os.getenv("PUSHOVER_API_TOKEN")
 
 # PassKit configuration (same as main app)
 PASSKIT_CONFIG = {
@@ -80,10 +80,10 @@ def get_checked_in_members():
 
 def send_pushover_notification(message, title="⚽ Liverpool OLSC", sound="default", priority=0):
     """Send a notification via Pushover."""
-    if not PUSHOVER_API_TOKEN:
+    if not PUSHOVER_API_TOKEN or not PUSHOVER_USER_KEY:
         print(f"Pushover notification: {title} - {message}")
         return False
-    
+
     url = "https://api.pushover.net/1/messages.json"
     payload = {
         "token": PUSHOVER_API_TOKEN,
@@ -202,12 +202,12 @@ Last check: Just now"""
 def main():
     """Main notification loop."""
     print("⚽ Liverpool OLSC - Pushover Notifications")
-    print(f"User Key: {PUSHOVER_USER_KEY[:10]}...")
-    
-    if not PUSHOVER_API_TOKEN:
-        print("⚠️  PUSHOVER_API_TOKEN not set in .env file")
+    if PUSHOVER_USER_KEY:
+        print(f"User Key: {PUSHOVER_USER_KEY[:10]}...")
+    if not PUSHOVER_USER_KEY or not PUSHOVER_API_TOKEN:
+        print("⚠️  Set PUSHOVER_USER_KEY and PUSHOVER_API_TOKEN in .env")
         print("   Create a Pushover app at: https://pushover.net/apps/build")
-        print("   Add PUSHOVER_API_TOKEN=your_token to .env")
+        print("   Add PUSHOVER_USER_KEY=your_user_key and PUSHOVER_API_TOKEN=your_token to .env")
         print()
         print("Running in test mode (notifications will print to console)")
     

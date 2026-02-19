@@ -44,6 +44,37 @@ In your Render dashboard, you'll need to set these environment variables for the
 - **Forgot password (local):** Set `ADMIN_RECOVERY_CODE` in `.env` to a secret string you keep safe. Then use **Forgot password?** → enter that recovery code and a new password. The new password is stored hashed in `.admin_hash` (gitignored).
 - **Google sign-in (optional):** To show “Sign in with Google”, set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (from Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client). Authorized redirect URI must be `https://your-render-url.onrender.com/login/callback`. To restrict who can log in, set `ALLOWED_GOOGLE_EMAILS` to a comma-separated list of allowed email addresses (e.g. `you@example.com,other@example.com`).
 
+**If you run match updates on Render (cron or script):**
+- `FOOTBALL_DATA_API_KEY` – API key from [football-data.org](https://www.football-data.org/). Use the same value as in your local `.env`. Required for `match_updates.py` to fetch fixtures.
+
+**If you run Pushover notifications on Render:**
+- `PUSHOVER_USER_KEY` – Your Pushover user key (same as in local `.env`).
+- `PUSHOVER_API_TOKEN` – Your Pushover app API token (same as in local `.env`).
+
+#### Render ENV checklist (copy into Dashboard → Environment)
+
+| Variable | Where | Notes |
+|----------|--------|--------|
+| `PROGRAM_ID` | Required | PassKit program ID |
+| `PASSKIT_API_KEY` | Required | PassKit API key |
+| `PASSKIT_PROJECT_KEY` | Required | PassKit project key |
+| `ADMIN_PASSWORD` | Required | Or use `ADMIN_PASSWORD_HASH` |
+| `FLASK_SECRET_KEY` | Required | `python3 -c "import secrets; print(secrets.token_hex(32))"` |
+| `API_BASE` | Optional | Default `https://api.pub2.passkit.io` |
+| `TIMEZONE` | Optional | Default `America/New_York` |
+| `SESSION_COOKIE_SECURE` | Optional | Set `true` for HTTPS (Render) |
+| `CHECKOUT_REPORT_EMAIL` | Optional | Email for checkout CSV |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | Optional | For checkout report email |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional | Google OAuth; set redirect URI |
+| `ALLOWED_GOOGLE_EMAILS` | Optional | Comma-separated allowed emails |
+| `FOOTBALL_DATA_API_KEY` | If match updates run on Render | From football-data.org |
+| `PUSHOVER_USER_KEY` | If notifications run on Render | Pushover user key |
+| `PUSHOVER_API_TOKEN` | If notifications run on Render | Pushover app token |
+
+**Local `.env`:** Use the same names. Set `FOOTBALL_DATA_API_KEY`, `PUSHOVER_USER_KEY`, and `PUSHOVER_API_TOKEN` in `.env` for `match_updates.py` and `notifications.py`; add them to Render only if you run those scripts there.
+
+**Custom background image:** The app uses `static/background.png` (Brooklyn OLSC stadium image) as the background on landing, login, and all main pages; if the file is missing, the gradient is shown.
+
 ### 2. Deploy to Render
 
 #### Option A: Using Render Dashboard

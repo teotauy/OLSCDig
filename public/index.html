@@ -207,35 +207,10 @@
     </div>
 
     <script>
-        // PassKit API Configuration
-        const CONFIG = {
-            API_BASE: 'https://api.pub2.passkit.io',
-            API_KEY: 'QHxrhw8Wi2T6W5lvN1ZxK35BYqvX6ynYnPvSbDaV36dYkczgwWCkKckDPtlRoq4VlC5f-M9vn4wVJejSqVOKEqFkrYJ2P6M2W7UtxH-mOnD5RBBjwCjmNuPGUGYQDwMFKogg08Su2eE-1PzKGipfslEkxRH078J4e0XFWRzfZc7jmLXBHYr47UNy0JLM4kmQPbktsK-nQdGvunwStmxyAIie6lKcjnVHw8L61tyL6nAsO1VsclmHe5UG5ImB3XD2Xl5naggXBjEz1p74k5lO85VovN1y9IEI6s5m-Rh_WZXVB3-BEV6Ft5xEKTHpHlqB',
-            PROJECT_KEY: 'f94c829556448ba780034221a0aa0a9c9a208792cfa20fa1c4e3ad71612a3a33',
-            PROGRAM_ID: '3yyTsbqwmtXaiKZ5qWhqTP'
-        };
-
+        // Headcount is loaded from the app's /api/headcount endpoint (no keys in client).
         let refreshInterval;
         let countdownInterval;
         let secondsLeft = 60;
-
-        function parseNDJSON(text) {
-            const members = [];
-            const lines = text.trim().split('\n');
-            for (const line of lines) {
-                if (line) {
-                    try {
-                        const data = JSON.parse(line);
-                        if (data.result) {
-                            members.push(data.result);
-                        }
-                    } catch (e) {
-                        console.error('Error parsing line:', e);
-                    }
-                }
-            }
-            return members;
-        }
 
         function startCountdown() {
             secondsLeft = 60;
@@ -271,51 +246,13 @@
 
         async function fetchHeadcount() {
             try {
-                const url = `${CONFIG.API_BASE}/members/member/list/${CONFIG.PROGRAM_ID}`;
-                
-                const payload = {
-                    filters: {
-                        limit: 1000,
-                        offset: 0,
-                        orderBy: 'created',
-                        orderAsc: true,
-                        filterGroups: [{
-                            condition: 'AND',
-                            fieldFilters: [{
-                                filterField: 'status',
-                                filterValue: 'CHECKED_IN',
-                                filterOperator: 'eq'
-                            }]
-                        }]
-                    }
-                };
-
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${CONFIG.API_KEY}`,
-                        'Content-Type': 'application/json',
-                        'X-Project-Key': CONFIG.PROJECT_KEY
-                    },
-                    body: JSON.stringify(payload)
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-
-                const text = await response.text();
-                const members = parseNDJSON(text);
-                
-                document.getElementById('count').textContent = members.length;
-                
-                const now = new Date();
-                const timeStr = now.toLocaleTimeString('en-US', { 
-                    hour: 'numeric', 
-                    minute: '2-digit'
-                });
+                const response = await fetch('/api/headcount');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                document.getElementById('count').textContent = data.count ?? '?';
+                const updated = data.updated_at ? new Date(data.updated_at) : new Date();
+                const timeStr = updated.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
                 document.getElementById('updated').textContent = `Updated at ${timeStr}`;
-                
             } catch (error) {
                 console.error('Error fetching headcount:', error);
                 document.getElementById('count').textContent = '?';
