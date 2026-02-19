@@ -95,21 +95,34 @@ def _record_login_attempt(ip, success):
     # Prune old
     _login_attempts[ip] = [t for t in _login_attempts[ip] if now - t < LOGIN_RATE_LIMIT_WINDOW]
 
-# Configuration
+# Configuration (strip env values so trailing newlines from Render/dashboards don't break headers)
+def _env(key, default=""):
+    v = os.getenv(key, default)
+    return v.strip() if isinstance(v, str) else (v.decode("utf-8").strip() if isinstance(v, bytes) else str(v))
 config = {
-    "PROGRAM_ID": os.getenv("PROGRAM_ID", "3yyTsbqwmtXaiKZ5qWhqTP"),
-    "API_BASE": os.getenv("API_BASE", "https://api.pub2.passkit.io"),
-    "API_KEY": os.getenv("PASSKIT_API_KEY"),
-    "PROJECT_KEY": os.getenv("PASSKIT_PROJECT_KEY"),
-    "TIMEZONE": os.getenv("TIMEZONE", "America/New_York"),
+    "PROGRAM_ID": _env("PROGRAM_ID", "3yyTsbqwmtXaiKZ5qWhqTP"),
+    "API_BASE": _env("API_BASE", "https://api.pub2.passkit.io"),
+    "API_KEY": _env("PASSKIT_API_KEY"),
+    "PROJECT_KEY": _env("PASSKIT_PROJECT_KEY"),
+    "TIMEZONE": _env("TIMEZONE", "America/New_York"),
 }
+
+def _clean_header_value(v):
+    """Ensure header value is a clean string (no newlines, no bytes)."""
+    if v is None:
+        return ""
+    if isinstance(v, bytes):
+        v = v.decode("utf-8", errors="replace")
+    return str(v).strip()
 
 def get_passkit_headers():
     """Get headers for PassKit API requests."""
+    api_key = _clean_header_value(config.get("API_KEY"))
+    project_key = _clean_header_value(config.get("PROJECT_KEY"))
     return {
-        "Authorization": f"Bearer {config['API_KEY']}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
-        "X-Project-Key": config["PROJECT_KEY"]
+        "X-Project-Key": project_key,
     }
 
 def parse_ndjson(response_text):
