@@ -38,6 +38,7 @@ app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'false'
 
 # Auth: stored hash file (gitignored); fallback to env
 HASH_FILE = os.path.join(os.path.dirname(__file__), '.admin_hash')
+ADMIN_USERNAME = (os.getenv('ADMIN_USERNAME') or '').strip()
 LOGIN_RATE_LIMIT_WINDOW = 900   # 15 minutes
 LOGIN_RATE_LIMIT_MAX = 5
 _login_attempts = {}  # ip -> [timestamp, ...]
@@ -99,6 +100,14 @@ def _record_login_attempt(ip, success):
 def _env(key, default=""):
     v = os.getenv(key, default)
     return v.strip() if isinstance(v, str) else (v.decode("utf-8").strip() if isinstance(v, bytes) else str(v))
+def _headcount_refresh_seconds():
+    """Headcount refresh interval in seconds (10–300). Set HEADCOUNT_REFRESH_SECONDS in env to override default 60."""
+    try:
+        s = _env("HEADCOUNT_REFRESH_SECONDS", "60")
+        return max(10, min(300, int(s)))
+    except ValueError:
+        return 60
+
 config = {
     "PROGRAM_ID": _env("PROGRAM_ID", "3yyTsbqwmtXaiKZ5qWhqTP"),
     "API_BASE": _env("API_BASE", "https://api.pub2.passkit.io"),
@@ -106,6 +115,11 @@ config = {
     "PROJECT_KEY": _env("PASSKIT_PROJECT_KEY"),
     "TIMEZONE": _env("TIMEZONE", "America/New_York"),
 }
+
+@app.context_processor
+def inject_headcount_refresh():
+    """Make headcount refresh interval (seconds) available in all templates."""
+    return {"headcount_refresh_seconds": _headcount_refresh_seconds()}
 
 def _clean_header_value(v):
     """Ensure header value is a clean string (no newlines, no bytes)."""
@@ -302,13 +316,25 @@ def update_match_page():
         return redirect(url_for('login'))
     return render_template('update_match.html')
 
+@app.route('/resend-welcome')
+def resend_welcome_page():
+    """Page to resend welcome email with pass link (password protected)."""
+    if not require_password():
+        return redirect(url_for('login'))
+    return render_template('resend_welcome.html')
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     """Login page for member addition. Rate-limited; supports password hash or plain env."""
     ip = request.remote_addr or 'unknown'
     if request.method == 'POST':
+        username = (request.form.get('username') or '').strip()
         if _is_login_rate_limited(ip):
             return render_template('login.html', error='Too many attempts. Try again in 15 minutes.')
+        # If ADMIN_USERNAME is set, require it to match (case-insensitive)
+        if ADMIN_USERNAME and username.lower() != ADMIN_USERNAME.lower():
+            _record_login_attempt(ip, success=False)
+            return render_template('login.html', error='Incorrect username or password')
         password = request.form.get('password', '')
         if _verify_password(password):
             _record_login_attempt(ip, success=True)
@@ -466,6 +492,52 @@ def _build_checkout_report(members, checked_out_at_str):
         w.writerow([name, email, check_in, checked_out_at_str])
     return out.getvalue()
 
+def _send_welcome_email_smtp(to_email, first_name, pass_url):
+    """Send 'resend welcome' email with pass link using SMTP from env. Returns True if sent."""
+    host = os.getenv("SMTP_HOST")
+    user = os.getenv("SMTP_USER")
+    password = os.getenv("SMTP_PASSWORD")
+    if not all([host, user, password]):
+        return False
+    port = int(os.getenv("SMTP_PORT", "587"))
+    from_addr = os.getenv("EMAIL_FROM", user)
+    subject = "OLSC Brooklyn – Your membership pass link"
+    name = first_name or "Member"
+    html = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><style>
+body {{ font-family: Arial, sans-serif; color: #333; }}
+.header {{ background: linear-gradient(135deg, #c8102e 0%, #00a65a 100%); color: white; padding: 20px; text-align: center; }}
+.content {{ padding: 20px; }}
+.button {{ background: #c8102e; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 15px 0; }}
+.footer {{ background: #f8f9fa; padding: 15px; text-align: center; font-size: 12px; color: #666; }}
+</style></head>
+<body>
+<div class="header"><h1>⚽ OLSC Brooklyn</h1></div>
+<div class="content">
+<p>Hi {name},</p>
+<p>Here’s your membership pass link again. Tap the button below to add your digital card to your phone’s wallet.</p>
+<p><a href="{pass_url}" class="button">📱 Add to Wallet</a></p>
+<p>If you have any questions, reply to this email or reach out at the bar.</p>
+<p>You’ll Never Walk Alone!<br>— OLSC Brooklyn</p>
+</div>
+<div class="footer"><p>This email was sent to {to_email}.</p></div>
+</body>
+</html>"""
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = from_addr
+    msg["To"] = to_email
+    msg.attach(MIMEText(html, "html"))
+    try:
+        with smtplib.SMTP(host, port) as server:
+            server.starttls()
+            server.login(user, password)
+            server.sendmail(from_addr, [to_email], msg.as_string())
+        return True
+    except Exception:
+        return False
+
 def _send_checkout_report_email(to_email, csv_content, filename):
     """Email the checkout CSV to to_email using SMTP from env. Returns True if sent."""
     host = os.getenv("SMTP_HOST")
@@ -568,6 +640,79 @@ def api_checkout():
             "status": "error",
             "error": str(e)
         }), 500
+
+def _trigger_passkit_welcome_email(member):
+    """Ask PassKit to resend the welcome email for this member (PUT with sendWelcomeEmail). Returns True if accepted."""
+    member_id = member.get("id")
+    person = member.get("person") or {}
+    update_url = f"{config['API_BASE']}/members/member"
+    payload = {
+        "programId": config["PROGRAM_ID"],
+        "id": member_id,
+        "person": {
+            "forename": person.get("forename", ""),
+            "surname": person.get("surname", ""),
+            "displayName": person.get("displayName", ""),
+            "emailAddress": person.get("emailAddress", ""),
+            "mobileNumber": person.get("mobileNumber", ""),
+        },
+        "sendWelcomeEmail": True,
+    }
+    if member.get("externalId"):
+        payload["externalId"] = member["externalId"]
+    try:
+        r = requests.put(update_url, headers=get_passkit_headers(), json=payload, timeout=30)
+        return r.status_code == 200
+    except Exception:
+        return False
+
+@app.route('/api/resend-welcome-email', methods=['POST'])
+def api_resend_welcome_email():
+    """Resend welcome email: try PassKit's built-in resend first; fall back to our SMTP email if needed."""
+    if not require_password():
+        return jsonify({"status": "error", "error": "Authentication required"}), 401
+    try:
+        data = request.get_json() or {}
+        email = (data.get("email") or "").strip()
+        if not email:
+            return jsonify({"status": "error", "error": "Email is required"}), 400
+        member = check_member_exists(email)
+        if not member:
+            return jsonify({"status": "error", "error": "No member found with that email"}), 404
+        member_id = member.get("id")
+        person = member.get("person") or {}
+        to_email = person.get("emailAddress") or email
+        first_name = person.get("forename") or person.get("displayName") or "Member"
+        if isinstance(first_name, str) and " " in first_name:
+            first_name = first_name.split()[0]
+        pass_url = f"https://pub2.passkit.io/pass/{config['PROGRAM_ID']}/{member_id}"
+
+        # Prefer PassKit's own welcome email if the API supports it
+        if _trigger_passkit_welcome_email(member):
+            return jsonify({
+                "status": "success",
+                "message": f"PassKit welcome email triggered for {to_email}",
+                "email": to_email,
+                "via": "passkit",
+            })
+
+        # Fallback: send ourselves via SMTP
+        if not all([os.getenv("SMTP_HOST"), os.getenv("SMTP_USER"), os.getenv("SMTP_PASSWORD")]):
+            return jsonify({
+                "status": "error",
+                "error": "PassKit did not send the email and SMTP is not configured. Set SMTP_HOST, SMTP_USER, and SMTP_PASSWORD to use the fallback welcome email."
+            }), 503
+        sent = _send_welcome_email_smtp(to_email, first_name, pass_url)
+        if not sent:
+            return jsonify({"status": "error", "error": "Failed to send email"}), 500
+        return jsonify({
+            "status": "success",
+            "message": f"Welcome email sent to {to_email} (via SMTP)",
+            "email": to_email,
+            "via": "smtp",
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
 
 @app.route('/api/add-member', methods=['POST'])
 def api_add_member():
@@ -706,6 +851,81 @@ def api_update_match():
             "failed_count": failed_count
         })
     
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+@app.route('/api/match-override', methods=['POST'])
+def api_match_override():
+    """Create or update a manual match override entry used for 'next match'."""
+    if not require_password():
+        return jsonify({"status": "error", "error": "Authentication required"}), 401
+
+    try:
+        data = request.get_json() or {}
+        opponent = (data.get("opponent") or "").strip()
+        date_iso = (data.get("date") or "").strip()  # Expected format: YYYY-MM-DD
+        time_str = (data.get("time") or "").strip()
+        pass_display = (data.get("pass_display") or "").strip()
+        note = (data.get("note") or "Created via web override").strip()
+
+        if not opponent or not date_iso or not time_str:
+            return jsonify({
+                "status": "error",
+                "error": "Opponent, date, and time are required"
+            }), 400
+
+        try:
+            override_date = datetime.strptime(date_iso, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({
+                "status": "error",
+                "error": "Date must be in YYYY-MM-DD format"
+            }), 400
+
+        # Display date on the pass (e.g. 3/6)
+        display_date = f"{override_date.month}/{override_date.day}"
+
+        if not pass_display:
+            # Use shared formatting helper so overrides match automatic fixtures
+            pass_display = format_match_display(opponent, display_date, time_str)
+
+        override_file = os.path.join(os.path.dirname(__file__), "match_overrides.json")
+        overrides_data = {"overrides": {}, "enabled": True}
+        if os.path.exists(override_file):
+            try:
+                with open(override_file, "r") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    overrides_data.update(loaded)
+            except Exception:
+                # If the file is unreadable, start fresh but don't crash
+                pass
+
+        overrides = overrides_data.get("overrides") or {}
+        overrides[date_iso] = {
+            "opponent": opponent,
+            "time": time_str,
+            "date": display_date,
+            "pass_display": pass_display,
+            "note": note,
+        }
+        overrides_data["overrides"] = overrides
+        overrides_data["enabled"] = True
+
+        with open(override_file, "w") as f:
+            json.dump(overrides_data, f, indent=2)
+
+        return jsonify({
+            "status": "success",
+            "message": "Override saved",
+            "override": {
+                "opponent": opponent,
+                "date_key": date_iso,
+                "display_date": display_date,
+                "time": time_str,
+                "pass_display": pass_display,
+            },
+        })
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
 

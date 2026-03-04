@@ -206,7 +206,7 @@
             <div class="goal">🥅</div>
         </div>
         <div class="countdown-text">
-            <span id="countdown">60</span>s until next refresh
+            <span id="countdown">{{ headcount_refresh_seconds }}</span>s until next refresh
         </div>
 
         <div class="admin-link">
@@ -215,12 +215,13 @@
     </div>
 
     <script>
+        const REFRESH_SECONDS = {{ headcount_refresh_seconds }};
         let refreshInterval;
         let countdownInterval;
-        let secondsLeft = 60;
+        let secondsLeft = REFRESH_SECONDS;
 
         function startCountdown() {
-            secondsLeft = 60;
+            secondsLeft = REFRESH_SECONDS;
             const countdownEl = document.getElementById('countdown');
             const ballEl = document.getElementById('ball');
             
@@ -235,7 +236,7 @@
                 countdownEl.textContent = secondsLeft;
                 
                 // Move ball across pitch (from 10px to ~85% of width)
-                const progress = (60 - secondsLeft) / 60;
+                const progress = (REFRESH_SECONDS - secondsLeft) / REFRESH_SECONDS;
                 const containerWidth = ballEl.parentElement.offsetWidth;
                 const maxLeft = containerWidth - 50; // Leave room for goal
                 ballEl.style.left = (10 + (maxLeft * progress)) + 'px';
@@ -246,7 +247,7 @@
                 }
                 
                 if (secondsLeft <= 0) {
-                    secondsLeft = 60;
+                    secondsLeft = REFRESH_SECONDS;
                 }
             }, 1000);
         }
@@ -280,11 +281,11 @@
         fetchHeadcount();
         startCountdown();
 
-        // Auto-refresh every 60 seconds
+        // Auto-refresh (interval set by HEADCOUNT_REFRESH_SECONDS, default 60)
         refreshInterval = setInterval(() => {
             fetchHeadcount();
             startCountdown();
-        }, 60000);
+        }, REFRESH_SECONDS * 1000);
 
         // Refresh when page becomes visible again (mobile)
         document.addEventListener('visibilitychange', () => {

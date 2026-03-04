@@ -139,6 +139,81 @@
             border: 1px solid #bee5eb;
         }
 
+        .override-card {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 12px;
+            background: #fff7f7;
+            border: 1px solid #f5c6cb;
+        }
+
+        .override-card h3 {
+            color: #c8102e;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .override-card p {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 15px;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .form-row label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .form-row input[type="text"],
+        .form-row input[type="date"],
+        .form-row input[type="time"] {
+            flex: 1;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+            font-size: 14px;
+        }
+
+        .form-row input[type="text"]:focus,
+        .form-row input[type="date"]:focus,
+        .form-row input[type="time"]:focus {
+            outline: none;
+            border-color: #c8102e;
+        }
+
+        .override-btn {
+            margin-top: 10px;
+            padding: 10px 14px;
+            border-radius: 6px;
+            border: none;
+            background: #c8102e;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.1s ease;
+        }
+
+        .override-btn:hover {
+            background: #a30d26;
+            transform: translateY(-1px);
+        }
+
+        .override-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
         .links {
             text-align: center;
             margin-top: 20px;
@@ -226,6 +301,36 @@
 
         <div id="resultBox" style="display: none;"></div>
 
+        <div class="override-card">
+            <h3>Force Next Match (Override)</h3>
+            <p>Use this to manually set the next match (for FA Cup or fixtures the API misses). The earliest upcoming override will always be used.</p>
+            <form id="overrideForm">
+                <div class="form-row">
+                    <div style="flex: 2;">
+                        <label for="overrideOpponent">Opponent</label>
+                        <input type="text" id="overrideOpponent" required placeholder="e.g. Wolves">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div>
+                        <label for="overrideDate">Date</label>
+                        <input type="date" id="overrideDate" required>
+                    </div>
+                    <div>
+                        <label for="overrideTime">Time</label>
+                        <input type="text" id="overrideTime" placeholder="e.g. 3 PM" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div style="flex: 2;">
+                        <label for="overridePassDisplay">Pass Text (optional)</label>
+                        <input type="text" id="overridePassDisplay" placeholder="If blank, will be generated">
+                    </div>
+                </div>
+                <button type="submit" class="override-btn" id="overrideBtn">Save Override & Reload Match</button>
+            </form>
+        </div>
+
         <div class="links">
             <a href="/add-member">Add Member</a>
             <a href="/">Headcount</a>
@@ -239,6 +344,8 @@
         const resultBox = document.getElementById('resultBox');
         const matchInfo = document.getElementById('matchInfo');
         const loading = document.getElementById('loading');
+        const overrideForm = document.getElementById('overrideForm');
+        const overrideBtn = document.getElementById('overrideBtn');
 
         function showStatus(message, type) {
             statusMessage.textContent = message;
@@ -324,6 +431,58 @@
             } finally {
                 updateBtn.disabled = false;
                 updateBtn.textContent = 'Update All Passes';
+            }
+        });
+
+        overrideForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const opponent = document.getElementById('overrideOpponent').value.trim();
+            const date = document.getElementById('overrideDate').value;
+            const time = document.getElementById('overrideTime').value.trim();
+            const passDisplay = document.getElementById('overridePassDisplay').value.trim();
+
+            if (!opponent || !date || !time) {
+                showStatus('Opponent, date, and time are required for an override.', 'error');
+                return;
+            }
+
+            overrideBtn.disabled = true;
+            overrideBtn.textContent = 'Saving override...';
+
+            try {
+                const response = await fetch('/api/match-override', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        opponent,
+                        date,
+                        time,
+                        pass_display: passDisplay || undefined
+                    })
+                });
+
+                if (response.status === 401) {
+                    window.location.href = '/login?next=/update-match';
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    showStatus('Override saved. Reloading next match...', 'success');
+                    await loadMatchInfo();
+                } else {
+                    showStatus(data.error || 'Error saving override', 'error');
+                }
+            } catch (error) {
+                showStatus('Connection error while saving override.', 'error');
+                console.error('Error:', error);
+            } finally {
+                overrideBtn.disabled = false;
+                overrideBtn.textContent = 'Save Override & Reload Match';
             }
         });
 

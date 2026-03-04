@@ -13,6 +13,7 @@ Single reference for what’s done, what’s next, and what’s on the horizon.
 - **Match updates** – Liverpool fixtures on passes (CLI + web “Update Match”)
 - **Match overrides** – FA Cup / one-off games via `match_overrides.json`
 - **Add member (web)** – Password-protected form; welcome email
+- **Resend welcome email (admin)** – By member email; uses same SMTP as checkout report
 - **Quick add (CLI)** – `quick_add_members.py` for manual adds
 
 ### Web app (Flask on Render)

@@ -1,5 +1,12 @@
 {
   "overrides": {
+    "2026-03-06": {
+      "opponent": "Wolves",
+      "time": "3 PM",
+      "date": "3/6",
+      "pass_display": "Wolves | 3/6 3 PM",
+      "note": "FA Cup - not in API"
+    },
     "2026-02-14": {
       "opponent": "Brighton",
       "time": "3 PM",

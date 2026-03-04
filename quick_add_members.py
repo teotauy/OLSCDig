@@ -69,6 +69,12 @@ MEMBERS = [
         "last_name": "Devanney",
         "email": "jdevanney@mac.com",
         "phone": ""
+    },
+    {
+        "first_name": "JeanBaptiste",
+        "last_name": "Reisqs",
+        "email": "jeanbaptiste.reisqs@gmail.com",
+        "phone": ""
     }
 ]
 

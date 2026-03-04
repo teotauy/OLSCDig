@@ -38,7 +38,7 @@ PUSHOVER_USER_KEY=uxsqmcnqrjzzsy82uaogdjctczyvix
 
 ### Step 3: Your complete `.env` should look like this:
 
-```
+```bash
 PASSKIT_API_KEY=QHxrhw8Wi2T6W5lvN1ZxK35BYqvX6ynYnPvSbDaV36dYkczgwWCkKckDPtlRoq4VlC5f-M9vn4wVJejSqVOKEqFkrYJ2P6M2W7UtxH-mOnD5RBBjwCjmNuPGUGYQDwMFKogg08Su2eE-1PzKGipfslEkxRH078J4e0XFWRzfZc7jmLXBHYr47UNy0JLM4kmQPbktsK-nQdGvunwStmxyAIie6lKcjnVHw8L61tyL6nAsO1VsclmHe5UG5ImB3XD2Xl5naggXBjEz1p74k5lO85VovN1y9IEI6s5m-Rh_WZXVB3-BEV6Ft5xEKTHpHlqB
 PASSKIT_PROJECT_KEY=f94c829556448ba780034221a0aa0a9c9a208792cfa20fa1c4e3ad71612a3a33
 PROGRAM_ID=3yyTsbqwmtXaiKZ5qWhqTP
@@ -47,6 +47,8 @@ TIMEZONE=America/New_York
 PUSHOVER_API_TOKEN=atxyjoykhphqyng39p98qgivyccm8j
 FOOTBALL_DATA_API_KEY=7e9f8206e9db47fa8a4b15b783a7543b
 PUSHOVER_USER_KEY=uxsqmcnqrjzzsy82uaogdjctczyvix
+# Optional but recommended if you want a username on the login form:
+# ADMIN_USERNAME=admin
 ```
 
 ### Step 4: Test locally

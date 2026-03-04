@@ -26,9 +26,11 @@ In your Render dashboard, you'll need to set these environment variables for the
 - `FLASK_SECRET_KEY` - Random secret key for sessions: `python3 -c "import secrets; print(secrets.token_hex(32))"`
 
 **Optional:**
+- `ADMIN_USERNAME` - Username required on the login form (e.g. `admin`). If set, both username and password must match.
 - `API_BASE` - Defaults to `https://api.pub2.passkit.io`
 - `TIMEZONE` - Defaults to `America/New_York`
 - `SESSION_COOKIE_SECURE` - Set to `true` when using HTTPS (e.g. on Render) so the session cookie is only sent over HTTPS.
+- `HEADCOUNT_REFRESH_SECONDS` - How often the headcount updates (default `60`). Set to `30` for twice as fast, or `45` for a middle ground. Minimum 10, maximum 300.
 - **Checkout report email:** After "Check Out Everyone", the CSV can be emailed. Set:
   - `CHECKOUT_REPORT_EMAIL` - Address to receive the report (e.g. `colby@colbyangusblack.com`).
   - `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASSWORD` - Your SMTP server (e.g. Gmail, SendGrid). Optional: `EMAIL_FROM` (defaults to `SMTP_USER`).
@@ -63,6 +65,7 @@ In your Render dashboard, you'll need to set these environment variables for the
 | `API_BASE` | Optional | Default `https://api.pub2.passkit.io` |
 | `TIMEZONE` | Optional | Default `America/New_York` |
 | `SESSION_COOKIE_SECURE` | Optional | Set `true` for HTTPS (Render) |
+| `HEADCOUNT_REFRESH_SECONDS` | Optional | Headcount refresh interval in seconds (default 60; e.g. 30 for faster) |
 | `CHECKOUT_REPORT_EMAIL` | Optional | Email for checkout CSV |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | Optional | For checkout report email |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional | Google OAuth; set redirect URI |

@@ -223,8 +223,78 @@ def check_manual_override(match_date_str):
         print(f"Warning: Could not load match overrides: {e}")
     return None
 
+def _get_forced_next_match_from_overrides():
+    """
+    If any upcoming manual overrides exist, treat the earliest one as the
+    authoritative "next match". This lets us strong-arm cases like FA Cup
+    fixtures that the external API doesn't return correctly.
+    """
+    try:
+        override_file = os.path.join(os.path.dirname(__file__), "match_overrides.json")
+        if not os.path.exists(override_file):
+            return None
+        with open(override_file, 'r') as f:
+            overrides_data = json.load(f)
+        if not overrides_data.get("enabled"):
+            return None
+        overrides = overrides_data.get("overrides") or {}
+        if not isinstance(overrides, dict):
+            return None
+
+        # Work in configured display timezone so "today" matches what admins see
+        display_tz = pytz.timezone(PASSKIT_CONFIG.get("TIMEZONE", "America/New_York"))
+        now_local = datetime.now(display_tz).date()
+
+        candidates = []
+        for date_key, override in overrides.items():
+            try:
+                override_date = datetime.strptime(date_key, "%Y-%m-%d").date()
+            except ValueError:
+                continue
+            # Skip overrides that are already in the past
+            if override_date < now_local:
+                continue
+            candidates.append((override_date, date_key, override))
+
+        if not candidates:
+            return None
+
+        # Earliest upcoming override wins
+        candidates.sort(key=lambda x: x[0])
+        override_date, _date_key, override = candidates[0]
+
+        opponent = override.get("opponent", "").strip()
+        if not opponent:
+            return None
+
+        # Use override's raw time/date/pass_display for consistency
+        time_str = (override.get("time") or "").strip()
+        display_date = (override.get("date") or "").strip()
+        pass_display = (override.get("pass_display") or "").strip()
+        full_date = override_date.strftime("%A, %B %d")
+
+        return {
+            "opponent": opponent,
+            "date": display_date or override_date.strftime("%-m/%-d") if hasattr(override_date, "strftime") else "",
+            "time": time_str,
+            "venue": override.get("venue", "Away"),
+            "is_home": bool(override.get("is_home", False)),
+            "full_date": full_date,
+            "kickoff": time_str,
+            "pass_display": pass_display or format_match_display(opponent, display_date, time_str),
+        }
+    except Exception as e:
+        print(f"Warning: Could not determine forced next match from overrides: {e}")
+        return None
+
 def get_next_match():
     """Get the next upcoming match."""
+    # First, see if any upcoming manual overrides exist; if so, treat the
+    # earliest one as the authoritative "next match" (e.g. FA Cup ties).
+    forced = _get_forced_next_match_from_overrides()
+    if forced:
+        return forced
+
     fixtures = get_liverpool_fixtures()
     if fixtures:
         return fixtures[0]  # Next match (already processed with override check)
