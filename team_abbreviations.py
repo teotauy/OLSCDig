@@ -55,13 +55,21 @@ TEAM_ABBREVIATIONS = {
     "Rangers FC": "Rangers",
     "Olympique de Marseille": "Marseille",
     "Qarabağ Ağdam FK": "Qarabag",
-    
+    "Galatasaray SK": "Galatasaray",
+    "Galatasaray": "Galatasaray",
+
     # Add more as needed
 }
 
 def abbreviate_team_name(full_name):
     """Convert full team name to short abbreviation."""
-    return TEAM_ABBREVIATIONS.get(full_name, full_name[:8])  # Fallback to first 8 chars
+    if not full_name:
+        return ""
+    # Use mapping if present; otherwise keep full name if short, else first 14 chars (was 8, caused "Galatasa")
+    abbr = TEAM_ABBREVIATIONS.get(full_name.strip())
+    if abbr is not None:
+        return abbr
+    return full_name if len(full_name) <= 14 else full_name[:14]
 
 def format_match_display(opponent, date_str, time_str):
     """Format match info for pass display with optimal character usage."""

@@ -303,7 +303,7 @@
 
         <div class="override-card">
             <h3>Force Next Match (Override)</h3>
-            <p>Use this to manually set the next match (for FA Cup or fixtures the API misses). The earliest upcoming override will always be used.</p>
+            <p>Use this to manually set the next match (for FA Cup or fixtures the API misses). The earliest <strong>upcoming</strong> override (date &ge; today) is used. Once that date passes, the app falls back to the API—so re-add an override or fix the API name if the next match is wrong.</p>
             <form id="overrideForm">
                 <div class="form-row">
                     <div style="flex: 2;">
