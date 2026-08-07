@@ -66,7 +66,7 @@ troubleshooting — it narrows down cert vs. pass.json vs. signature issues.
 
 After the AirDrop/email spike succeeds, test the app-integrated route:
 
-1. Add the Apple env vars and cert files to the running environment.
+1. Add the Apple env vars and certs to the running environment.
 2. Start or deploy the Flask app.
 3. Log in as admin first.
 4. Open:
@@ -78,3 +78,37 @@ After the AirDrop/email spike succeeds, test the app-integrated route:
 On Render, use the full HTTPS URL for the live app. iOS should download the
 pass from the hosted Flask route and offer "Add to Apple Wallet." This proves
 the production delivery path, not just local signing.
+
+### Render environment variables
+
+Required:
+
+```text
+APPLE_TEAM_ID=<your team id>
+APPLE_PASS_TYPE_ID=pass.com.redcrowlabs.olsc
+APPLE_CERT_PASSWORD=<p12 export password>
+```
+
+For certs, use either Render secret files with paths:
+
+```text
+APPLE_PASS_CERT_PATH=/etc/secrets/passTypeCert.p12
+APPLE_WWDR_CERT_PATH=/etc/secrets/wwdr.pem
+```
+
+Or use base64 env vars, which are often easier in Render:
+
+```bash
+base64 -i certs/passTypeCert.p12 | tr -d '\n'
+base64 -i certs/wwdr.pem | tr -d '\n'
+```
+
+Paste those outputs into:
+
+```text
+APPLE_PASS_CERT_P12_BASE64=<base64 passTypeCert.p12>
+APPLE_WWDR_PEM_BASE64=<base64 wwdr.pem>
+```
+
+Do not commit cert files or generated `.pkpass` files. They are intentionally
+gitignored.

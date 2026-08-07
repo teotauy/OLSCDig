@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Apple Wallet pass generation utilities for OLSC Brooklyn."""
 
+import base64
 import hashlib
 import json
 import os
@@ -46,13 +47,40 @@ def _env(key, default=""):
     return value.strip() if isinstance(value, str) else value
 
 
-def load_apple_wallet_config():
+def _materialize_base64_cert(value, path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.write_bytes(base64.b64decode(value, validate=True))
+    except Exception as exc:
+        raise AppleWalletConfigError(f"Could not decode base64 certificate for {path.name}: {exc}") from exc
+    return path
+
+
+def load_apple_wallet_config(materialize_dir=None):
+    materialize_dir = Path(materialize_dir) if materialize_dir else None
+    pass_cert_b64 = _env("APPLE_PASS_CERT_P12_BASE64")
+    wwdr_b64 = _env("APPLE_WWDR_PEM_BASE64")
+
+    if pass_cert_b64:
+        if not materialize_dir:
+            raise AppleWalletConfigError("APPLE_PASS_CERT_P12_BASE64 requires a materialize directory")
+        pass_cert_p12 = _materialize_base64_cert(pass_cert_b64, materialize_dir / "passTypeCert.p12")
+    else:
+        pass_cert_p12 = Path(_env("APPLE_PASS_CERT_PATH", str(DEFAULT_CERT_DIR / "passTypeCert.p12")))
+
+    if wwdr_b64:
+        if not materialize_dir:
+            raise AppleWalletConfigError("APPLE_WWDR_PEM_BASE64 requires a materialize directory")
+        wwdr_pem = _materialize_base64_cert(wwdr_b64, materialize_dir / "wwdr.pem")
+    else:
+        wwdr_pem = Path(_env("APPLE_WWDR_CERT_PATH", str(DEFAULT_CERT_DIR / "wwdr.pem")))
+
     config = AppleWalletConfig(
         team_id=_env("APPLE_TEAM_ID"),
         pass_type_id=_env("APPLE_PASS_TYPE_ID"),
         cert_password=os.getenv("APPLE_CERT_PASSWORD", ""),
-        pass_cert_p12=Path(_env("APPLE_PASS_CERT_PATH", str(DEFAULT_CERT_DIR / "passTypeCert.p12"))),
-        wwdr_pem=Path(_env("APPLE_WWDR_CERT_PATH", str(DEFAULT_CERT_DIR / "wwdr.pem"))),
+        pass_cert_p12=pass_cert_p12,
+        wwdr_pem=wwdr_pem,
     )
 
     missing = []
@@ -60,6 +88,8 @@ def load_apple_wallet_config():
         missing.append("APPLE_TEAM_ID")
     if not config.pass_type_id:
         missing.append("APPLE_PASS_TYPE_ID")
+    if "APPLE_CERT_PASSWORD" not in os.environ:
+        missing.append("APPLE_CERT_PASSWORD")
     if missing:
         raise AppleWalletConfigError(f"Missing env vars: {', '.join(missing)}")
     if not config.pass_cert_p12.exists():
@@ -186,9 +216,9 @@ def _zip_pass(pass_dir):
 
 def build_member_pkpass(pass_data, config=None):
     """Build and sign a .pkpass package, returning bytes."""
-    config = config or load_apple_wallet_config()
     temp_dir = Path(tempfile.mkdtemp(prefix="olsc-wallet-pass-"))
     try:
+        config = config or load_apple_wallet_config(temp_dir / "certs")
         pass_dir = temp_dir / "pass"
         pass_dir.mkdir(parents=True)
         (pass_dir / "pass.json").write_text(
