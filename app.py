@@ -19,12 +19,13 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 from datetime import datetime, timedelta
-from flask import Flask, render_template, jsonify, request, session, redirect, url_for
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for, send_file
 from dotenv import load_dotenv
 import pytz
 import bcrypt
 from team_abbreviations import format_match_display, abbreviate_team_name
 from match_updates import get_next_match
+from wallet_pass import AppleWalletConfigError, MemberPassData, build_member_pkpass
 # Notifications feature removed
 
 load_dotenv()
@@ -363,7 +364,7 @@ def forgot_password():
         hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
         if _set_password_hash(hashed):
             return redirect(url_for('login', reset='1'))
-        return render_template('forgot_password.html', recovery_enabled=True, error='Could not save new password (e.g. read-only filesystem). Use Render Environment to set ADMIN_PASSWORD.')
+        return render_template('forgot_password.html', recovery_enabled=True, error='Could not save new password (e.g. read-only filesystem). Set ADMIN_PASSWORD or ADMIN_PASSWORD_HASH in your host\'s Environment (Render, Vercel, etc.).')
     return render_template('forgot_password.html', recovery_enabled=bool(recovery_code))
 
 @app.route('/login/google')
@@ -912,12 +913,19 @@ def api_match_override():
         overrides_data["overrides"] = overrides
         overrides_data["enabled"] = True
 
-        with open(override_file, "w") as f:
-            json.dump(overrides_data, f, indent=2)
+        persisted = True
+        try:
+            with open(override_file, "w") as f:
+                json.dump(overrides_data, f, indent=2)
+        except (OSError, PermissionError):
+            persisted = False
 
         return jsonify({
             "status": "success",
-            "message": "Override saved",
+            "message": "Override saved" if persisted else (
+                "Override applied for this session only. On Vercel, file writes are not persisted—edit match_overrides.json in your repo and redeploy to save permanently."
+            ),
+            "persisted": persisted,
             "override": {
                 "opponent": opponent,
                 "date_key": date_iso,
@@ -926,6 +934,57 @@ def api_match_override():
                 "pass_display": pass_display,
             },
         })
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+@app.route('/wallet/test-pass')
+def wallet_test_pass_alias():
+    """Friendly URL that redirects to the .pkpass download route."""
+    return redirect(url_for('wallet_test_pass_download', **request.args))
+
+@app.route('/wallet/test-pass.pkpass')
+def wallet_test_pass_download():
+    """Admin-only Apple Wallet test pass download served from this Flask app."""
+    if not require_password():
+        return redirect(url_for('login'))
+
+    try:
+        display_name = (request.args.get("name") or "OLSC Test Member").strip()[:80]
+        season = (request.args.get("season") or os.getenv("OLSC_SEASON") or "2026/27").strip()[:20]
+        serial = f"TEST-{int(time.time())}"
+        token = "spike-test-token"
+        barcode_url = f"{request.url_root.rstrip('/')}/checkin/t/{token}"
+
+        next_match_text = ""
+        try:
+            next_match = get_next_match()
+            if next_match:
+                next_match_text = next_match.get("pass_display") or ""
+        except Exception:
+            next_match_text = ""
+
+        pkpass_bytes = build_member_pkpass(MemberPassData(
+            display_name=display_name,
+            season=season,
+            serial_number=serial,
+            barcode_message=barcode_url,
+            next_match=next_match_text,
+            description="OLSC Brooklyn Membership Test Pass",
+        ))
+
+        return send_file(
+            io.BytesIO(pkpass_bytes),
+            mimetype="application/vnd.apple.pkpass",
+            as_attachment=True,
+            download_name="olsc-test.pkpass",
+            max_age=0,
+        )
+    except AppleWalletConfigError as e:
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "hint": "Set APPLE_TEAM_ID, APPLE_PASS_TYPE_ID, APPLE_CERT_PASSWORD, and provide certs/passTypeCert.p12 + certs/wwdr.pem.",
+        }), 500
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
 
