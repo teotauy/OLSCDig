@@ -1160,8 +1160,15 @@ def admin_members():
         else:
             try:
                 with db.cursor() as cur:
-                    _upsert_member_in_season(cur, first_name, last_name, email, phone, season['id'])
+                    member_id = _upsert_member_in_season(cur, first_name, last_name, email, phone, season['id'])
                 added = f"{first_name} {last_name}"
+
+                new_member = {"id": member_id, "first_name": first_name, "last_name": last_name, "email": email}
+                pass_ok, pass_message = _issue_and_email_pass(new_member, season)
+                if pass_ok:
+                    added += " — pass emailed."
+                else:
+                    added += f" (pass not sent: {pass_message})"
             except Exception as e:
                 error = f"Could not add member: {e}"
 
@@ -1244,6 +1251,51 @@ def admin_member_edit(member_id):
     return render_template('admin_member_edit.html', member=member, error=error)
 
 
+def _safe_pkpass_filename(member):
+    name = f"{member['first_name']}-{member['last_name']}".strip("-").lower()
+    safe = "".join(ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in name).strip("-")
+    return f"olsc-{safe or 'member'}.pkpass"
+
+
+def _issue_member_pkpass(member, season):
+    """Issue/rotate a wallet token and return signed pass bytes plus web URL."""
+    raw_token, serial_number = db.issue_wallet_token(member['id'], season['id'], platform='apple')
+    barcode_url = f"{request.url_root.rstrip('/')}/checkin/t/{raw_token}"
+
+    next_match_text = ""
+    try:
+        next_match = get_next_match()
+        if next_match:
+            next_match_text = next_match.get('pass_display') or ""
+    except Exception:
+        next_match_text = ""
+
+    pkpass_bytes = build_member_pkpass(MemberPassData(
+        display_name=f"{member['first_name']} {member['last_name']}".strip(),
+        season=season['name'],
+        serial_number=serial_number,
+        barcode_message=barcode_url,
+        next_match=next_match_text,
+        description="OLSC Brooklyn Membership",
+    ))
+    mobile_pass_url = f"{request.url_root.rstrip('/')}{url_for('mobile_pass', token=raw_token)}"
+    return pkpass_bytes, mobile_pass_url
+
+
+def _issue_and_email_pass(member, season):
+    """Issue a wallet token, build a signed pass, and email it to a member."""
+    try:
+        pkpass_bytes, mobile_pass_url = _issue_member_pkpass(member, season)
+    except AppleWalletConfigError as e:
+        return False, f"Wallet not configured: {e}"
+    except Exception as e:
+        return False, f"Could not build pass: {e}"
+
+    if _send_pkpass_email(member['email'], member['first_name'], pkpass_bytes, mobile_pass_url=mobile_pass_url):
+        return True, None
+    return False, "Pass generated but email failed to send (check SMTP env vars)."
+
+
 @app.route('/admin/members/<int:member_id>/resend-pass', methods=['POST'])
 def admin_member_resend_pass(member_id):
     if not require_password():
@@ -1257,35 +1309,39 @@ def admin_member_resend_pass(member_id):
     if not member or not season:
         return redirect(url_for('admin_members'))
 
+    ok, message = _issue_and_email_pass(member, season)
+    if ok:
+        return redirect(url_for('admin_members', resent=member['email']))
+    return redirect(url_for('admin_members', resend_error=message))
+
+
+@app.route('/admin/members/<int:member_id>/download-pass', methods=['POST'])
+def admin_member_download_pass(member_id):
+    if not require_password():
+        return redirect(url_for('login'))
+
+    season = db.get_current_season()
+    with db.cursor() as cur:
+        cur.execute("SELECT * FROM members WHERE id = %s", (member_id,))
+        member = cur.fetchone()
+
+    if not member or not season:
+        return redirect(url_for('admin_members'))
+
     try:
-        raw_token, serial_number = db.issue_wallet_token(member['id'], season['id'], platform='apple')
-        barcode_url = f"{request.url_root.rstrip('/')}/checkin/t/{raw_token}"
-
-        next_match_text = ""
-        try:
-            next_match = get_next_match()
-            if next_match:
-                next_match_text = next_match.get('pass_display') or ""
-        except Exception:
-            next_match_text = ""
-
-        pkpass_bytes = build_member_pkpass(MemberPassData(
-            display_name=f"{member['first_name']} {member['last_name']}".strip(),
-            season=season['name'],
-            serial_number=serial_number,
-            barcode_message=barcode_url,
-            next_match=next_match_text,
-            description="OLSC Brooklyn Membership",
-        ))
+        pkpass_bytes, _mobile_pass_url = _issue_member_pkpass(member, season)
     except AppleWalletConfigError as e:
         return redirect(url_for('admin_members', resend_error=f"Wallet not configured: {e}"))
     except Exception as e:
         return redirect(url_for('admin_members', resend_error=f"Could not build pass: {e}"))
 
-    mobile_pass_url = f"{request.url_root.rstrip('/')}{url_for('mobile_pass', token=raw_token)}"
-    if _send_pkpass_email(member['email'], member['first_name'], pkpass_bytes, mobile_pass_url=mobile_pass_url):
-        return redirect(url_for('admin_members', resent=member['email']))
-    return redirect(url_for('admin_members', resend_error="Pass generated but email failed to send (check SMTP env vars)."))
+    return send_file(
+        io.BytesIO(pkpass_bytes),
+        mimetype="application/vnd.apple.pkpass",
+        as_attachment=True,
+        download_name=_safe_pkpass_filename(member),
+        max_age=0,
+    )
 
 
 @app.route('/admin/members/import', methods=['POST'])

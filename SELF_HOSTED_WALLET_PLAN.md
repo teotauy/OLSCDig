@@ -39,7 +39,8 @@ Gate-by-gate (see full list under "Go/No-Go Gates" below):
 | Fresh scan creates a check-in | Built locally (Aug 10): `POST /api/checkins/scan` validates wallet token and inserts one check-in for the current match; needs DB-backed end-to-end test |
 | Duplicate scan shows "already used" | Built locally (Aug 10): DB unique constraint drives the duplicate warning state; needs DB-backed end-to-end test |
 | Last-match/check-in CSV export | **Not started** |
-| Documented resend flow | Built and logic-tested locally; end-to-end test still needs `APPLE_CERT_PASSWORD` + SMTP creds in `.env` |
+| Documented resend flow | Built and logic-tested locally; end-to-end test still needs SMTP creds in `.env` (`APPLE_CERT_PASSWORD` is resolved) |
+| Automatic pass delivery on member add | **Done (Aug 10):** adding a member via `/admin/members` now automatically issues a token, builds a real signed pass, and emails it — same underlying logic as "Resend Pass" (extracted into a shared `_issue_and_email_pass` helper). Deliberately scoped to the single-add form only, not CSV bulk import (importing 100 rows shouldn't silently fire 100 emails). Verified: pass/token get created even when email fails, and the failure is surfaced clearly to the admin rather than silently swallowed. |
 
 **Biggest remaining lift:** production verification. The hosted Wallet pass
 path is verified on Render, and DB/admin/scanner/mobile-web code exists
