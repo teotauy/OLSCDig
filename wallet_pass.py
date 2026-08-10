@@ -49,10 +49,15 @@ def _env(key, default=""):
 
 def _materialize_base64_cert(value, path):
     path.parent.mkdir(parents=True, exist_ok=True)
+    clean_value = "".join(str(value).split())
     try:
-        path.write_bytes(base64.b64decode(value, validate=True))
+        path.write_bytes(base64.b64decode(clean_value, validate=True))
     except Exception as exc:
-        raise AppleWalletConfigError(f"Could not decode base64 certificate for {path.name}: {exc}") from exc
+        raise AppleWalletConfigError(
+            f"Could not decode base64 certificate for {path.name}: {exc}. "
+            "Regenerate the value with `base64 -i <file> | tr -d '\\n' | pbcopy` "
+            "and paste only that value into Render."
+        ) from exc
     return path
 
 
