@@ -17,6 +17,7 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_CERT_DIR = ROOT / "certs"
+BASE64_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=")
 
 
 class AppleWalletConfigError(RuntimeError):
@@ -56,6 +57,14 @@ def _materialize_base64_cert(value, path):
         while padding_end < len(clean_value) and clean_value[padding_end] == "=":
             padding_end += 1
         clean_value = clean_value[:padding_end]
+    invalid_chars = sorted({char for char in clean_value if char not in BASE64_CHARS})
+    if invalid_chars:
+        shown = ", ".join(repr(char) for char in invalid_chars[:8])
+        raise AppleWalletConfigError(
+            f"Could not decode base64 certificate for {path.name}: invalid non-base64 character(s): {shown}. "
+            "The value should usually start with `MII`, include only letters/numbers/+//, may end with `=`, "
+            "and should not include quotes, `%`, env var names, or shell prompts."
+        )
     try:
         path.write_bytes(base64.b64decode(clean_value, validate=True))
     except Exception as exc:
