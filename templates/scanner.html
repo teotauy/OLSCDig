@@ -48,6 +48,19 @@
             overflow: hidden;
             background: #111;
             min-height: 280px;
+            transition: border-color 0.18s ease, box-shadow 0.18s ease;
+        }
+        .camera-wrap.success {
+            border-color: #00a65a;
+            box-shadow: 0 0 0 8px rgba(0,166,90,0.18);
+        }
+        .camera-wrap.warning {
+            border-color: #ffb000;
+            box-shadow: 0 0 0 8px rgba(255,176,0,0.2);
+        }
+        .camera-wrap.error {
+            border-color: #c8102e;
+            box-shadow: 0 0 0 8px rgba(200,16,46,0.18);
         }
         #reader {
             width: 100%;
@@ -91,17 +104,20 @@
         }
         input:focus { outline: none; border-color: #c8102e; }
         .result {
-            margin: 0 16px 16px;
+            margin: 16px;
             border-radius: 20px;
-            padding: 22px 16px;
+            padding: 18px 14px;
             text-align: center;
             border: 4px solid #ddd;
             background: #f7f7f7;
-            min-height: 165px;
+            min-height: 132px;
             display: flex;
             flex-direction: column;
             justify-content: center;
             transition: all 0.2s ease;
+            position: sticky;
+            top: 8px;
+            z-index: 10;
         }
         .result.idle { color: #555; }
         .result.success {
@@ -122,8 +138,8 @@
             border-color: #c8102e;
             box-shadow: 0 0 0 8px rgba(200,16,46,0.18);
         }
-        .result h2 { font-size: 34px; line-height: 1.05; margin-bottom: 10px; text-transform: uppercase; }
-        .result .member { font-size: 24px; font-weight: 800; margin-bottom: 6px; }
+        .result h2 { font-size: 38px; line-height: 1.0; margin-bottom: 8px; text-transform: uppercase; }
+        .result .member { font-size: 23px; font-weight: 800; margin-bottom: 6px; }
         .result .detail { font-size: 15px; line-height: 1.35; }
         .ball {
             display: none;
@@ -143,6 +159,13 @@
         }
         .links a { color: #c8102e; text-decoration: none; margin: 0 8px; }
         .muted { color: #777; font-size: 13px; line-height: 1.35; }
+        @media (max-width: 430px) {
+            body { padding: 8px; }
+            .header { padding: 14px; }
+            .result { margin: 10px; min-height: 118px; padding: 14px 10px; }
+            .result h2 { font-size: 34px; }
+            .section { padding: 10px; }
+        }
     </style>
 </head>
 <body>
@@ -159,8 +182,17 @@
             </div>
         </div>
 
+        <div id="result" class="result idle">
+            <div class="ball">⚽</div>
+            <h2>Ready</h2>
+            <div class="detail">Scan an Apple Wallet pass QR code.</div>
+            {% if not match %}
+                <div class="detail" style="margin-top:8px; font-weight:700;">Set a current match before the door opens.</div>
+            {% endif %}
+        </div>
+
         <div class="section">
-            <div class="camera-wrap">
+            <div id="cameraWrap" class="camera-wrap">
                 <div id="reader"></div>
             </div>
             <div class="controls">
@@ -173,15 +205,6 @@
                 <input id="manualToken" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://.../checkin/t/...">
                 <button id="manualBtn" type="button" style="width:100%; margin-top:10px;">Check In Manually</button>
             </div>
-        </div>
-
-        <div id="result" class="result idle">
-            <div class="ball">⚽</div>
-            <h2>Ready</h2>
-            <div class="detail">Scan an Apple Wallet pass QR code.</div>
-            {% if not match %}
-                <div class="detail" style="margin-top:8px; font-weight:700;">Set a current match before the door opens.</div>
-            {% endif %}
         </div>
 
         <div class="links">
@@ -199,6 +222,8 @@
         const manualBtn = document.getElementById('manualBtn');
         const manualToken = document.getElementById('manualToken');
         const result = document.getElementById('result');
+        const cameraWrap = document.getElementById('cameraWrap');
+        let audioContext = null;
 
         function escapeHtml(value) {
             return String(value || '').replace(/[&<>"']/g, char => ({
@@ -212,12 +237,78 @@
 
         function setResult(type, title, member, detail) {
             result.className = `result ${type}`;
+            setCameraState(type);
             result.innerHTML = `
                 <div class="ball">⚽</div>
                 <h2>${escapeHtml(title)}</h2>
                 ${member ? `<div class="member">${escapeHtml(member)}</div>` : ''}
                 <div class="detail">${detail || ''}</div>
             `;
+        }
+
+        function setCameraState(type) {
+            cameraWrap.classList.remove('success', 'warning', 'error');
+            if (['success', 'warning', 'error'].includes(type)) {
+                cameraWrap.classList.add(type);
+            }
+
+            const color = {
+                success: '#00a65a',
+                warning: '#ffb000',
+                error: '#c8102e'
+            }[type];
+            if (!color) return;
+
+            window.setTimeout(() => {
+                document.querySelectorAll('#reader [style*="border"]').forEach(el => {
+                    const rect = el.getBoundingClientRect();
+                    if (rect.width <= 320 && rect.height <= 320) {
+                        el.style.borderColor = color;
+                    }
+                });
+            }, 30);
+        }
+
+        function getAudioContext() {
+            if (!audioContext) {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) return null;
+                audioContext = new AudioCtx();
+            }
+            if (audioContext.state === 'suspended') audioContext.resume();
+            return audioContext;
+        }
+
+        function playTone(frequency, durationMs, type = 'sine', startDelayMs = 0, gainValue = 0.08) {
+            const ctx = getAudioContext();
+            if (!ctx) return;
+            const oscillator = ctx.createOscillator();
+            const gain = ctx.createGain();
+            const start = ctx.currentTime + (startDelayMs / 1000);
+            oscillator.type = type;
+            oscillator.frequency.setValueAtTime(frequency, start);
+            gain.gain.setValueAtTime(0.0001, start);
+            gain.gain.exponentialRampToValueAtTime(gainValue, start + 0.015);
+            gain.gain.exponentialRampToValueAtTime(0.0001, start + (durationMs / 1000));
+            oscillator.connect(gain);
+            gain.connect(ctx.destination);
+            oscillator.start(start);
+            oscillator.stop(start + (durationMs / 1000) + 0.02);
+        }
+
+        function playFeedback(type) {
+            if (type === 'success') {
+                playTone(660, 120, 'sine', 0, 0.07);
+                playTone(880, 150, 'sine', 120, 0.07);
+                if (navigator.vibrate) navigator.vibrate(45);
+            } else if (type === 'warning') {
+                playTone(330, 120, 'triangle', 0, 0.09);
+                playTone(260, 180, 'triangle', 140, 0.09);
+                if (navigator.vibrate) navigator.vibrate([80, 50, 80]);
+            } else if (type === 'error') {
+                playTone(160, 320, 'sawtooth', 0, 0.09);
+                if (navigator.vibrate) navigator.vibrate([140, 70, 140]);
+            }
         }
 
         async function submitScan(rawValue) {
@@ -235,13 +326,17 @@
 
                 if (data.status === 'success' && data.result === 'checked_in') {
                     setResult('success', 'Good', data.member.name, `${escapeHtml(data.match.label)}<br>Checked in ${escapeHtml(data.checked_in_at)}`);
+                    playFeedback('success');
                 } else if (data.status === 'success' && data.result === 'already_checked_in') {
                     setResult('warning', 'Already Used', data.member.name, `${escapeHtml(data.match.label)}<br>First scan ${escapeHtml(data.checked_in_at || 'already recorded')}`);
+                    playFeedback('warning');
                 } else {
                     setResult('error', 'Stop', '', escapeHtml(data.message || 'Invalid pass.'));
+                    playFeedback('error');
                 }
             } catch (error) {
                 setResult('error', 'Error', '', 'Scanner could not reach the server.');
+                playFeedback('error');
             } finally {
                 manualToken.value = '';
                 window.setTimeout(() => { busy = false; }, 1800);
