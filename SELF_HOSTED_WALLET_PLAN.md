@@ -34,7 +34,7 @@ Gate-by-gate (see full list under "Go/No-Go Gates" below):
 | Admin login works in production | Presumed OK, unchanged by this work |
 | Members can be added/imported | Done and tested locally; **not yet deployed to Render** |
 | Real Apple Wallet pass on 2 iPhones | **Done (Aug 10): production `/wallet/test-pass.pkpass` on Render generates a real signed pass with live next-match data, confirmed working end-to-end.** Still worth testing install on a 2nd phone before the checkpoint, but the hard part (prod signing) is proven. |
-| Mobile web pass page (Android path) | Built locally by Claude's DB/mobile pass work; needs production deploy + phone verification |
+| Mobile web pass page (Android path) | **Done (Aug 10): `GET /pass/<token>` built and verified** — looks up by hashed token (`db.find_active_wallet_pass_by_token`), shows name/season/live next-match/QR, generic 404 for invalid/expired tokens (no info leak). Wired into the resend-pass email so it's actually reachable, not just a route that exists. Tested via Flask test client (valid + invalid token) and confirmed visually in a real browser. Still needs production deploy + a real non-iPhone browser test. |
 | Scanner scans the QR | Built locally (Aug 10): admin-only `/scanner` with camera scanner + manual fallback; needs real-phone verification |
 | Fresh scan creates a check-in | Built locally (Aug 10): `POST /api/checkins/scan` validates wallet token and inserts one check-in for the current match; needs DB-backed end-to-end test |
 | Duplicate scan shows "already used" | Built locally (Aug 10): DB unique constraint drives the duplicate warning state; needs DB-backed end-to-end test |
