@@ -50,6 +50,12 @@ def _env(key, default=""):
 def _materialize_base64_cert(value, path):
     path.parent.mkdir(parents=True, exist_ok=True)
     clean_value = "".join(str(value).split())
+    if "=" in clean_value:
+        padding_start = clean_value.find("=")
+        padding_end = padding_start
+        while padding_end < len(clean_value) and clean_value[padding_end] == "=":
+            padding_end += 1
+        clean_value = clean_value[:padding_end]
     try:
         path.write_bytes(base64.b64decode(clean_value, validate=True))
     except Exception as exc:
