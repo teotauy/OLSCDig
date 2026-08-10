@@ -12,7 +12,7 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parent
@@ -131,18 +131,51 @@ def _run_openssl(args, *, stdin_data=None, retry_without_legacy=False):
     raise AppleWalletConfigError(f"openssl failed: {result.stderr.strip()}")
 
 
-def _make_placeholder_images(pass_dir):
-    specs = {
-        "icon.png": (29, 29),
-        "icon@2x.png": (58, 58),
-        "icon@3x.png": (87, 87),
-        "logo.png": (160, 50),
-        "logo@2x.png": (320, 100),
-    }
-    for name, size in specs.items():
-        img = Image.new("RGBA", size, (200, 16, 46, 255))
-        draw = ImageDraw.Draw(img)
-        draw.text((4, size[1] // 2 - 6), "OLSC", fill="white")
+CREST_WHITE_PATH = ROOT / "wallet_pass_assets" / "olsc_crest_white.png"
+
+
+def _load_crest():
+    """White-on-transparent OLSC/LFC crest, extracted from the club's real
+    logo art (Desktop/Artwork-Assets/Official Logos/OLSC Logos/Mono red.png)
+    and recolored for use on the pass's red background. Bundled in the repo
+    (not referenced from outside it) so it's available on Render too.
+    """
+    return Image.open(CREST_WHITE_PATH).convert("RGBA")
+
+
+def _paste_centered(canvas, art, margin_frac=0.14):
+    """Resize `art` (preserving aspect ratio) to fit `canvas` minus a margin,
+    and paste it centered."""
+    cw, ch = canvas.size
+    max_w = int(cw * (1 - margin_frac * 2))
+    max_h = int(ch * (1 - margin_frac * 2))
+    scale = min(max_w / art.width, max_h / art.height)
+    resized = art.resize((max(1, int(art.width * scale)), max(1, int(art.height * scale))), Image.LANCZOS)
+    offset = ((cw - resized.width) // 2, (ch - resized.height) // 2)
+    canvas.alpha_composite(resized, offset)
+
+
+def _make_pass_images(pass_dir, brand_color=(200, 16, 46, 255)):
+    """Generate icon + logo art using the real OLSC/LFC crest."""
+    crest = _load_crest()
+
+    # icon.png / @2x / @3x — opaque badge, shown outside the pass card
+    # (notifications, lock screen), so a solid brand-colored square is correct here.
+    icon_sizes = {"icon.png": 29, "icon@2x.png": 58, "icon@3x.png": 87}
+    for name, size in icon_sizes.items():
+        img = Image.new("RGBA", (size, size), brand_color)
+        _paste_centered(img, crest, margin_frac=0.1)
+        img.save(pass_dir / name)
+
+    # logo.png / @2x — transparent background so it sits naturally on the
+    # pass's own background color instead of showing as a hard rectangle.
+    # Crest only, no wordmark: organizationName ("OLSC Brooklyn") already
+    # renders as text elsewhere in Wallet, so cramming a second copy of the
+    # name into a ~50px-tall header just adds clutter.
+    logo_sizes = {"logo.png": (160, 50), "logo@2x.png": (320, 100)}
+    for name, (w, h) in logo_sizes.items():
+        img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        _paste_centered(img, crest, margin_frac=0.08)
         img.save(pass_dir / name)
 
 
@@ -245,7 +278,7 @@ def build_member_pkpass(pass_data, config=None):
             json.dumps(_build_pass_json(config, pass_data)),
             encoding="utf-8",
         )
-        _make_placeholder_images(pass_dir)
+        _make_pass_images(pass_dir)
         _write_manifest(pass_dir)
         _sign_manifest(pass_dir, config)
         return _zip_pass(pass_dir)

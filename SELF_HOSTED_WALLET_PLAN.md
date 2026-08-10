@@ -33,7 +33,7 @@ Gate-by-gate (see full list under "Go/No-Go Gates" below):
 | DB survives deploys/restarts | Infrastructure done (Supabase live, schema applied); not yet exercised by real check-in traffic |
 | Admin login works in production | Presumed OK, unchanged by this work |
 | Members can be added/imported | Done and tested locally; **not yet deployed to Render** |
-| Real Apple Wallet pass on 2 iPhones | **Done (Aug 10): production `/wallet/test-pass.pkpass` on Render generates a real signed pass with live next-match data, confirmed working end-to-end.** Still worth testing install on a 2nd phone before the checkpoint, but the hard part (prod signing) is proven. |
+| Real Apple Wallet pass on 2 iPhones | **Done (Aug 10): production `/wallet/test-pass.pkpass` on Render generates a real signed pass with live next-match data, confirmed working end-to-end.** Still worth testing install on a 2nd phone before the checkpoint, but the hard part (prod signing) is proven. Icon/logo art also upgraded (Aug 10) from generated placeholder text to the real OLSC/LFC crest — see "Real crest art" note under Apple Wallet below. |
 | Mobile web pass page (Android path) | **Done (Aug 10): `GET /pass/<token>` built and verified** — looks up by hashed token (`db.find_active_wallet_pass_by_token`), shows name/season/live next-match/QR, generic 404 for invalid/expired tokens (no info leak). Wired into the resend-pass email so it's actually reachable, not just a route that exists. Tested via Flask test client (valid + invalid token) and confirmed visually in a real browser. Still needs production deploy + a real non-iPhone browser test. |
 | Scanner scans the QR | Built locally (Aug 10): admin-only `/scanner` with camera scanner + manual fallback; needs real-phone verification |
 | Fresh scan creates a check-in | Built locally (Aug 10): `POST /api/checkins/scan` validates wallet token and inserts one check-in for the current match; needs DB-backed end-to-end test |
@@ -235,6 +235,22 @@ mismatched/wrong passwords) — but it bundles *every* identity in the
 keychain, so the target one must be isolated by `localKeyID` before
 repackaging into a clean single-identity `.p12`.
 
+**Real crest art (Aug 10):** `wallet_pass.py`'s icon/logo generation
+(`_make_pass_images`, formerly `_make_placeholder_images`) now uses the
+actual OLSC/LFC crest instead of generated "OLSC" text. Source: `Desktop/
+Artwork-Assets/Official Logos/OLSC Logos/Mono red.png` — the crest region
+was cropped out (isolated from the "Official Supporters Club / Brooklyn"
+wordmark below it), recolored white (the source is red-on-transparent; our
+pass background is red, so red-on-red would've been invisible), and bundled
+into the repo at `wallet_pass_assets/olsc_crest_white.png` since the Desktop
+folder it came from won't exist on Render. Logo is crest-only, no wordmark —
+`organizationName` ("OLSC Brooklyn") already renders as text elsewhere in
+Wallet, so a second copy of the club name crammed into a ~50px-tall header
+just added clutter. Still using the `generic` pass style (flat
+`backgroundColor`) — switching to `storeCard` for real background artwork
+(not just a logo) was raised and left as an open, undecided option for later,
+not rejected.
+
 Later:
 
 - Add Apple Wallet web service registration.
@@ -242,12 +258,19 @@ Later:
 
 ### Google Wallet
 
+Current setup:
+
+- Google Wallet API Issuer account exists.
+- Issuer ID: `3388000000023170524`.
+- Assume demo mode until publishing access is explicitly requested and approved.
+
 Required:
 
-- Google Wallet issuer account.
 - Service account.
+- Invite the service account email as a Developer user in the Google Pay & Wallet Console.
 - Wallet class/object creation.
 - Save-to-Google-Wallet link.
+- Publishing access before issuing passes broadly to members.
 
 MVP can come after Apple Wallet if most members use iPhone.
 
@@ -697,7 +720,9 @@ neither of which are set locally yet.
 ### Phase 5: Google Wallet MVP
 
 - Post-launch.
-- Set up Google Wallet issuer/class/object only after Apple Wallet launch is stable.
+- Issuer ID obtained: `3388000000023170524`.
+- Set up Google Cloud service account and Render env vars.
+- Create Google Wallet class/object only after Apple Wallet launch is stable.
 - Generate Save-to-Google-Wallet links.
 - Keep QR/check-in behavior identical.
 
