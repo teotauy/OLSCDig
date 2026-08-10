@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Members - OLSC Brooklyn</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #c8102e 0%, #00a65a 100%);
+            background-image: url("{{ url_for('static', filename='background.png') }}"), linear-gradient(135deg, #c8102e 0%, #00a65a 100%);
+            background-size: cover, auto;
+            background-position: center, 0 0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 30px;
+        }
+        .header { text-align: center; margin-bottom: 20px; }
+        .header p.brand { font-size: 12px; color: #c8102e; margin-bottom: 4px; }
+        .header h1 { color: #c8102e; font-size: 24px; margin-bottom: 6px; }
+        .header p.season { color: #666; font-size: 14px; }
+
+        .message { padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
+        .message.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .message.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .message.info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+
+        .panel { border: 1px solid #e0e0e0; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+        .panel h2 { font-size: 16px; color: #333; margin-bottom: 14px; }
+
+        .row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+        .row .field { flex: 1; min-width: 140px; }
+        label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; }
+        input[type="text"], input[type="email"], input[type="tel"], input[type="file"] {
+            width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;
+        }
+        input:focus { outline: none; border-color: #c8102e; }
+
+        .btn {
+            padding: 10px 18px; background: linear-gradient(135deg, #c8102e 0%, #d81d42 100%);
+            color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
+            cursor: pointer;
+        }
+        .btn.secondary { background: #00a65a; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #eee; }
+        th { color: #666; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+        tr:hover { background: #fafafa; }
+        .edit-link { color: #c8102e; text-decoration: none; font-size: 13px; }
+        .muted { color: #999; font-size: 13px; }
+
+        .links { text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0; }
+        .links a { color: #c8102e; text-decoration: none; font-size: 14px; margin: 0 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <p class="brand">OLSC Brooklyn</p>
+            <h1>👥 Members</h1>
+            <p class="season">Season: {{ season.name if season else 'No current season set' }} &middot; {{ members|length }} member(s)</p>
+        </div>
+
+        {% if error %}<div class="message error">{{ error }}</div>{% endif %}
+        {% if added %}<div class="message success">Added {{ added }}.</div>{% endif %}
+        {% if info %}<div class="message info">{{ info }}</div>{% endif %}
+
+        <div class="panel">
+            <h2>Add a member</h2>
+            <form method="POST">
+                <div class="row">
+                    <div class="field">
+                        <label for="first_name">First name *</label>
+                        <input type="text" id="first_name" name="first_name" required>
+                    </div>
+                    <div class="field">
+                        <label for="last_name">Last name *</label>
+                        <input type="text" id="last_name" name="last_name" required>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="field">
+                        <label for="email">Email *</label>
+                        <input type="email" id="email" name="email" required>
+                    </div>
+                    <div class="field">
+                        <label for="phone">Phone</label>
+                        <input type="tel" id="phone" name="phone">
+                    </div>
+                </div>
+                <button type="submit" class="btn">Add Member</button>
+            </form>
+        </div>
+
+        <div class="panel">
+            <h2>Import from CSV</h2>
+            <p class="muted" style="margin-bottom: 10px;">
+                Accepts a simple CSV with <code>first_name, last_name, email, phone</code> columns,
+                or a raw PassKit export (uses <code>person.displayName</code>, <code>person.emailAddress</code>, <code>person.mobileNumber</code>).
+                Existing emails are attached to the current season rather than duplicated.
+            </p>
+            <form method="POST" action="{{ url_for('admin_members_import') }}" enctype="multipart/form-data">
+                <input type="file" name="file" accept=".csv" required>
+                <button type="submit" class="btn secondary" style="margin-top: 10px;">Import</button>
+            </form>
+        </div>
+
+        <div class="panel">
+            <h2>Roster</h2>
+            {% if members %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Check-ins</th>
+                        <th colspan="2"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in members %}
+                    <tr>
+                        <td>{{ m.first_name }} {{ m.last_name }}</td>
+                        <td>{{ m.email }}</td>
+                        <td>{{ m.phone or '—' }}</td>
+                        <td>{{ m.checkins_this_season }}</td>
+                        <td><a class="edit-link" href="{{ url_for('admin_member_edit', member_id=m.id) }}">Edit</a></td>
+                        <td>
+                            <form method="POST" action="{{ url_for('admin_member_resend_pass', member_id=m.id) }}" style="display:inline;" onsubmit="return confirm('Resend pass to {{ m.email }}? This invalidates their current pass.');">
+                                <button type="submit" class="btn small" style="padding:6px 10px; font-size:12px;">Resend Pass</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="muted">No members in the current season yet.</p>
+            {% endif %}
+        </div>
+
+        <div class="links">
+            <a href="{{ url_for('scanner') }}">Scanner</a>
+            <a href="{{ url_for('admin_matches') }}">🗓️ Matches</a>
+            <a href="{{ url_for('admin_index') }}">← Admin Home</a>
+            <a href="/logout">Logout</a>
+        </div>
+    </div>
+</body>
+</html>

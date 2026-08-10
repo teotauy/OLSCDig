@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>{{ 'Your Pass' if found else 'Pass Not Found' }} - OLSC Brooklyn</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .card {
+            max-width: 380px;
+            width: 100%;
+            background: linear-gradient(160deg, #c8102e 0%, #a30d25 100%);
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+            padding: 28px 24px;
+            color: white;
+            text-align: center;
+        }
+        .brand {
+            font-size: 11px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            opacity: 0.85;
+            margin-bottom: 4px;
+        }
+        .member-label {
+            font-size: 11px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            opacity: 0.75;
+            margin-top: 18px;
+        }
+        .member-name {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+        .meta-row {
+            display: flex;
+            justify-content: center;
+            gap: 28px;
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        .meta-row .field-label {
+            font-size: 10px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            opacity: 0.75;
+        }
+        .meta-row .field-value {
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .qr-box {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            display: inline-block;
+            margin-bottom: 8px;
+        }
+        .qr-box img {
+            width: 220px;
+            height: 220px;
+            display: block;
+        }
+        .hint {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-top: 12px;
+        }
+        .not-found h1 {
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+        .not-found p {
+            font-size: 14px;
+            opacity: 0.85;
+        }
+    </style>
+</head>
+<body>
+    {% if found %}
+    <div class="card">
+        <div class="brand">OLSC Brooklyn Membership</div>
+        <div class="member-label">Member</div>
+        <div class="member-name">{{ display_name }}</div>
+        <div class="meta-row">
+            <div>
+                <div class="field-label">Season</div>
+                <div class="field-value">{{ season_name }}</div>
+            </div>
+            {% if next_match %}
+            <div>
+                <div class="field-label">Next Match</div>
+                <div class="field-value">{{ next_match }}</div>
+            </div>
+            {% endif %}
+        </div>
+        <div class="qr-box">
+            <img src="{{ qr_data_uri }}" alt="Membership QR code">
+        </div>
+        <div class="hint">Show this screen at the door — no need to add it to Wallet.</div>
+    </div>
+    {% else %}
+    <div class="card not-found">
+        <div class="brand">OLSC Brooklyn Membership</div>
+        <h1>Pass Not Found</h1>
+        <p>This link is invalid or has expired. If you're a current member, ask an admin to resend your pass.</p>
+    </div>
+    {% endif %}
+</body>
+</html>

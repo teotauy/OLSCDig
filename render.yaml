@@ -40,3 +40,23 @@ services:
         sync: false
       - key: FLASK_SECRET_KEY
         sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: APPLE_TEAM_ID
+        sync: false
+      - key: APPLE_PASS_TYPE_ID
+        sync: false
+      - key: APPLE_CERT_PASSWORD
+        sync: false
+      - key: APPLE_PASS_CERT_P12_BASE64
+        sync: false
+      - key: APPLE_WWDR_PEM_BASE64
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: EMAIL_FROM
+        sync: false

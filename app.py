@@ -11,9 +11,13 @@ import requests
 import json
 import csv
 import io
+import hashlib
 import smtplib
 import time
 import secrets
+import base64
+import qrcode
+from urllib.parse import urlparse
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
@@ -26,6 +30,7 @@ import bcrypt
 from team_abbreviations import format_match_display, abbreviate_team_name
 from match_updates import get_next_match
 from wallet_pass import AppleWalletConfigError, MemberPassData, build_member_pkpass
+import db
 # Notifications feature removed
 
 load_dotenv()
@@ -539,6 +544,67 @@ body {{ font-family: Arial, sans-serif; color: #333; }}
     except Exception:
         return False
 
+def _send_pkpass_email(to_email, first_name, pkpass_bytes, mobile_pass_url=None):
+    """Email a signed .pkpass attachment to a member. Returns True if sent.
+
+    Always includes a link to the mobile web pass page too — that's the
+    real path for Android members, who can't do anything useful with a
+    .pkpass attachment.
+    """
+    host = os.getenv("SMTP_HOST")
+    user = os.getenv("SMTP_USER")
+    password = os.getenv("SMTP_PASSWORD")
+    if not all([host, user, password]):
+        return False
+    port = int(os.getenv("SMTP_PORT", "587"))
+    from_addr = os.getenv("EMAIL_FROM", user)
+    name = first_name or "Member"
+    mobile_link_html = (
+        f'<p>On Android (or if the attachment doesn\'t work), use this link instead: '
+        f'<a href="{mobile_pass_url}">{mobile_pass_url}</a></p>'
+        if mobile_pass_url else ""
+    )
+    html = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><style>
+body {{ font-family: Arial, sans-serif; color: #333; }}
+.header {{ background: linear-gradient(135deg, #c8102e 0%, #00a65a 100%); color: white; padding: 20px; text-align: center; }}
+.content {{ padding: 20px; }}
+.footer {{ background: #f8f9fa; padding: 15px; text-align: center; font-size: 12px; color: #666; }}
+</style></head>
+<body>
+<div class="header"><h1>⚽ OLSC Brooklyn</h1></div>
+<div class="content">
+<p>Hi {name},</p>
+<p>Your membership pass is attached to this email. Open the attachment on your iPhone and tap "Add to Apple Wallet."</p>
+{mobile_link_html}
+<p>If you already had a pass, this one replaces it — the old one will stop working the next time it's scanned.</p>
+<p>You'll Never Walk Alone!<br>— OLSC Brooklyn</p>
+</div>
+<div class="footer"><p>This email was sent to {to_email}.</p></div>
+</body>
+</html>"""
+    msg = MIMEMultipart("mixed")
+    msg["Subject"] = "OLSC Brooklyn – Your membership pass"
+    msg["From"] = from_addr
+    msg["To"] = to_email
+    alt = MIMEMultipart("alternative")
+    alt.attach(MIMEText(html, "html"))
+    msg.attach(alt)
+    part = MIMEBase("application", "vnd.apple.pkpass")
+    part.set_payload(pkpass_bytes)
+    encoders.encode_base64(part)
+    part.add_header("Content-Disposition", "attachment", filename="olsc-membership.pkpass")
+    msg.attach(part)
+    try:
+        with smtplib.SMTP(host, port) as server:
+            server.starttls()
+            server.login(user, password)
+            server.sendmail(from_addr, [to_email], msg.as_string())
+        return True
+    except Exception:
+        return False
+
 def _send_checkout_report_email(to_email, csv_content, filename):
     """Email the checkout CSV to to_email using SMTP from env. Returns True if sent."""
     host = os.getenv("SMTP_HOST")
@@ -983,18 +1049,512 @@ def wallet_test_pass_download():
         return jsonify({
             "status": "error",
             "error": str(e),
-            "hint": "Set APPLE_TEAM_ID, APPLE_PASS_TYPE_ID, APPLE_CERT_PASSWORD, and provide certs/passTypeCert.p12 + certs/wwdr.pem.",
+            "hint": "Set APPLE_TEAM_ID, APPLE_PASS_TYPE_ID, APPLE_CERT_PASSWORD, plus either APPLE_PASS_CERT_PATH/APPLE_WWDR_CERT_PATH files or APPLE_PASS_CERT_P12_BASE64/APPLE_WWDR_PEM_BASE64 env vars.",
         }), 500
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
 
 # Notification APIs removed
 
- 
+# ---- Self-hosted DB-backed admin: members & matches (schema.sql / db.py) ----
+# Separate from the PassKit-backed add-member/update-match routes above.
+# Writes go to our own Postgres, not PassKit.
 
- 
+def _split_name(display_name):
+    display_name = (display_name or "").strip()
+    if not display_name:
+        return "", ""
+    parts = display_name.split(" ", 1)
+    return parts[0], parts[1] if len(parts) > 1 else ""
 
- 
+
+def _localize_kickoff(value):
+    """value: 'YYYY-MM-DDTHH:MM' from a datetime-local input, in app TIMEZONE."""
+    tz = pytz.timezone(os.getenv('TIMEZONE', 'America/New_York'))
+    naive = datetime.strptime(value, '%Y-%m-%dT%H:%M')
+    return tz.localize(naive)
+
+
+def _extract_scan_token(raw_value):
+    """Accept either a raw wallet token or a full /checkin/t/<token> URL."""
+    value = (raw_value or "").strip()
+    if not value:
+        return ""
+    try:
+        parsed = urlparse(value)
+        if parsed.scheme and parsed.netloc:
+            parts = [part for part in parsed.path.split("/") if part]
+            if len(parts) >= 3 and parts[-3:-1] == ["checkin", "t"]:
+                return parts[-1].strip()
+            if len(parts) >= 2 and parts[-2:] and parts[-2] == "t":
+                return parts[-1].strip()
+    except Exception:
+        pass
+    if "/checkin/t/" in value:
+        return value.rsplit("/checkin/t/", 1)[-1].split("?", 1)[0].split("#", 1)[0].strip()
+    return value
+
+
+def _format_match_for_scan(match):
+    if not match:
+        return None
+    kickoff = match.get('kickoff_at')
+    if kickoff:
+        try:
+            tz = pytz.timezone(os.getenv('TIMEZONE', 'America/New_York'))
+            kickoff = kickoff.astimezone(tz).strftime('%a %b %-d, %-I:%M %p')
+        except Exception:
+            kickoff = str(kickoff)
+    return {
+        "id": match.get("id"),
+        "opponent": match.get("opponent"),
+        "is_home": bool(match.get("is_home")),
+        "competition": match.get("competition") or "",
+        "kickoff": kickoff or "",
+        "label": f"{'vs' if match.get('is_home') else '@'} {match.get('opponent')}",
+    }
+
+
+def _upsert_member_in_season(cur, first_name, last_name, email, phone, season_id):
+    cur.execute(
+        """
+        INSERT INTO members (first_name, last_name, email, phone)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (email) DO UPDATE SET
+            first_name = EXCLUDED.first_name,
+            last_name = EXCLUDED.last_name,
+            phone = EXCLUDED.phone
+        RETURNING id
+        """,
+        (first_name, last_name, email, phone),
+    )
+    member_id = cur.fetchone()['id']
+    cur.execute(
+        """
+        INSERT INTO member_seasons (member_id, season_id)
+        VALUES (%s, %s)
+        ON CONFLICT (member_id, season_id) DO NOTHING
+        """,
+        (member_id, season_id),
+    )
+    return member_id
+
+
+@app.route('/admin/members', methods=['GET', 'POST'])
+def admin_members():
+    if not require_password():
+        return redirect(url_for('login'))
+
+    season = db.get_current_season()
+    error = None
+    added = None
+
+    if request.method == 'POST':
+        first_name = request.form.get('first_name', '').strip()
+        last_name = request.form.get('last_name', '').strip()
+        email = request.form.get('email', '').strip().lower()
+        phone = request.form.get('phone', '').strip()
+
+        if not first_name or not last_name or not email:
+            error = "First name, last name, and email are required."
+        else:
+            try:
+                with db.cursor() as cur:
+                    _upsert_member_in_season(cur, first_name, last_name, email, phone, season['id'])
+                added = f"{first_name} {last_name}"
+            except Exception as e:
+                error = f"Could not add member: {e}"
+
+    imported = request.args.get('imported')
+    skipped = request.args.get('skipped')
+    info = None
+    if imported is not None:
+        info = f"Imported {imported} member(s)." + (f" Skipped {skipped}." if skipped and skipped != '0' else "")
+
+    resent = request.args.get('resent')
+    resend_error = request.args.get('resend_error')
+    if resent:
+        info = f"Pass resent to {resent}."
+    if resend_error:
+        error = resend_error
+
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            SELECT m.id, m.first_name, m.last_name, m.email, m.phone, m.created_at,
+                   (SELECT COUNT(*) FROM checkins c
+                    JOIN matches mt ON mt.id = c.match_id
+                    WHERE c.member_id = m.id AND mt.season_id = %s) AS checkins_this_season
+            FROM members m
+            JOIN member_seasons ms ON ms.member_id = m.id
+            WHERE ms.season_id = %s
+            ORDER BY m.last_name, m.first_name
+            """,
+            (season['id'], season['id']),
+        )
+        members = cur.fetchall()
+
+    return render_template(
+        'admin_members.html',
+        season=season,
+        members=members,
+        error=error,
+        added=added,
+        info=info,
+    )
+
+
+@app.route('/admin/members/<int:member_id>/edit', methods=['GET', 'POST'])
+def admin_member_edit(member_id):
+    if not require_password():
+        return redirect(url_for('login'))
+
+    error = None
+
+    if request.method == 'POST':
+        first_name = request.form.get('first_name', '').strip()
+        last_name = request.form.get('last_name', '').strip()
+        email = request.form.get('email', '').strip().lower()
+        phone = request.form.get('phone', '').strip()
+
+        if not first_name or not last_name or not email:
+            error = "First name, last name, and email are required."
+        else:
+            try:
+                with db.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE members
+                        SET first_name = %s, last_name = %s, email = %s, phone = %s
+                        WHERE id = %s
+                        """,
+                        (first_name, last_name, email, phone, member_id),
+                    )
+                return redirect(url_for('admin_members'))
+            except Exception as e:
+                error = f"Could not save changes: {e}"
+
+    with db.cursor() as cur:
+        cur.execute("SELECT * FROM members WHERE id = %s", (member_id,))
+        member = cur.fetchone()
+
+    if not member:
+        return redirect(url_for('admin_members'))
+
+    return render_template('admin_member_edit.html', member=member, error=error)
+
+
+@app.route('/admin/members/<int:member_id>/resend-pass', methods=['POST'])
+def admin_member_resend_pass(member_id):
+    if not require_password():
+        return redirect(url_for('login'))
+
+    season = db.get_current_season()
+    with db.cursor() as cur:
+        cur.execute("SELECT * FROM members WHERE id = %s", (member_id,))
+        member = cur.fetchone()
+
+    if not member or not season:
+        return redirect(url_for('admin_members'))
+
+    try:
+        raw_token, serial_number = db.issue_wallet_token(member['id'], season['id'], platform='apple')
+        barcode_url = f"{request.url_root.rstrip('/')}/checkin/t/{raw_token}"
+
+        next_match_text = ""
+        try:
+            next_match = get_next_match()
+            if next_match:
+                next_match_text = next_match.get('pass_display') or ""
+        except Exception:
+            next_match_text = ""
+
+        pkpass_bytes = build_member_pkpass(MemberPassData(
+            display_name=f"{member['first_name']} {member['last_name']}".strip(),
+            season=season['name'],
+            serial_number=serial_number,
+            barcode_message=barcode_url,
+            next_match=next_match_text,
+            description="OLSC Brooklyn Membership",
+        ))
+    except AppleWalletConfigError as e:
+        return redirect(url_for('admin_members', resend_error=f"Wallet not configured: {e}"))
+    except Exception as e:
+        return redirect(url_for('admin_members', resend_error=f"Could not build pass: {e}"))
+
+    mobile_pass_url = f"{request.url_root.rstrip('/')}{url_for('mobile_pass', token=raw_token)}"
+    if _send_pkpass_email(member['email'], member['first_name'], pkpass_bytes, mobile_pass_url=mobile_pass_url):
+        return redirect(url_for('admin_members', resent=member['email']))
+    return redirect(url_for('admin_members', resend_error="Pass generated but email failed to send (check SMTP env vars)."))
+
+
+@app.route('/admin/members/import', methods=['POST'])
+def admin_members_import():
+    if not require_password():
+        return redirect(url_for('login'))
+
+    season = db.get_current_season()
+    file = request.files.get('file')
+    if not file or not file.filename:
+        return redirect(url_for('admin_members'))
+
+    text = file.read().decode('utf-8-sig', errors='ignore')
+    reader = csv.DictReader(io.StringIO(text))
+
+    imported = 0
+    skipped = 0
+
+    with db.cursor() as cur:
+        for row in reader:
+            email = (row.get('email') or row.get('person.emailAddress') or '').strip().lower()
+            if not email:
+                skipped += 1
+                continue
+
+            if row.get('first_name') or row.get('last_name'):
+                first_name = (row.get('first_name') or '').strip()
+                last_name = (row.get('last_name') or '').strip()
+            else:
+                first_name, last_name = _split_name(row.get('person.displayName'))
+
+            if not first_name and not last_name:
+                skipped += 1
+                continue
+
+            phone = (row.get('phone') or row.get('person.mobileNumber') or '').strip()
+
+            _upsert_member_in_season(cur, first_name, last_name, email, phone, season['id'])
+            imported += 1
+
+    return redirect(url_for('admin_members', imported=imported, skipped=skipped))
+
+
+@app.route('/admin/matches', methods=['GET', 'POST'])
+def admin_matches():
+    if not require_password():
+        return redirect(url_for('login'))
+
+    season = db.get_current_season()
+    error = None
+
+    if request.method == 'POST':
+        opponent = request.form.get('opponent', '').strip()
+        is_home = request.form.get('is_home') == 'home'
+        competition = request.form.get('competition', '').strip()
+        kickoff_raw = request.form.get('kickoff_at', '').strip()
+        venue = request.form.get('venue', '').strip()
+
+        if not opponent or not kickoff_raw:
+            error = "Opponent and kickoff time are required."
+        else:
+            try:
+                kickoff_at = _localize_kickoff(kickoff_raw)
+                with db.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO matches (season_id, opponent, is_home, competition, kickoff_at, venue)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        """,
+                        (season['id'], opponent, is_home, competition, kickoff_at, venue),
+                    )
+            except Exception as e:
+                error = f"Could not add match: {e}"
+
+    with db.cursor() as cur:
+        cur.execute(
+            "SELECT * FROM matches WHERE season_id = %s ORDER BY kickoff_at",
+            (season['id'],),
+        )
+        matches = cur.fetchall()
+
+    tz = pytz.timezone(os.getenv('TIMEZONE', 'America/New_York'))
+    for m in matches:
+        if m['kickoff_at']:
+            m['kickoff_at'] = m['kickoff_at'].astimezone(tz)
+
+    return render_template('admin_matches.html', season=season, matches=matches, error=error)
+
+
+@app.route('/admin/matches/<int:match_id>/set-current', methods=['POST'])
+def admin_match_set_current(match_id):
+    if not require_password():
+        return redirect(url_for('login'))
+
+    with db.cursor() as cur:
+        cur.execute("UPDATE matches SET is_current = FALSE WHERE is_current")
+        cur.execute("UPDATE matches SET is_current = TRUE WHERE id = %s", (match_id,))
+
+    return redirect(url_for('admin_matches'))
+
+
+def _qr_data_uri(payload):
+    """Build a base64 PNG data URI for a QR code encoding `payload`."""
+    img = qrcode.make(payload, error_correction=qrcode.constants.ERROR_CORRECT_M)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    encoded = base64.b64encode(buf.getvalue()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
+@app.route('/pass/<token>')
+def mobile_pass(token):
+    """Public mobile web pass page — the Android/non-Wallet path.
+
+    Shows the same QR the Apple Wallet pass carries, so a member can show
+    this page at the door from any phone browser. No admin auth: knowing
+    the token *is* the access control, same as a password-reset link.
+    """
+    record = db.find_active_wallet_pass_by_token(token)
+    if not record:
+        return render_template('mobile_pass.html', found=False), 404
+
+    barcode_url = f"{request.url_root.rstrip('/')}/checkin/t/{token}"
+
+    next_match_text = ""
+    try:
+        next_match = get_next_match()
+        if next_match:
+            next_match_text = next_match.get("pass_display") or ""
+    except Exception:
+        next_match_text = ""
+
+    return render_template(
+        'mobile_pass.html',
+        found=True,
+        display_name=f"{record['first_name']} {record['last_name']}".strip(),
+        season_name=record['season_name'],
+        next_match=next_match_text,
+        qr_data_uri=_qr_data_uri(barcode_url),
+    )
+
+
+@app.route('/scanner')
+def scanner():
+    if not require_password():
+        return redirect(url_for('login'))
+
+    season = db.get_current_season()
+    match = db.get_current_match()
+    return render_template(
+        'scanner.html',
+        season=season,
+        match=_format_match_for_scan(match),
+    )
+
+
+@app.route('/api/checkins/scan', methods=['POST'])
+def api_checkins_scan():
+    if not require_password():
+        return jsonify({"status": "error", "code": "unauthorized", "message": "Login required."}), 401
+
+    payload = request.get_json(silent=True) or {}
+    token = _extract_scan_token(payload.get('token') or payload.get('barcode') or payload.get('value'))
+    if not token:
+        return jsonify({
+            "status": "error",
+            "code": "missing_token",
+            "message": "No wallet token found in the scan.",
+        }), 400
+
+    token_hash = hashlib.sha256(token.encode('utf-8')).hexdigest()
+
+    try:
+        with db.cursor() as cur:
+            cur.execute("SELECT id, name FROM seasons WHERE is_current")
+            season = cur.fetchone()
+            if not season:
+                return jsonify({
+                    "status": "error",
+                    "code": "no_current_season",
+                    "message": "No current season is configured.",
+                }), 400
+
+            cur.execute("SELECT * FROM matches WHERE is_current")
+            match = cur.fetchone()
+            if not match:
+                return jsonify({
+                    "status": "error",
+                    "code": "no_current_match",
+                    "message": "No current match is configured. Set one in Matches before scanning.",
+                }), 400
+
+            cur.execute(
+                """
+                SELECT wp.id AS wallet_pass_id, wp.member_id, wp.season_id, wp.revoked_at,
+                       m.first_name, m.last_name, m.email
+                FROM wallet_passes wp
+                JOIN members m ON m.id = wp.member_id
+                WHERE wp.token_hash = %s
+                """,
+                (token_hash,),
+            )
+            wallet_pass = cur.fetchone()
+
+            if not wallet_pass or wallet_pass['revoked_at'] or wallet_pass['season_id'] != season['id']:
+                return jsonify({
+                    "status": "error",
+                    "code": "invalid_or_expired",
+                    "message": "Invalid, expired, or revoked pass.",
+                    "match": _format_match_for_scan(match),
+                }), 404
+
+            scanner_admin_id = session.get('username') or ADMIN_USERNAME or "admin"
+            cur.execute(
+                """
+                INSERT INTO checkins (member_id, match_id, scanner_admin_id, source)
+                VALUES (%s, %s, %s, 'scanner')
+                ON CONFLICT (member_id, match_id) DO NOTHING
+                RETURNING id, checked_in_at
+                """,
+                (wallet_pass['member_id'], match['id'], scanner_admin_id),
+            )
+            inserted = cur.fetchone()
+
+            if inserted:
+                result = "checked_in"
+                checked_in_at = inserted['checked_in_at']
+                message = "Checked in."
+            else:
+                cur.execute(
+                    """
+                    SELECT id, checked_in_at
+                    FROM checkins
+                    WHERE member_id = %s AND match_id = %s
+                    """,
+                    (wallet_pass['member_id'], match['id']),
+                )
+                existing = cur.fetchone()
+                result = "already_checked_in"
+                checked_in_at = existing['checked_in_at'] if existing else None
+                message = "Already used for this match."
+
+        checked_in_display = ""
+        if checked_in_at:
+            try:
+                tz = pytz.timezone(os.getenv('TIMEZONE', 'America/New_York'))
+                checked_in_display = checked_in_at.astimezone(tz).strftime('%-I:%M:%S %p')
+            except Exception:
+                checked_in_display = str(checked_in_at)
+
+        return jsonify({
+            "status": "success",
+            "result": result,
+            "message": message,
+            "checked_in_at": checked_in_display,
+            "member": {
+                "id": wallet_pass['member_id'],
+                "name": f"{wallet_pass['first_name']} {wallet_pass['last_name']}".strip(),
+                "email": wallet_pass['email'],
+            },
+            "match": _format_match_for_scan(match),
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "code": "server_error",
+            "message": f"Scanner failed: {e}",
+        }), 500
+
 
 if __name__ == '__main__':
     # Check if API credentials are set

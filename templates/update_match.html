@@ -472,7 +472,7 @@
                 const data = await response.json();
 
                 if (data.status === 'success') {
-                    showStatus('Override saved. Reloading next match...', 'success');
+                    showStatus(data.message || 'Override saved. Reloading next match...', data.persisted === false ? 'info' : 'success');
                     await loadMatchInfo();
                 } else {
                     showStatus(data.error || 'Error saving override', 'error');

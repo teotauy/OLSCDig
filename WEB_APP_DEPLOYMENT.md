@@ -103,6 +103,18 @@ In your Render dashboard, you'll need to set these environment variables for the
 5. Render will automatically detect `render.yaml` and create both services
 6. Set environment variables in the dashboard for `olsc-web-app`
 
+#### Deploy to Vercel (alternative to Render)
+
+You can run the same Flask app on Vercel. Vercel is serverless (no persistent disk), so a few behaviors differ:
+
+1. **Connect repo:** [Vercel](https://vercel.com) → Add New Project → Import your Git repo. Vercel will detect Flask from `app.py` and `vercel.json` (which sets `"framework": "flask"`).
+2. **Environment variables:** In the project’s Settings → Environment Variables, add the same variables as for Render (see Step 1 above). Use **Vercel’s** dashboard, not Render’s. Set `SESSION_COOKIE_SECURE` to `true` for HTTPS.
+3. **Password:** Because the filesystem is read-only, the app cannot write `.admin_hash`. Use **`ADMIN_PASSWORD`** or **`ADMIN_PASSWORD_HASH`** in Vercel’s env; “Forgot password” cannot save a new hash to disk, so change the password by updating those env vars and redeploying.
+4. **Match overrides:** `match_overrides.json` in the repo is **read** as usual. Saving an override from the web form **does not persist** on Vercel (the app will report that). To add or change an override, edit `match_overrides.json` in the repo and push; the next deploy will pick it up.
+5. **Checkout reports:** The CSV is still generated and can be emailed if SMTP is set; saving the file to disk is skipped on read-only hosts.
+
+After deploy, your app URL will be like `https://your-project.vercel.app`. Use it the same way as the Render URL (headcount, add member, update match, etc.).
+
 ### 3. Access Your Web App
 
 Once deployed, Render will give you a URL like:
@@ -202,16 +214,30 @@ Same root cause as above: the headcount endpoint calls PassKit to list checked-i
 
 ## Cost
 
+### Current Strategy
+
+Keep the app on Render free tier while we are building and stabilizing the self-hosted Wallet/check-in system. Free tier is fine for setup, deploy testing, Wallet download tests, DB smoke tests, and scanner development.
+
+Upgrade `olsc-web-app` to paid/always-on only before real match-day use. The reason to upgrade is cold starts at the door, not normal traffic volume or rate limits.
+
 **Free Tier:**
 - ✅ 750 hours/month free
 - ✅ Automatic SSL
 - ✅ Custom domain support
 - ⚠️ Spins down after 15 min inactivity (wakes up automatically)
+- ✅ OK during build/stabilization
 
 **Paid Tier ($7/month):**
 - ✅ Always on (no spin-down)
 - ✅ Faster response times
 - ✅ Better for production use
+- ✅ Recommended before first real match-day scanner use
+
+**Build pipeline minutes:**
+- Pushes/deploys consume Render build pipeline minutes.
+- This app has a small Python build, so normal development deploys should be low impact.
+- Avoid enabling Performance Build Pipeline unless needed.
+- Use Render Billing/Usage and spend limits if you want a hard cap.
 
 ## Local Testing
 
