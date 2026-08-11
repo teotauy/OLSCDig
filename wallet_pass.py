@@ -132,6 +132,7 @@ def _run_openssl(args, *, stdin_data=None, retry_without_legacy=False):
 
 
 CREST_WHITE_PATH = ROOT / "wallet_pass_assets" / "olsc_crest_white.png"
+WORDMARK_WHITE_PATH = ROOT / "wallet_pass_assets" / "olsc_wordmark_white.png"
 
 
 def _load_crest():
@@ -141,6 +142,15 @@ def _load_crest():
     (not referenced from outside it) so it's available on Render too.
     """
     return Image.open(CREST_WHITE_PATH).convert("RGBA")
+
+
+def _load_wordmark():
+    """White-on-transparent crest + "Official Supporters Club / Brooklyn"
+    lockup, extracted from Horizontal_Mono Red.png the same way as the
+    crest. Used for the pass header logo, where there's room to actually
+    read text — distinguishes this pass from any other LFC-branded item.
+    """
+    return Image.open(WORDMARK_WHITE_PATH).convert("RGBA")
 
 
 def _paste_centered(canvas, art, margin_frac=0.14):
@@ -156,11 +166,13 @@ def _paste_centered(canvas, art, margin_frac=0.14):
 
 
 def _make_pass_images(pass_dir, brand_color=(200, 16, 46, 255)):
-    """Generate icon + logo art using the real OLSC/LFC crest."""
+    """Generate icon + logo art using the real OLSC/LFC crest and wordmark."""
     crest = _load_crest()
+    wordmark = _load_wordmark()
 
     # icon.png / @2x / @3x — opaque badge, shown outside the pass card
-    # (notifications, lock screen), so a solid brand-colored square is correct here.
+    # (notifications, lock screen). Crest only: too small for legible text,
+    # and this is a recognition mark, not the place identity gets clarified.
     icon_sizes = {"icon.png": 29, "icon@2x.png": 58, "icon@3x.png": 87}
     for name, size in icon_sizes.items():
         img = Image.new("RGBA", (size, size), brand_color)
@@ -169,13 +181,14 @@ def _make_pass_images(pass_dir, brand_color=(200, 16, 46, 255)):
 
     # logo.png / @2x — transparent background so it sits naturally on the
     # pass's own background color instead of showing as a hard rectangle.
-    # Crest only, no wordmark: organizationName ("OLSC Brooklyn") already
-    # renders as text elsewhere in Wallet, so cramming a second copy of the
-    # name into a ~50px-tall header just adds clutter.
+    # Crest + "Official Supporters Club / Brooklyn" wordmark together: a
+    # bare crest alone can't be told apart from any other LFC-branded pass
+    # someone might have in Wallet (official club membership, tickets,
+    # etc.) — the wordmark is what actually says "this one's OLSC Brooklyn."
     logo_sizes = {"logo.png": (160, 50), "logo@2x.png": (320, 100)}
     for name, (w, h) in logo_sizes.items():
         img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        _paste_centered(img, crest, margin_frac=0.08)
+        _paste_centered(img, wordmark, margin_frac=0.06)
         img.save(pass_dir / name)
 
 

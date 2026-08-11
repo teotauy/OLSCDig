@@ -35,11 +35,11 @@ Gate-by-gate (see full list under "Go/No-Go Gates" below):
 | Members can be added/imported | Done and tested locally; **not yet deployed to Render** |
 | Real Apple Wallet pass on 2 iPhones | **Done (Aug 10): production `/wallet/test-pass.pkpass` on Render generates a real signed pass with live next-match data, confirmed working end-to-end.** Still worth testing install on a 2nd phone before the checkpoint, but the hard part (prod signing) is proven. Icon/logo art also upgraded (Aug 10) from generated placeholder text to the real OLSC/LFC crest — see "Real crest art" note under Apple Wallet below. |
 | Mobile web pass page (Android path) | **Done (Aug 10): `GET /pass/<token>` built and verified** — looks up by hashed token (`db.find_active_wallet_pass_by_token`), shows name/season/live next-match/QR, generic 404 for invalid/expired tokens (no info leak). Wired into the resend-pass email so it's actually reachable, not just a route that exists. Tested via Flask test client (valid + invalid token) and confirmed visually in a real browser. Still needs production deploy + a real non-iPhone browser test. |
-| Scanner scans the QR | Built locally (Aug 10): admin-only `/scanner` with camera scanner + manual fallback; needs real-phone verification |
-| Fresh scan creates a check-in | Built locally (Aug 10): `POST /api/checkins/scan` validates wallet token and inserts one check-in for the current match; needs DB-backed end-to-end test |
-| Duplicate scan shows "already used" | Built locally (Aug 10): DB unique constraint drives the duplicate warning state; needs DB-backed end-to-end test |
+| Scanner scans the QR | **Done (Aug 10): deployed to Render and scanning in production**, not just locally. |
+| Fresh scan creates a check-in | **Done (Aug 10): confirmed working on Render** against live Supabase data. |
+| Duplicate scan shows "already used" | Confirming now (Aug 10) on production. |
 | Last-match/check-in CSV export | **Not started** |
-| Documented resend flow | Built and logic-tested locally; end-to-end test still needs SMTP creds in `.env` (`APPLE_CERT_PASSWORD` is resolved) |
+| Documented resend flow | Built and deployed; pass/report email now uses Resend first with SMTP fallback. Render has `RESEND_API_KEY`; default sender is `OLSC Brooklyn <DIGITALIDS@OLSCBROOKLYN.COM>` and default reply-to is `OLSC_BK@olscbrooklyn.com`. |
 | Automatic pass delivery on member add | **Done (Aug 10):** adding a member via `/admin/members` now automatically issues a token, builds a real signed pass, and emails it — same underlying logic as "Resend Pass" (extracted into a shared `_issue_and_email_pass` helper). Deliberately scoped to the single-add form only, not CSV bulk import (importing 100 rows shouldn't silently fire 100 emails). Verified: pass/token get created even when email fails, and the failure is surfaced clearly to the admin rather than silently swallowed. |
 
 **Biggest remaining lift:** production verification. The hosted Wallet pass
@@ -243,13 +243,18 @@ was cropped out (isolated from the "Official Supporters Club / Brooklyn"
 wordmark below it), recolored white (the source is red-on-transparent; our
 pass background is red, so red-on-red would've been invisible), and bundled
 into the repo at `wallet_pass_assets/olsc_crest_white.png` since the Desktop
-folder it came from won't exist on Render. Logo is crest-only, no wordmark —
-`organizationName` ("OLSC Brooklyn") already renders as text elsewhere in
-Wallet, so a second copy of the club name crammed into a ~50px-tall header
-just added clutter. Still using the `generic` pass style (flat
-`backgroundColor`) — switching to `storeCard` for real background artwork
-(not just a logo) was raised and left as an open, undecided option for later,
-not rejected.
+folder it came from won't exist on Render. **Revised same day:** logo was initially crest-only (reasoning:
+`organizationName` already renders as text elsewhere in Wallet) — corrected
+after feedback that a bare crest can't be told apart from any other
+LFC-branded pass someone might have (official club membership, tickets,
+etc.). Logo now uses a second extracted asset, the full "crest + Official
+Supporters Club / Brooklyn" lockup from `Horizontal_Mono Red.png`
+(`wallet_pass_assets/olsc_wordmark_white.png`), so the header itself says
+which club/branch this is, not just that it's LFC-related. Icon stays
+crest-only (29-87px is too small for the wordmark to be legible anyway).
+Still using the `generic` pass style (flat `backgroundColor`) — switching to
+`storeCard` for real background artwork (not just a logo) was raised and
+left as an open, undecided option for later, not rejected.
 
 Later:
 
@@ -600,7 +605,7 @@ Automatic PassKit fallback if any of these are still broken:
 - **Aug 10 (today):** Lost most of this day to an Apple Wallet cert/env-var debugging saga (stale `APPLE_PASS_CERT_P12_BASE64` silently overriding the real cert file — see the "Gotcha hit and fixed" note under Apple Wallet). **Done: production `/wallet/test-pass.pkpass` on Render now generates a real signed pass with live next-match data — the hosted delivery path is fully proven.**
 - **Aug 11-13:** Scanner page + `POST /api/checkins/scan` (idempotent per member/match), plus the mobile web pass page (Android's launch-day path). Both fully unstarted as of Aug 10 — this is the real remaining core of the project.
 - **Aug 14-15:** Deploy DB/admin/scanner routes to Render and verify end-to-end in production (not just local+Supabase): add a member, generate/install a pass on a 2nd iPhone, scan it, confirm duplicate-scan warning, check the mobile web page on an Android-like browser.
-- **Aug 16-18:** CSV export, resend-flow end-to-end test with real SMTP, staff-facing runbook, polish, buffer for whatever breaks.
+- **Aug 16-18:** CSV export, resend-flow end-to-end test with Resend, staff-facing runbook, polish, buffer for whatever breaks.
 - **Aug 19:** Alamo go/no-go.
 - **Aug 20:** Stretch checkpoint (small fixes only) if not fully green on the 19th.
 - **Aug 20-21:** If green — member import, final polish, welcome emails. If red — execute PassKit fallback (restart subscription, import members, send links) while there's still work time.
@@ -692,14 +697,14 @@ invalidates whatever pass existed before (safe default for a
 screenshotted/shared pass). "Resend Pass" button added per member on
 `/admin/members`, wired to a new route that issues a token, calls Cursor's
 `wallet_pass.build_member_pkpass()` with the member's real name/season, and
-emails the signed `.pkpass` as an attachment (new `_send_pkpass_email`,
-modeled on the existing checkout-report attachment code). Tested: DB rotation
+emails the signed `.pkpass` as an attachment. Email now uses Resend first
+(`RESEND_API_KEY`, default sender `OLSC Brooklyn <DIGITALIDS@OLSCBROOKLYN.COM>`,
+default reply-to `OLSC_BK@olscbrooklyn.com`) with SMTP fallback. Tested: DB rotation
 logic (verified only one row per member/season/platform, hash changes, old
 token stops matching), and the route's error handling (confirmed it fails
 gracefully with a clear on-page message and no secrets leaked when Apple
-Wallet isn't fully configured). **Not yet tested end-to-end** — that needs
-`APPLE_CERT_PASSWORD` and `SMTP_HOST`/`SMTP_USER`/`SMTP_PASSWORD` in `.env`,
-neither of which are set locally yet.
+Wallet isn't fully configured). Resend plumbing is deployed but still needs
+a real member email send verified after Render finishes redeploying.
 
 ### Phase 3: Scanner
 
