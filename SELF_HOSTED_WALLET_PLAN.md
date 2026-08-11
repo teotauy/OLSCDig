@@ -292,7 +292,13 @@ this alone.
 
 Each member gets a random, unguessable credential token.
 
-Example QR payload:
+Apple Wallet QR payload:
+
+```text
+<random-token>
+```
+
+Mobile web pass QR payload:
 
 ```text
 https://olsc.example.com/checkin/t/<random-token>
@@ -303,8 +309,8 @@ Rules:
 - Token should not expose email or member ID.
 - Token should be long enough to resist guessing.
 - Token can be rotated if a pass is leaked.
-- Server looks up the token and records the check-in.
-- Admin scanner should submit the token to an authenticated endpoint.
+- Server hashes the token, looks it up, and records the check-in.
+- Admin scanner accepts either raw tokens or `/checkin/t/<token>` URLs and submits the token to an authenticated endpoint.
 
 ### Barcode Format
 

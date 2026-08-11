@@ -310,10 +310,10 @@ def admin_index():
 
 @app.route('/add-member')
 def add_member_page():
-    """Page for adding new members (password protected)."""
+    """Legacy PassKit add-member page. Redirect to the DB-backed member admin."""
     if not require_password():
         return redirect(url_for('login'))
-    return render_template('add_member.html')
+    return redirect(url_for('admin_members'))
 
 @app.route('/update-match')
 def update_match_page():
@@ -1334,7 +1334,6 @@ def _safe_pkpass_filename(member):
 def _issue_member_pkpass(member, season):
     """Issue/rotate a wallet token and return signed pass bytes plus web URL."""
     raw_token, serial_number = db.issue_wallet_token(member['id'], season['id'], platform='apple')
-    barcode_url = f"{request.url_root.rstrip('/')}/checkin/t/{raw_token}"
 
     next_match_text = ""
     try:
@@ -1348,7 +1347,7 @@ def _issue_member_pkpass(member, season):
         display_name=f"{member['first_name']} {member['last_name']}".strip(),
         season=season['name'],
         serial_number=serial_number,
-        barcode_message=barcode_url,
+        barcode_message=raw_token,
         next_match=next_match_text,
         description="OLSC Brooklyn Membership",
     ))
