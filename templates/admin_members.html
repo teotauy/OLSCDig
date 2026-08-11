@@ -162,8 +162,8 @@
                             </form>
                         </td>
                         <td>
-                            <form method="POST" action="{{ url_for('admin_member_resend_pass', member_id=m.id) }}" style="display:inline;" onsubmit="return confirm('Resend pass to {{ m.email }}? This invalidates their current pass.');">
-                                <button type="submit" class="btn small" style="padding:6px 10px; font-size:12px;">Resend Pass</button>
+                            <form method="POST" action="{{ url_for('admin_member_resend_pass', member_id=m.id) }}" style="display:inline;" onsubmit="return confirm('{{ 'Resend' if m.has_active_pass else 'Send' }} pass to {{ m.email }}{% if m.has_active_pass %}? This invalidates their current pass.{% else %}?{% endif %}');">
+                                <button type="submit" class="btn small" style="padding:6px 10px; font-size:12px;">{{ 'Resend Pass' if m.has_active_pass else 'Send Pass' }}</button>
                             </form>
                         </td>
                     </tr>

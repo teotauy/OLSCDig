@@ -1272,13 +1272,20 @@ def admin_members():
             SELECT m.id, m.first_name, m.last_name, m.email, m.phone, m.created_at,
                    (SELECT COUNT(*) FROM checkins c
                     JOIN matches mt ON mt.id = c.match_id
-                    WHERE c.member_id = m.id AND mt.season_id = %s) AS checkins_this_season
+                    WHERE c.member_id = m.id AND mt.season_id = %s) AS checkins_this_season,
+                   EXISTS (
+                    SELECT 1 FROM wallet_passes wp
+                    WHERE wp.member_id = m.id
+                      AND wp.season_id = %s
+                      AND wp.platform = 'apple'
+                      AND wp.revoked_at IS NULL
+                   ) AS has_active_pass
             FROM members m
             JOIN member_seasons ms ON ms.member_id = m.id
             WHERE ms.season_id = %s
             ORDER BY m.last_name, m.first_name
             """,
-            (season['id'], season['id']),
+            (season['id'], season['id'], season['id']),
         )
         members = cur.fetchall()
 
