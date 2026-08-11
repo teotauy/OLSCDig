@@ -636,7 +636,7 @@ body {{ font-family: Arial, sans-serif; color: #333; }}
 </html>"""
     if _send_email_resend(
         to_email,
-        "OLSC Brooklyn – Your membership pass",
+        "[ACTION NEEDED] - Your Digital ID",
         html=html,
         attachments=[{
             "filename": "olsc-membership.pkpass",
@@ -654,7 +654,7 @@ body {{ font-family: Arial, sans-serif; color: #333; }}
     from_addr = os.getenv("EMAIL_FROM", user)
 
     msg = MIMEMultipart("mixed")
-    msg["Subject"] = "OLSC Brooklyn – Your membership pass"
+    msg["Subject"] = "[ACTION NEEDED] - Your Digital ID"
     msg["From"] = from_addr
     msg["To"] = to_email
     alt = MIMEMultipart("alternative")
