@@ -498,6 +498,56 @@ def _build_checkout_report(members, checked_out_at_str):
         w.writerow([name, email, check_in, checked_out_at_str])
     return out.getvalue()
 
+
+def _email_from_address(smtp_user=None):
+    return (
+        os.getenv("RESEND_FROM_EMAIL")
+        or os.getenv("EMAIL_FROM")
+        or smtp_user
+        or os.getenv("SMTP_USER")
+        or "OLSC Brooklyn <DIGITALIDS@OLSCBROOKLYN.COM>"
+    ).strip()
+
+
+def _send_email_resend(to_email, subject, html=None, text=None, attachments=None):
+    """Send an email through Resend's HTTP API. Returns True if accepted."""
+    api_key = (os.getenv("RESEND_API_KEY") or "").strip()
+    from_addr = _email_from_address()
+    if not api_key or not from_addr:
+        return False
+
+    payload = {
+        "from": from_addr,
+        "to": [to_email],
+        "subject": subject,
+    }
+    if html:
+        payload["html"] = html
+    if text:
+        payload["text"] = text
+
+    reply_to = (os.getenv("RESEND_REPLY_TO") or "OLSC_BK@olscbrooklyn.com").strip()
+    if reply_to:
+        payload["reply_to"] = reply_to
+
+    if attachments:
+        payload["attachments"] = attachments
+
+    try:
+        response = requests.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=15,
+        )
+        return 200 <= response.status_code < 300
+    except Exception:
+        return False
+
+
 def _send_welcome_email_smtp(to_email, first_name, pass_url):
     """Send 'resend welcome' email with pass link using SMTP from env. Returns True if sent."""
     host = os.getenv("SMTP_HOST")
@@ -551,13 +601,6 @@ def _send_pkpass_email(to_email, first_name, pkpass_bytes, mobile_pass_url=None)
     real path for Android members, who can't do anything useful with a
     .pkpass attachment.
     """
-    host = os.getenv("SMTP_HOST")
-    user = os.getenv("SMTP_USER")
-    password = os.getenv("SMTP_PASSWORD")
-    if not all([host, user, password]):
-        return False
-    port = int(os.getenv("SMTP_PORT", "587"))
-    from_addr = os.getenv("EMAIL_FROM", user)
     name = first_name or "Member"
     mobile_link_html = (
         f'<p>On Android (or if the attachment doesn\'t work), use this link instead: '
@@ -584,6 +627,25 @@ body {{ font-family: Arial, sans-serif; color: #333; }}
 <div class="footer"><p>This email was sent to {to_email}.</p></div>
 </body>
 </html>"""
+    if _send_email_resend(
+        to_email,
+        "OLSC Brooklyn – Your membership pass",
+        html=html,
+        attachments=[{
+            "filename": "olsc-membership.pkpass",
+            "content": base64.b64encode(pkpass_bytes).decode("ascii"),
+        }],
+    ):
+        return True
+
+    host = os.getenv("SMTP_HOST")
+    user = os.getenv("SMTP_USER")
+    password = os.getenv("SMTP_PASSWORD")
+    if not all([host, user, password]):
+        return False
+    port = int(os.getenv("SMTP_PORT", "587"))
+    from_addr = os.getenv("EMAIL_FROM", user)
+
     msg = MIMEMultipart("mixed")
     msg["Subject"] = "OLSC Brooklyn – Your membership pass"
     msg["From"] = from_addr
@@ -607,6 +669,18 @@ body {{ font-family: Arial, sans-serif; color: #333; }}
 
 def _send_checkout_report_email(to_email, csv_content, filename):
     """Email the checkout CSV to to_email using SMTP from env. Returns True if sent."""
+    subject = f"Checkout report: {filename}"
+    if _send_email_resend(
+        to_email,
+        subject,
+        text=f"Checkout report attached ({filename}).",
+        attachments=[{
+            "filename": filename,
+            "content": base64.b64encode(csv_content.encode("utf-8")).decode("ascii"),
+        }],
+    ):
+        return True
+
     host = os.getenv("SMTP_HOST")
     user = os.getenv("SMTP_USER")
     password = os.getenv("SMTP_PASSWORD")
@@ -615,7 +689,7 @@ def _send_checkout_report_email(to_email, csv_content, filename):
     port = int(os.getenv("SMTP_PORT", "587"))
     from_addr = os.getenv("EMAIL_FROM", user)
     msg = MIMEMultipart()
-    msg["Subject"] = f"Checkout report: {filename}"
+    msg["Subject"] = subject
     msg["From"] = from_addr
     msg["To"] = to_email
     msg.attach(MIMEText(f"Checkout report attached ({filename}).", "plain"))

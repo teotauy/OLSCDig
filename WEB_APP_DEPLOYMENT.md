@@ -34,6 +34,7 @@ In your Render dashboard, you'll need to set these environment variables for the
 - **Checkout report email:** After "Check Out Everyone", the CSV can be emailed. Set:
   - `CHECKOUT_REPORT_EMAIL` - Address to receive the report (e.g. `colby@colbyangusblack.com`).
   - `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASSWORD` - Your SMTP server (e.g. Gmail, SendGrid). Optional: `EMAIL_FROM` (defaults to `SMTP_USER`).
+  - Or use Resend: `RESEND_API_KEY`, optional `RESEND_FROM_EMAIL` (defaults to `OLSC Brooklyn <DIGITALIDS@OLSCBROOKLYN.COM>`), optional `RESEND_REPLY_TO` (defaults to `OLSC_BK@olscbrooklyn.com`).
   If these are set, the report is sent as an attachment after each bulk checkout.
 
 ### Login & security
@@ -68,6 +69,7 @@ In your Render dashboard, you'll need to set these environment variables for the
 | `HEADCOUNT_REFRESH_SECONDS` | Optional | Headcount refresh interval in seconds (default 60; e.g. 30 for faster) |
 | `CHECKOUT_REPORT_EMAIL` | Optional | Email for checkout CSV |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | Optional | For checkout report email |
+| `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_REPLY_TO` | Optional | Preferred pass/report email path through Resend; sender defaults to `OLSC Brooklyn <DIGITALIDS@OLSCBROOKLYN.COM>`, reply-to defaults to `OLSC_BK@olscbrooklyn.com` |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional | Google OAuth; set redirect URI |
 | `ALLOWED_GOOGLE_EMAILS` | Optional | Comma-separated allowed emails |
 | `FOOTBALL_DATA_API_KEY` | If match updates run on Render | From football-data.org |
