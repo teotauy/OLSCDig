@@ -39,7 +39,7 @@
         .row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
         .row .field { flex: 1; min-width: 140px; }
         label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; }
-        input[type="text"], input[type="email"], input[type="tel"], input[type="file"] {
+        input[type="text"], input[type="email"], input[type="tel"], input[type="file"], input[type="search"] {
             width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;
         }
         input:focus { outline: none; border-color: #c8102e; }
@@ -54,9 +54,18 @@
         table { width: 100%; border-collapse: collapse; font-size: 14px; }
         th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #eee; }
         th { color: #666; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+        th.sortable { cursor: pointer; user-select: none; }
+        th.sortable button {
+            appearance: none; border: 0; background: none; color: inherit; cursor: pointer;
+            font: inherit; font-weight: inherit; text-transform: inherit; padding: 0;
+        }
+        th.sortable .sort-indicator { color: #c8102e; margin-left: 4px; }
         tr:hover { background: #fafafa; }
         .edit-link { color: #c8102e; text-decoration: none; font-size: 13px; }
         .muted { color: #999; font-size: 13px; }
+        .roster-toolbar { display: flex; gap: 10px; align-items: flex-end; margin-bottom: 12px; }
+        .roster-toolbar .field { flex: 1; }
+        .roster-count { color: #666; font-size: 13px; white-space: nowrap; padding-bottom: 10px; }
 
         .links { text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0; }
         .links a { color: #c8102e; text-decoration: none; font-size: 14px; margin: 0 10px; }
@@ -117,19 +126,31 @@
         <div class="panel">
             <h2>Roster</h2>
             {% if members %}
-            <table>
+            <div class="roster-toolbar">
+                <div class="field">
+                    <label for="memberSearch">Search roster</label>
+                    <input type="search" id="memberSearch" placeholder="Search name, email, or phone">
+                </div>
+                <div class="roster-count"><span id="visibleCount">{{ members|length }}</span> shown</div>
+            </div>
+            <table id="membersTable">
                 <thead>
                     <tr>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Phone</th>
-                        <th>Check-ins</th>
+                        <th class="sortable" data-sort="name"><button type="button">Name<span class="sort-indicator"></span></button></th>
+                        <th class="sortable" data-sort="email"><button type="button">Email<span class="sort-indicator"></span></button></th>
+                        <th class="sortable" data-sort="phone"><button type="button">Phone<span class="sort-indicator"></span></button></th>
+                        <th class="sortable" data-sort="checkins"><button type="button">Check-ins<span class="sort-indicator"></span></button></th>
                         <th colspan="3"></th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="membersTableBody">
                     {% for m in members %}
-                    <tr>
+                    <tr
+                        data-name="{{ (m.first_name ~ ' ' ~ m.last_name)|lower }}"
+                        data-email="{{ (m.email or '')|lower }}"
+                        data-phone="{{ (m.phone or '')|lower }}"
+                        data-checkins="{{ m.checkins_this_season }}"
+                    >
                         <td>{{ m.first_name }} {{ m.last_name }}</td>
                         <td>{{ m.email }}</td>
                         <td>{{ m.phone or '—' }}</td>
@@ -161,5 +182,75 @@
             <a href="/logout">Logout</a>
         </div>
     </div>
+    <script>
+        const searchInput = document.getElementById('memberSearch');
+        const tableBody = document.getElementById('membersTableBody');
+        const visibleCount = document.getElementById('visibleCount');
+        const sortableHeaders = document.querySelectorAll('th.sortable');
+        let currentSort = { key: 'name', direction: 'asc' };
+
+        if (searchInput && tableBody && visibleCount) {
+
+        function rowMatchesSearch(row, query) {
+            if (!query) return true;
+            const haystack = `${row.dataset.name} ${row.dataset.email} ${row.dataset.phone}`;
+            return haystack.includes(query);
+        }
+
+        function sortRows(key, direction) {
+            const rows = Array.from(tableBody.querySelectorAll('tr'));
+            rows.sort((a, b) => {
+                let left = a.dataset[key] || '';
+                let right = b.dataset[key] || '';
+                if (key === 'checkins') {
+                    left = Number(left || 0);
+                    right = Number(right || 0);
+                }
+                if (left < right) return direction === 'asc' ? -1 : 1;
+                if (left > right) return direction === 'asc' ? 1 : -1;
+                return (a.dataset.name || '').localeCompare(b.dataset.name || '');
+            });
+            rows.forEach(row => tableBody.appendChild(row));
+        }
+
+        function updateSortIndicators() {
+            sortableHeaders.forEach(header => {
+                const indicator = header.querySelector('.sort-indicator');
+                indicator.textContent = header.dataset.sort === currentSort.key
+                    ? (currentSort.direction === 'asc' ? '↑' : '↓')
+                    : '';
+            });
+        }
+
+        function applyRosterControls() {
+            const query = (searchInput.value || '').trim().toLowerCase();
+            let shown = 0;
+            Array.from(tableBody.querySelectorAll('tr')).forEach(row => {
+                const visible = rowMatchesSearch(row, query);
+                row.style.display = visible ? '' : 'none';
+                if (visible) shown += 1;
+            });
+            visibleCount.textContent = shown;
+        }
+
+        sortableHeaders.forEach(header => {
+            header.addEventListener('click', () => {
+                const key = header.dataset.sort;
+                currentSort = {
+                    key,
+                    direction: currentSort.key === key && currentSort.direction === 'asc' ? 'desc' : 'asc',
+                };
+                sortRows(currentSort.key, currentSort.direction);
+                updateSortIndicators();
+                applyRosterControls();
+            });
+        });
+
+            searchInput.addEventListener('input', applyRosterControls);
+            sortRows(currentSort.key, currentSort.direction);
+            updateSortIndicators();
+            applyRosterControls();
+        }
+    </script>
 </body>
 </html>

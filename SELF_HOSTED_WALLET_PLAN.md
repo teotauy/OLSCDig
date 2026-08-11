@@ -603,6 +603,12 @@ Automatic PassKit fallback if any of these are still broken:
 - We cannot import the member list quickly.
 - Admin auth is unreliable.
 
+Fallback implementation note:
+
+- Keep PassKit routes/scripts in the repo until after the season launch is stable.
+- Normal `/add-member` redirects to the new DB-backed `/admin/members` flow to avoid accidental expired-account calls.
+- Emergency PassKit add-member UI remains available at `/legacy/passkit/add-member` if we cut bait and reactivate PassKit.
+
 #### Suggested Daily Milestones (revised Aug 10)
 
 - **Aug 6-7:** Apple Developer status, Pass Type ID/cert, hardcoded `.pkpass` generated, signed, hosted, and installed on a real iPhone from an existing HTTPS URL. **Done: Apple Wallet spike succeeded on a real iPhone.**

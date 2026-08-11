@@ -315,6 +315,13 @@ def add_member_page():
         return redirect(url_for('login'))
     return redirect(url_for('admin_members'))
 
+@app.route('/legacy/passkit/add-member')
+def legacy_passkit_add_member_page():
+    """Fallback-only PassKit add-member page for emergency PassKit season."""
+    if not require_password():
+        return redirect(url_for('login'))
+    return render_template('add_member.html')
+
 @app.route('/update-match')
 def update_match_page():
     """Page for updating match info (password protected)."""
