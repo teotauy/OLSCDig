@@ -41,6 +41,15 @@ class MemberPassData:
     barcode_message: str
     next_match: str = ""
     description: str = "OLSC Brooklyn Membership"
+    is_home: bool = True  # drives home (red) vs away (white/red, 2026/27 road kit) pass theme
+    relevant_date: str = ""
+    locations: tuple = (
+        {
+            "latitude": 40.6657,
+            "longitude": -73.9877,
+            "relevantText": "Up the Reds.",
+        },
+    )
 
 
 def _env(key, default=""):
@@ -131,26 +140,45 @@ def _run_openssl(args, *, stdin_data=None, retry_without_legacy=False):
     raise AppleWalletConfigError(f"openssl failed: {result.stderr.strip()}")
 
 
-CREST_WHITE_PATH = ROOT / "wallet_pass_assets" / "olsc_crest_white.png"
-WORDMARK_WHITE_PATH = ROOT / "wallet_pass_assets" / "olsc_wordmark_white.png"
+ASSETS_DIR = ROOT / "wallet_pass_assets"
+
+# 2026/27 kit-based pass themes, chosen automatically from the fixture's
+# is_home flag (the same data source as the "next match" text — if the pass
+# says "vs Newcastle" it's red, "@ Everton" it's the away/white scheme, and
+# the two can never disagree). Away = the actual 2026/27 road kit: white
+# with red lettering, not PassKit-era green.
+PASS_THEMES = {
+    "home": {
+        "background": "rgb(200,16,46)",
+        "foreground": "rgb(255,255,255)",
+        "label": "rgb(255,255,255)",
+        "icon_bg": (200, 16, 46, 255),
+        "icon_border": None,
+        "crest_path": ASSETS_DIR / "olsc_crest_white.png",
+        "wordmark_path": ASSETS_DIR / "olsc_wordmark_white.png",
+    },
+    "away": {
+        "background": "rgb(255,255,255)",
+        "foreground": "rgb(200,16,46)",
+        "label": "rgb(200,16,46)",
+        "icon_bg": (255, 255, 255, 255),
+        # A plain white icon can disappear against Wallet's own light-mode
+        # chrome (notifications, lock screen) — a thin red frame keeps it
+        # defined without changing the away color story.
+        "icon_border": (200, 16, 46, 255),
+        "crest_path": ASSETS_DIR / "olsc_crest_red.png",
+        "wordmark_path": ASSETS_DIR / "olsc_wordmark_red.png",
+    },
+}
 
 
-def _load_crest():
-    """White-on-transparent OLSC/LFC crest, extracted from the club's real
-    logo art (Desktop/Artwork-Assets/Official Logos/OLSC Logos/Mono red.png)
-    and recolored for use on the pass's red background. Bundled in the repo
-    (not referenced from outside it) so it's available on Render too.
+def _load_art(path):
+    """Load one of the bundled crest/wordmark assets (extracted from the
+    club's real logo art in Desktop/Artwork-Assets/Official Logos/OLSC
+    Logos/ and recolored per theme). Bundled in the repo, not referenced
+    from outside it, so it's available on Render too.
     """
-    return Image.open(CREST_WHITE_PATH).convert("RGBA")
-
-
-def _load_wordmark():
-    """White-on-transparent crest + "Official Supporters Club / Brooklyn"
-    lockup, extracted from Horizontal_Mono Red.png the same way as the
-    crest. Used for the pass header logo, where there's room to actually
-    read text — distinguishes this pass from any other LFC-branded item.
-    """
-    return Image.open(WORDMARK_WHITE_PATH).convert("RGBA")
+    return Image.open(path).convert("RGBA")
 
 
 def _paste_centered(canvas, art, margin_frac=0.14):
@@ -165,17 +193,24 @@ def _paste_centered(canvas, art, margin_frac=0.14):
     canvas.alpha_composite(resized, offset)
 
 
-def _make_pass_images(pass_dir, brand_color=(200, 16, 46, 255)):
-    """Generate icon + logo art using the real OLSC/LFC crest and wordmark."""
-    crest = _load_crest()
-    wordmark = _load_wordmark()
+def _make_pass_images(pass_dir, theme):
+    """Generate icon + logo art using the real OLSC/LFC crest and wordmark,
+    colored for `theme` (PASS_THEMES["home"] or ["away"])."""
+    crest = _load_art(theme["crest_path"])
+    wordmark = _load_art(theme["wordmark_path"])
 
     # icon.png / @2x / @3x — opaque badge, shown outside the pass card
     # (notifications, lock screen). Crest only: too small for legible text,
     # and this is a recognition mark, not the place identity gets clarified.
     icon_sizes = {"icon.png": 29, "icon@2x.png": 58, "icon@3x.png": 87}
     for name, size in icon_sizes.items():
-        img = Image.new("RGBA", (size, size), brand_color)
+        if theme["icon_border"]:
+            border_w = max(1, round(size * 0.06))
+            img = Image.new("RGBA", (size, size), theme["icon_border"])
+            inner = Image.new("RGBA", (size - border_w * 2, size - border_w * 2), theme["icon_bg"])
+            img.paste(inner, (border_w, border_w))
+        else:
+            img = Image.new("RGBA", (size, size), theme["icon_bg"])
         _paste_centered(img, crest, margin_frac=0.1)
         img.save(pass_dir / name)
 
@@ -192,14 +227,14 @@ def _make_pass_images(pass_dir, brand_color=(200, 16, 46, 255)):
         img.save(pass_dir / name)
 
 
-def _build_pass_json(config, pass_data):
+def _build_pass_json(config, pass_data, theme):
     secondary_fields = [
         {"key": "season", "label": "SEASON", "value": pass_data.season},
     ]
     if pass_data.next_match:
         secondary_fields.append({"key": "nextMatch", "label": "NEXT MATCH", "value": pass_data.next_match})
 
-    return {
+    pass_json = {
         "formatVersion": 1,
         "passTypeIdentifier": config.pass_type_id,
         "teamIdentifier": config.team_id,
@@ -219,10 +254,15 @@ def _build_pass_json(config, pass_data):
                 "messageEncoding": "iso-8859-1",
             }
         ],
-        "backgroundColor": "rgb(200,16,46)",
-        "foregroundColor": "rgb(255,255,255)",
-        "labelColor": "rgb(255,255,255)",
+        "backgroundColor": theme["background"],
+        "foregroundColor": theme["foreground"],
+        "labelColor": theme["label"],
     }
+    if pass_data.locations:
+        pass_json["locations"] = list(pass_data.locations)
+    if pass_data.relevant_date:
+        pass_json["relevantDate"] = pass_data.relevant_date
+    return pass_json
 
 
 def _write_manifest(pass_dir):
@@ -285,13 +325,14 @@ def build_member_pkpass(pass_data, config=None):
     temp_dir = Path(tempfile.mkdtemp(prefix="olsc-wallet-pass-"))
     try:
         config = config or load_apple_wallet_config(temp_dir / "certs")
+        theme = PASS_THEMES["home"] if pass_data.is_home else PASS_THEMES["away"]
         pass_dir = temp_dir / "pass"
         pass_dir.mkdir(parents=True)
         (pass_dir / "pass.json").write_text(
-            json.dumps(_build_pass_json(config, pass_data)),
+            json.dumps(_build_pass_json(config, pass_data, theme)),
             encoding="utf-8",
         )
-        _make_pass_images(pass_dir)
+        _make_pass_images(pass_dir, theme)
         _write_manifest(pass_dir)
         _sign_manifest(pass_dir, config)
         return _zip_pass(pass_dir)

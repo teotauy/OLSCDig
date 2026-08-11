@@ -29,7 +29,7 @@ import pytz
 import bcrypt
 from team_abbreviations import format_match_display, abbreviate_team_name
 from match_updates import get_next_match
-from wallet_pass import AppleWalletConfigError, MemberPassData, build_member_pkpass
+from wallet_pass import AppleWalletConfigError, MemberPassData, build_member_pkpass, PASS_THEMES
 import db
 # Notifications feature removed
 
@@ -1345,15 +1345,29 @@ def _safe_pkpass_filename(member):
     return f"olsc-{safe or 'member'}.pkpass"
 
 
+def _current_match_relevant_date():
+    """Return current match kickoff as an Apple Wallet relevantDate string."""
+    try:
+        match = db.get_current_match()
+        kickoff_at = match.get('kickoff_at') if match else None
+        if not kickoff_at:
+            return ""
+        return kickoff_at.astimezone(pytz.utc).isoformat().replace("+00:00", "Z")
+    except Exception:
+        return ""
+
+
 def _issue_member_pkpass(member, season):
     """Issue/rotate a wallet token and return signed pass bytes plus web URL."""
     raw_token, serial_number = db.issue_wallet_token(member['id'], season['id'], platform='apple')
 
     next_match_text = ""
+    is_home = True
     try:
         next_match = get_next_match()
         if next_match:
             next_match_text = next_match.get('pass_display') or ""
+            is_home = bool(next_match.get('is_home', True))
     except Exception:
         next_match_text = ""
 
@@ -1364,6 +1378,8 @@ def _issue_member_pkpass(member, season):
         barcode_message=raw_token,
         next_match=next_match_text,
         description="OLSC Brooklyn Membership",
+        is_home=is_home,
+        relevant_date=_current_match_relevant_date(),
     ))
     mobile_pass_url = f"{request.url_root.rstrip('/')}{url_for('mobile_pass', token=raw_token)}"
     return pkpass_bytes, mobile_pass_url
@@ -1539,6 +1555,13 @@ def _qr_data_uri(payload):
     return f"data:image/png;base64,{encoded}"
 
 
+def _asset_data_uri(path):
+    """Base64 PNG data URI for a file, for inlining wallet_pass_assets/
+    images directly into a template with no separate static route."""
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
 @app.route('/pass/<token>')
 def mobile_pass(token):
     """Public mobile web pass page — the Android/non-Wallet path.
@@ -1554,12 +1577,16 @@ def mobile_pass(token):
     barcode_url = f"{request.url_root.rstrip('/')}/checkin/t/{token}"
 
     next_match_text = ""
+    is_home = True
     try:
         next_match = get_next_match()
         if next_match:
             next_match_text = next_match.get("pass_display") or ""
+            is_home = bool(next_match.get("is_home", True))
     except Exception:
         next_match_text = ""
+
+    theme = PASS_THEMES["home"] if is_home else PASS_THEMES["away"]
 
     return render_template(
         'mobile_pass.html',
@@ -1568,6 +1595,8 @@ def mobile_pass(token):
         season_name=record['season_name'],
         next_match=next_match_text,
         qr_data_uri=_qr_data_uri(barcode_url),
+        is_home=is_home,
+        wordmark_data_uri=_asset_data_uri(theme["wordmark_path"]),
     )
 
 

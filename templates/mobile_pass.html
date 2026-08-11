@@ -18,12 +18,22 @@
         .card {
             max-width: 380px;
             width: 100%;
-            background: linear-gradient(160deg, #c8102e 0%, #a30d25 100%);
             border-radius: 20px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.4);
             padding: 28px 24px;
-            color: white;
             text-align: center;
+        }
+        /* 2026/27 kit-based theme: home shirt (red) vs road kit (white,
+           red lettering) — same is_home source as the "Next Match" text,
+           so they can never disagree with each other. */
+        .card.theme-home {
+            background: linear-gradient(160deg, #c8102e 0%, #a30d25 100%);
+            color: white;
+        }
+        .card.theme-away {
+            background: linear-gradient(160deg, #ffffff 0%, #f2f2f2 100%);
+            color: #c8102e;
+            border: 1px solid #eee;
         }
         .brand {
             font-size: 11px;
@@ -31,6 +41,13 @@
             text-transform: uppercase;
             opacity: 0.85;
             margin-bottom: 4px;
+        }
+        .wordmark {
+            max-width: 220px;
+            width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto 14px;
         }
         .member-label {
             font-size: 11px;
@@ -61,12 +78,42 @@
             font-size: 14px;
             font-weight: 600;
         }
+        /* Animated ring around the QR — motion is confined entirely to this
+           frame via an oversized rotating gradient clipped by overflow:
+           hidden. The QR image itself (.qr-box) never moves, resizes, or
+           gets touched by the animation, so it stays scannable at any
+           point in the rotation. */
+        .qr-ring {
+            position: relative;
+            display: inline-block;
+            border-radius: 18px;
+            padding: 6px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+        .qr-ring::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 220%;
+            height: 220%;
+            background: conic-gradient(from 0deg, #c8102e, #ffd447, #ffffff, #ffd447, #c8102e);
+            transform: translate(-50%, -50%) rotate(0deg);
+            animation: qrRingSpin 4s linear infinite;
+        }
+        @keyframes qrRingSpin {
+            to { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .qr-ring::before { animation: none; }
+        }
         .qr-box {
+            position: relative;
             background: white;
             border-radius: 12px;
             padding: 16px;
-            display: inline-block;
-            margin-bottom: 8px;
+            display: block;
         }
         .qr-box img {
             width: 220px;
@@ -90,8 +137,8 @@
 </head>
 <body>
     {% if found %}
-    <div class="card">
-        <div class="brand">OLSC Brooklyn Membership</div>
+    <div class="card {{ 'theme-home' if is_home else 'theme-away' }}">
+        <img class="wordmark" src="{{ wordmark_data_uri }}" alt="OLSC Brooklyn — Official Supporters Club">
         <div class="member-label">Member</div>
         <div class="member-name">{{ display_name }}</div>
         <div class="meta-row">
@@ -106,13 +153,15 @@
             </div>
             {% endif %}
         </div>
-        <div class="qr-box">
-            <img src="{{ qr_data_uri }}" alt="Membership QR code">
+        <div class="qr-ring">
+            <div class="qr-box">
+                <img src="{{ qr_data_uri }}" alt="Membership QR code">
+            </div>
         </div>
         <div class="hint">Show this screen at the door — no need to add it to Wallet.</div>
     </div>
     {% else %}
-    <div class="card not-found">
+    <div class="card theme-home not-found">
         <div class="brand">OLSC Brooklyn Membership</div>
         <h1>Pass Not Found</h1>
         <p>This link is invalid or has expired. If you're a current member, ask an admin to resend your pass.</p>

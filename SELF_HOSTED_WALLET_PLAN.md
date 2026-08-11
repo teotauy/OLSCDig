@@ -34,7 +34,7 @@ Gate-by-gate (see full list under "Go/No-Go Gates" below):
 | Admin login works in production | Presumed OK, unchanged by this work |
 | Members can be added/imported | Done and tested locally; **not yet deployed to Render** |
 | Real Apple Wallet pass on 2 iPhones | **Done (Aug 10): production `/wallet/test-pass.pkpass` on Render generates a real signed pass with live next-match data, confirmed working end-to-end.** Still worth testing install on a 2nd phone before the checkpoint, but the hard part (prod signing) is proven. Icon/logo art also upgraded (Aug 10) from generated placeholder text to the real OLSC/LFC crest — see "Real crest art" note under Apple Wallet below. |
-| Mobile web pass page (Android path) | **Done (Aug 10): `GET /pass/<token>` built and verified** — looks up by hashed token (`db.find_active_wallet_pass_by_token`), shows name/season/live next-match/QR, generic 404 for invalid/expired tokens (no info leak). Wired into the resend-pass email so it's actually reachable, not just a route that exists. Tested via Flask test client (valid + invalid token) and confirmed visually in a real browser. Still needs production deploy + a real non-iPhone browser test. |
+| Mobile web pass page (Android path) | **Done (Aug 10, extended later same day):** animated ring around the QR (motion confined to the ring only via `overflow: hidden` + oversized rotating conic-gradient — confirmed via two screenshots that the ring moves while the QR itself is pixel-identical), automatic home/away theming matching the Wallet pass (same `is_home` source as "Next Match" text, so they can't disagree — verified against the real live fixture, which is actually away), and the real crest+wordmark image now shown on the page too (previously text-only — no platform reason for that, just an oversight). `GET /pass/<token>` built and verified — looks up by hashed token (`db.find_active_wallet_pass_by_token`), shows name/season/live next-match/QR, generic 404 for invalid/expired tokens (no info leak). Wired into the resend-pass email so it's actually reachable, not just a route that exists. Tested via Flask test client (valid + invalid token) and confirmed visually in a real browser. Still needs production deploy + a real non-iPhone browser test. |
 | Scanner scans the QR | **Done (Aug 10): deployed to Render and scanning in production**, not just locally. |
 | Fresh scan creates a check-in | **Done (Aug 10): confirmed working on Render** against live Supabase data. |
 | Duplicate scan shows "already used" | Confirming now (Aug 10) on production. |
@@ -221,6 +221,15 @@ MVP:
 - Generate a `.pkpass` with member name, season, QR code, and next match.
 - Email/download link from our app.
 - Reissue pass when needed.
+
+**Lock-screen relevance (Aug 11):** Apple Wallet passes now include a location
+hint for the bar at `481 5th Ave, Brooklyn, NY 11215` (approx.
+`40.6657, -73.9877`) with relevant text `Up the Reds.`. Member passes also set
+`relevantDate` from the current DB match kickoff when generated, so iOS has
+both place and matchday timing signals. This is an Apple-controlled relevance
+hint, not a guaranteed custom push notification; future Apple Wallet web
+service updates would be needed to keep `relevantDate` fresh without resending
+passes.
 
 **Gotcha hit and fixed (Aug 10):** if `APPLE_PASS_CERT_P12_BASE64` is set, the
 app uses it and silently ignores `certs/passTypeCert.p12` on disk, even
