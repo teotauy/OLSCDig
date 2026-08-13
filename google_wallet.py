@@ -78,18 +78,14 @@ def build_google_wallet_save_url(
         raise GoogleWalletConfigError("GOOGLE_WALLET_ISSUER_ID is not set")
 
     credentials = _load_credentials()
-    class_suffix = _safe_suffix(_env("GOOGLE_WALLET_CLASS_SUFFIX", f"olsc_brooklyn_digital_id_{season_name}"))
+    class_suffix = _safe_suffix(_env("GOOGLE_WALLET_CLASS_SUFFIX", f"olsc_brooklyn_digital_id_{season_name}_v2"))
     object_suffix = _safe_suffix(f"member_{member_id}_{serial_number}")
     class_id = f"{issuer_id}.{class_suffix}"
     object_id = f"{issuer_id}.{object_suffix}"
     wordmark = "olsc_wordmark_white.png" if is_home else "olsc_wordmark_red.png"
     background = "#c8102e" if is_home else "#ffffff"
 
-    generic_class = {
-        "id": class_id,
-        "issuerName": "OLSC Brooklyn",
-        "reviewStatus": "UNDER_REVIEW",
-    }
+    generic_class = {"id": class_id}
 
     text_modules = [
         {
