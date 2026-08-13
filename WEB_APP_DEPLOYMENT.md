@@ -30,12 +30,18 @@ In your Render dashboard, you'll need to set these environment variables for the
 - `API_BASE` - Defaults to `https://api.pub2.passkit.io`
 - `TIMEZONE` - Defaults to `America/New_York`
 - `SESSION_COOKIE_SECURE` - Set to `true` when using HTTPS (e.g. on Render) so the session cookie is only sent over HTTPS.
+- `PUBLIC_BASE_URL` - Public app URL, e.g. `https://olsc-web-app.onrender.com`. Used in emailed pass links and Google Wallet asset URLs.
 - `HEADCOUNT_REFRESH_SECONDS` - How often the headcount updates (default `60`). Set to `30` for twice as fast, or `45` for a middle ground. Minimum 10, maximum 300.
 - **Checkout report email:** After "Check Out Everyone", the CSV can be emailed. Set:
   - `CHECKOUT_REPORT_EMAIL` - Address to receive the report (e.g. `colby@colbyangusblack.com`).
   - `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASSWORD` - Your SMTP server (e.g. Gmail, SendGrid). Optional: `EMAIL_FROM` (defaults to `SMTP_USER`).
   - Or use Resend: `RESEND_API_KEY`, optional `RESEND_FROM_EMAIL` (defaults to `OLSC Brooklyn <DIGITALIDS@OLSCBROOKLYN.COM>`), optional `RESEND_REPLY_TO` (defaults to `OLSC_BK@olscbrooklyn.com`).
   If these are set, the report is sent as an attachment after each bulk checkout.
+- **Google Wallet demo-mode issuing:** Set:
+  - `GOOGLE_WALLET_ISSUER_ID` - `3388000000023188178`.
+  - `GOOGLE_WALLET_SERVICE_ACCOUNT_JSON_BASE64` - Base64 of the Google Cloud service account JSON key whose service account email is invited as **Developer** on that Wallet issuer.
+  - `GOOGLE_WALLET_CLASS_SUFFIX` - Optional. Defaults to a season-based OLSC Brooklyn Digital ID class suffix.
+  While the issuer is in demo mode, only Wallet Console test accounts can add passes.
 
 ### Login & security
 
@@ -66,10 +72,14 @@ In your Render dashboard, you'll need to set these environment variables for the
 | `API_BASE` | Optional | Default `https://api.pub2.passkit.io` |
 | `TIMEZONE` | Optional | Default `America/New_York` |
 | `SESSION_COOKIE_SECURE` | Optional | Set `true` for HTTPS (Render) |
+| `PUBLIC_BASE_URL` | Recommended | Public HTTPS app URL used in emailed pass links and Google Wallet assets |
 | `HEADCOUNT_REFRESH_SECONDS` | Optional | Headcount refresh interval in seconds (default 60; e.g. 30 for faster) |
 | `CHECKOUT_REPORT_EMAIL` | Optional | Email for checkout CSV |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | Optional | For checkout report email |
 | `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_REPLY_TO` | Optional | Preferred pass/report email path through Resend; sender defaults to `OLSC Brooklyn <DIGITALIDS@OLSCBROOKLYN.COM>`, reply-to defaults to `OLSC_BK@olscbrooklyn.com` |
+| `GOOGLE_WALLET_ISSUER_ID` | Google Wallet | OLSC Brooklyn issuer ID: `3388000000023188178` |
+| `GOOGLE_WALLET_SERVICE_ACCOUNT_JSON_BASE64` | Google Wallet | Base64-encoded JSON key for the Wallet issuer service account |
+| `GOOGLE_WALLET_CLASS_SUFFIX` | Optional | Override the Generic Pass class suffix |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional | Google OAuth; set redirect URI |
 | `ALLOWED_GOOGLE_EMAILS` | Optional | Comma-separated allowed emails |
 | `FOOTBALL_DATA_API_KEY` | If match updates run on Render | From football-data.org |
@@ -208,6 +218,20 @@ Same root cause as above: the headcount endpoint calls PassKit to list checked-i
 - Check Render logs: Dashboard → Your Service → Logs
 - Verify all required environment variables are set
 - Check that `requirements.txt` has all dependencies
+
+### Google Wallet link fails on Android
+
+**Symptoms:** The Add to Google Wallet link opens but fails with an authorization, issuer, or demo-mode error.
+
+**Fix:**
+
+1. Confirm `GOOGLE_WALLET_ISSUER_ID` in Render is exactly `3388000000023188178`.
+2. Decode `GOOGLE_WALLET_SERVICE_ACCOUNT_JSON_BASE64` locally and note `client_email`.
+3. In Google Pay & Wallet Console → **Users**, confirm that exact service account email is invited as **Developer** on the same issuer.
+4. In Google Pay & Wallet Console → **Test accounts**, confirm the Android Google account is listed.
+5. Save Render env changes and let the service redeploy, then resend a member pass email.
+
+The service account JSON is tied to the Cloud project/service account, not directly to the issuer ID. A key from the correct Cloud project can still work after an issuer ID correction, as long as that service account email has Developer access on the corrected issuer.
 
 ### Slow Loading
 - Render free tier spins down after 15 minutes of inactivity

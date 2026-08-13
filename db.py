@@ -125,7 +125,8 @@ def find_active_wallet_pass_by_token(raw_token):
         cur.execute(
             """
             SELECT m.id AS member_id, m.first_name, m.last_name,
-                   s.id AS season_id, s.name AS season_name
+                   s.id AS season_id, s.name AS season_name,
+                   wp.serial_number
             FROM wallet_passes wp
             JOIN members m ON m.id = wp.member_id
             JOIN seasons s ON s.id = wp.season_id

@@ -30,6 +30,7 @@ import bcrypt
 from team_abbreviations import format_match_display, abbreviate_team_name
 from match_updates import get_next_match
 from wallet_pass import AppleWalletConfigError, MemberPassData, build_member_pkpass, PASS_THEMES
+from google_wallet import GoogleWalletConfigError, build_google_wallet_save_url, google_wallet_configured
 import db
 # Notifications feature removed
 
@@ -113,6 +114,14 @@ def _headcount_refresh_seconds():
         return max(10, min(300, int(s)))
     except ValueError:
         return 60
+
+
+def _public_base_url():
+    """Canonical public URL used in emails, wallet assets, and save links."""
+    base_url = _env("PUBLIC_BASE_URL") or request.url_root.rstrip("/")
+    if base_url.startswith("http://") and "onrender.com" in base_url:
+        base_url = "https://" + base_url[len("http://"):]
+    return base_url.rstrip("/")
 
 config = {
     "PROGRAM_ID": _env("PROGRAM_ID", "3yyTsbqwmtXaiKZ5qWhqTP"),
@@ -601,7 +610,7 @@ body {{ font-family: Arial, sans-serif; color: #333; }}
     except Exception:
         return False
 
-def _send_pkpass_email(to_email, first_name, pkpass_bytes, mobile_pass_url=None):
+def _send_pkpass_email(to_email, first_name, pkpass_bytes, mobile_pass_url=None, google_wallet_url=None):
     """Email a signed .pkpass attachment to a member. Returns True if sent.
 
     Always includes a link to the mobile web pass page too — that's the
@@ -618,6 +627,14 @@ def _send_pkpass_email(to_email, first_name, pkpass_bytes, mobile_pass_url=None)
         f'<p style="font-size:12px; color:#888; text-align:center;">Or paste this link into a browser: '
         f'<a href="{mobile_pass_url}" style="color:#888;">{mobile_pass_url}</a></p>'
         if mobile_pass_url else ""
+    )
+    google_link_html = (
+        f'<p style="text-align:center; margin: 24px 0;">'
+        f'<a href="{google_wallet_url}" style="display:inline-block; background:#111111; color:#ffffff; '
+        f'padding:14px 28px; text-decoration:none; border-radius:8px; font-weight:600; font-size:14px;">'
+        f'Add to Google Wallet</a></p>'
+        f'<p style="font-size:12px; color:#888; text-align:center;">Android test accounts only while Google Wallet is in demo mode.</p>'
+        if google_wallet_url else ""
     )
     html = f"""<!DOCTYPE html>
 <html>
@@ -636,6 +653,7 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Aria
 <div class="content">
 <p>Hi {name},</p>
 <p>Your membership pass is attached to this email. Open the attachment on your iPhone and tap <strong>"Add to Apple Wallet."</strong></p>
+{google_link_html}
 {mobile_link_html}
 <p style="font-size:13px; color:#888;">If you already had a pass, this one replaces it — the old one will stop working the next time it's scanned.</p>
 <p>You'll Never Walk Alone!<br>— OLSC Brooklyn</p>
@@ -1367,8 +1385,43 @@ def _current_match_relevant_date():
         return ""
 
 
+@app.route('/wallet/assets/<filename>')
+def wallet_asset(filename):
+    """Public HTTPS assets for Google Wallet pass rendering."""
+    allowed = {
+        "olsc_wordmark_red.png": PASS_THEMES["away"]["wordmark_path"],
+        "olsc_wordmark_white.png": PASS_THEMES["home"]["wordmark_path"],
+        "olsc_crest_red.png": PASS_THEMES["home"]["crest_path"],
+    }
+    path = allowed.get(filename)
+    if not path:
+        return jsonify({"status": "error", "error": "asset not found"}), 404
+    return send_file(path, mimetype="image/png", max_age=86400)
+
+
+def _build_google_wallet_url(member, season, raw_token, serial_number, next_match_text, is_home):
+    if not google_wallet_configured():
+        return ""
+    try:
+        return build_google_wallet_save_url(
+            member_id=member["id"],
+            display_name=f"{member['first_name']} {member['last_name']}".strip(),
+            season_name=season["name"],
+            serial_number=serial_number,
+            barcode_value=raw_token,
+            next_match=next_match_text,
+            base_url=_public_base_url(),
+            is_home=is_home,
+        )
+    except GoogleWalletConfigError as e:
+        print(f"Google Wallet not configured: {e}")
+    except Exception as e:
+        print(f"Google Wallet link generation failed: {e}")
+    return ""
+
+
 def _issue_member_pkpass(member, season):
-    """Issue/rotate a wallet token and return signed pass bytes plus web URL."""
+    """Issue/rotate a wallet token and return signed pass bytes plus web URLs."""
     raw_token, serial_number = db.issue_wallet_token(member['id'], season['id'], platform='apple')
 
     next_match_text = ""
@@ -1391,20 +1444,21 @@ def _issue_member_pkpass(member, season):
         is_home=is_home,
         relevant_date=_current_match_relevant_date(),
     ))
-    mobile_pass_url = f"{request.url_root.rstrip('/')}{url_for('mobile_pass', token=raw_token)}"
-    return pkpass_bytes, mobile_pass_url
+    mobile_pass_url = f"{_public_base_url()}{url_for('mobile_pass', token=raw_token)}"
+    google_wallet_url = _build_google_wallet_url(member, season, raw_token, serial_number, next_match_text, is_home)
+    return pkpass_bytes, mobile_pass_url, google_wallet_url
 
 
 def _issue_and_email_pass(member, season):
     """Issue a wallet token, build a signed pass, and email it to a member."""
     try:
-        pkpass_bytes, mobile_pass_url = _issue_member_pkpass(member, season)
+        pkpass_bytes, mobile_pass_url, google_wallet_url = _issue_member_pkpass(member, season)
     except AppleWalletConfigError as e:
         return False, f"Wallet not configured: {e}"
     except Exception as e:
         return False, f"Could not build pass: {e}"
 
-    if _send_pkpass_email(member['email'], member['first_name'], pkpass_bytes, mobile_pass_url=mobile_pass_url):
+    if _send_pkpass_email(member['email'], member['first_name'], pkpass_bytes, mobile_pass_url=mobile_pass_url, google_wallet_url=google_wallet_url):
         return True, None
     return False, "Pass generated but email failed to send (check SMTP env vars)."
 
@@ -1442,7 +1496,7 @@ def admin_member_download_pass(member_id):
         return redirect(url_for('admin_members'))
 
     try:
-        pkpass_bytes, _mobile_pass_url = _issue_member_pkpass(member, season)
+        pkpass_bytes, _mobile_pass_url, _google_wallet_url = _issue_member_pkpass(member, season)
     except AppleWalletConfigError as e:
         return redirect(url_for('admin_members', resend_error=f"Wallet not configured: {e}"))
     except Exception as e:
@@ -1584,7 +1638,7 @@ def mobile_pass(token):
     if not record:
         return render_template('mobile_pass.html', found=False), 404
 
-    barcode_url = f"{request.url_root.rstrip('/')}/checkin/t/{token}"
+    barcode_url = f"{_public_base_url()}/checkin/t/{token}"
 
     next_match_text = ""
     is_home = True
@@ -1597,6 +1651,21 @@ def mobile_pass(token):
         next_match_text = ""
 
     theme = PASS_THEMES["home"] if is_home else PASS_THEMES["away"]
+    google_wallet_url = _build_google_wallet_url(
+        {
+            "id": record["member_id"],
+            "first_name": record["first_name"],
+            "last_name": record["last_name"],
+        },
+        {
+            "id": record["season_id"],
+            "name": record["season_name"],
+        },
+        token,
+        record.get("serial_number") or f"OLSC-{record['member_id']}-{record['season_id']}",
+        next_match_text,
+        is_home,
+    )
 
     return render_template(
         'mobile_pass.html',
@@ -1607,6 +1676,7 @@ def mobile_pass(token):
         qr_data_uri=_qr_data_uri(barcode_url),
         is_home=is_home,
         wordmark_data_uri=_asset_data_uri(theme["wordmark_path"]),
+        google_wallet_url=google_wallet_url,
     )
 
 
