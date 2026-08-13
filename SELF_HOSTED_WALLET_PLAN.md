@@ -38,7 +38,7 @@ Gate-by-gate (see full list under "Go/No-Go Gates" below):
 | Scanner scans the QR | **Done (Aug 10): deployed to Render and scanning in production**, not just locally. |
 | Fresh scan creates a check-in | **Done (Aug 10): confirmed working on Render** against live Supabase data. |
 | Duplicate scan shows "already used" | Confirming now (Aug 10) on production. |
-| Google Wallet demo-mode links | **Built (Aug 13):** the app now signs Google Wallet Generic Pass Save URLs using `GOOGLE_WALLET_SERVICE_ACCOUNT_JSON_BASE64` and issuer `3388000000023188178`. The same raw token used by Apple Wallet/mobile web is encoded in the Google Wallet QR, so `/scanner` behavior stays identical. Links are included in pass emails and on `/pass/<token>` when Google config is present. Still needs real Android add-to-wallet testing with an approved test account after deploy. |
+| Google Wallet demo-mode links | **Built (Aug 13):** the app now signs Google Wallet Generic Pass Save URLs using `GOOGLE_WALLET_SERVICE_ACCOUNT_JSON_BASE64` and issuer `3388000000023170524`. The same raw token used by Apple Wallet/mobile web is encoded in the Google Wallet QR, so `/scanner` behavior stays identical. Links are included in pass emails and on `/pass/<token>` when Google config is present. Still needs real Android add-to-wallet testing with an approved test account after deploy. |
 | Last-match/check-in CSV export | **Not started** |
 | Documented resend flow | Built and deployed; pass/report email now uses Resend first with SMTP fallback. Render has `RESEND_API_KEY`; default sender is `OLSC Brooklyn <DIGITALIDS@OLSCBROOKLYN.COM>` and default reply-to is `OLSC_BK@olscbrooklyn.com`. **Redesigned (Aug 11):** the fulfillment email (`_send_pkpass_email`'s HTML, shared by both the Resend and SMTP paths) no longer uses a generic red/green gradient + soccer emoji — now uses the real crest+wordmark image and a proper red CTA button for the Android/mobile-pass link, matching the pass and web page design language. Verified by rendering to a local file and viewing in-browser (not sent as a real test email, since Resend/SMTP are both live now). |
 | Automatic pass delivery on member add | **Done (Aug 10):** adding a member via `/admin/members` now automatically issues a token, builds a real signed pass, and emails it — same underlying logic as "Resend Pass" (extracted into a shared `_issue_and_email_pass` helper). Deliberately scoped to the single-add form only, not CSV bulk import (importing 100 rows shouldn't silently fire 100 emails). Verified: pass/token get created even when email fails, and the failure is surfaced clearly to the admin rather than silently swallowed. |
@@ -276,7 +276,7 @@ Later:
 Current setup:
 
 - Google Wallet API Issuer account exists.
-- Issuer ID: `3388000000023188178`.
+- Issuer ID: `3388000000023170524`.
 - Assume demo mode until publishing access is explicitly requested and approved.
 - Code wiring exists in demo mode: pass emails and `/pass/<token>` include an Add to Google Wallet link when `GOOGLE_WALLET_ISSUER_ID` and `GOOGLE_WALLET_SERVICE_ACCOUNT_JSON_BASE64` are configured.
 - Google Wallet uses a Generic Pass class/object embedded in a signed Save-to-Wallet JWT. Class/object creation happens just in time when an approved test account taps the link.
@@ -290,7 +290,7 @@ Required:
 - Save-to-Google-Wallet link. Current implementation generates this during pass issuance and mobile-pass rendering.
 - Publishing access before issuing passes broadly to members.
 - Render env vars:
-  - `GOOGLE_WALLET_ISSUER_ID=3388000000023188178`
+  - `GOOGLE_WALLET_ISSUER_ID=3388000000023170524`
   - `GOOGLE_WALLET_SERVICE_ACCOUNT_JSON_BASE64=<base64 service account JSON>`
   - Optional `GOOGLE_WALLET_CLASS_SUFFIX=<stable class suffix>`
   - Recommended `PUBLIC_BASE_URL=https://<render-app-host>`
@@ -298,7 +298,7 @@ Required:
 Testing gotcha (Aug 13):
 
 - The service account JSON is tied to the Google Cloud project/service account, not directly to the Wallet Issuer ID.
-- If Android testing fails with authorization/issuer errors, first verify `GOOGLE_WALLET_ISSUER_ID` in Render is `3388000000023188178` and that the exact service account email from the JSON key has been invited as a **Developer** on that same Wallet issuer.
+- If Android testing fails with authorization/issuer errors, first verify `GOOGLE_WALLET_ISSUER_ID` in Render is `3388000000023170524` and that the exact service account email from the JSON key has been invited as a **Developer** on that same Wallet issuer.
 - A JSON key generated while logged into a different Google account can still be valid if it belongs to the intended Cloud project and its service account has Developer access on the correct Wallet issuer.
 
 MVP can come after Apple Wallet if most members use iPhone.
@@ -761,7 +761,7 @@ a real member email send verified after Render finishes redeploying.
 ### Phase 5: Google Wallet MVP
 
 - Post-launch.
-- Issuer ID obtained: `3388000000023188178`.
+- Issuer ID obtained: `3388000000023170524`.
 - Set up Google Cloud service account and Render env vars.
 - Create Google Wallet class/object only after Apple Wallet launch is stable.
 - Generate Save-to-Google-Wallet links.

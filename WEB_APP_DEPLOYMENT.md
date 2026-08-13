@@ -38,7 +38,7 @@ In your Render dashboard, you'll need to set these environment variables for the
   - Or use Resend: `RESEND_API_KEY`, optional `RESEND_FROM_EMAIL` (defaults to `OLSC Brooklyn <DIGITALIDS@OLSCBROOKLYN.COM>`), optional `RESEND_REPLY_TO` (defaults to `OLSC_BK@olscbrooklyn.com`).
   If these are set, the report is sent as an attachment after each bulk checkout.
 - **Google Wallet demo-mode issuing:** Set:
-  - `GOOGLE_WALLET_ISSUER_ID` - `3388000000023188178`.
+  - `GOOGLE_WALLET_ISSUER_ID` - `3388000000023170524`.
   - `GOOGLE_WALLET_SERVICE_ACCOUNT_JSON_BASE64` - Base64 of the Google Cloud service account JSON key whose service account email is invited as **Developer** on that Wallet issuer.
   - `GOOGLE_WALLET_CLASS_SUFFIX` - Optional. Defaults to a season-based OLSC Brooklyn Digital ID class suffix.
   While the issuer is in demo mode, only Wallet Console test accounts can add passes.
@@ -77,7 +77,7 @@ In your Render dashboard, you'll need to set these environment variables for the
 | `CHECKOUT_REPORT_EMAIL` | Optional | Email for checkout CSV |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | Optional | For checkout report email |
 | `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_REPLY_TO` | Optional | Preferred pass/report email path through Resend; sender defaults to `OLSC Brooklyn <DIGITALIDS@OLSCBROOKLYN.COM>`, reply-to defaults to `OLSC_BK@olscbrooklyn.com` |
-| `GOOGLE_WALLET_ISSUER_ID` | Google Wallet | OLSC Brooklyn issuer ID: `3388000000023188178` |
+| `GOOGLE_WALLET_ISSUER_ID` | Google Wallet | OLSC Brooklyn issuer ID: `3388000000023170524` |
 | `GOOGLE_WALLET_SERVICE_ACCOUNT_JSON_BASE64` | Google Wallet | Base64-encoded JSON key for the Wallet issuer service account |
 | `GOOGLE_WALLET_CLASS_SUFFIX` | Optional | Override the Generic Pass class suffix |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional | Google OAuth; set redirect URI |
@@ -225,7 +225,7 @@ Same root cause as above: the headcount endpoint calls PassKit to list checked-i
 
 **Fix:**
 
-1. Confirm `GOOGLE_WALLET_ISSUER_ID` in Render is exactly `3388000000023188178`.
+1. Confirm `GOOGLE_WALLET_ISSUER_ID` in Render is exactly `3388000000023170524`.
 2. Decode `GOOGLE_WALLET_SERVICE_ACCOUNT_JSON_BASE64` locally and note `client_email`.
 3. In Google Pay & Wallet Console → **Users**, confirm that exact service account email is invited as **Developer** on the same issuer.
 4. In Google Pay & Wallet Console → **Test accounts**, confirm the Android Google account is listed.
