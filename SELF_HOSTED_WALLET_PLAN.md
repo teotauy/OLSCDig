@@ -301,6 +301,19 @@ Testing gotcha (Aug 13):
 - If Android testing fails with authorization/issuer errors, first verify `GOOGLE_WALLET_ISSUER_ID` in Render is `3388000000023170524` and that the exact service account email from the JSON key has been invited as a **Developer** on that same Wallet issuer.
 - A JSON key generated while logged into a different Google account can still be valid if it belongs to the intended Cloud project and its service account has Developer access on the correct Wallet issuer.
 
+Aug 13 debugging handoff:
+
+- User hit `Something went wrong. Please try again.` at `pay.google.com/gp/v/save/...` on desktop Safari while logged into `angusisthenewblack@gmail.com`. This should be a valid test surface; lack of an Android device is not, by itself, the blocker.
+- We initially confused two issuer IDs. Treat `3388000000023170524` as the authoritative OLSC Brooklyn Google Wallet issuer ID. Older doc references to `3388000000023188178` were corrected, and Render was reported to match `3388000000023170524`.
+- `GOOGLE_WALLET_SERVICE_ACCOUNT_JSON_BASE64` was decoded locally with a helper script. It is valid base64 JSON. It contains:
+  - `client_email`: `olsc-wallet-pass-issuer@olsc-digital-id.iam.gserviceaccount.com`
+  - `project_id`: `olsc-digital-id`
+- Do not regenerate the base64 key just because the issuer ID changed. Regenerate only if switching service accounts/keys or if the current service account cannot be authorized on the correct issuer.
+- User confirmed the service account already appears in the Google Pay & Wallet Console user invite flow with **Developer** access (`The user has already been added.`). The human Gmail was also added to test accounts. Do not keep looping on the same basic permission instructions unless new evidence shows the wrong issuer/account is selected.
+- We pushed commit `6b1a9f8` to make the just-in-time Generic Class match Google's sample more closely: `generic_class = {"id": class_id}` only, with default class suffix bumped to `_v2` to avoid reusing a possibly bad first demo class. Old save links remain invalid; only fresh links generated after Render deploy can test this.
+- Current implementation still uses the signed Save-to-Wallet JWT path with embedded `genericClasses` and `genericObjects`, not explicit REST API class/object creation first.
+- Recommended next step for Claude: stop guessing from the generic Google error page. Capture/decode the fresh signed JWT payload from the failing `pay.google.com/gp/v/save/...` link and verify issuer ID, class ID, object ID, service account `iss`, `origins`, logo URL, and barcode payload. If payload looks correct, use the Google Wallet REST API with the same service account to create/get the Generic Class/Object directly so Google returns a real API error instead of the opaque browser message.
+
 MVP can come after Apple Wallet if most members use iPhone.
 
 **Decision (Aug 7):** Google Wallet is in scope for launch, not deferred
