@@ -39,7 +39,7 @@ Gate-by-gate (see full list under "Go/No-Go Gates" below):
 | Fresh scan creates a check-in | **Done (Aug 10): confirmed working on Render** against live Supabase data. |
 | Duplicate scan shows "already used" | Confirming now (Aug 10) on production. |
 | Last-match/check-in CSV export | **Not started** |
-| Documented resend flow | Built and deployed; pass/report email now uses Resend first with SMTP fallback. Render has `RESEND_API_KEY`; default sender is `OLSC Brooklyn <DIGITALIDS@OLSCBROOKLYN.COM>` and default reply-to is `OLSC_BK@olscbrooklyn.com`. |
+| Documented resend flow | Built and deployed; pass/report email now uses Resend first with SMTP fallback. Render has `RESEND_API_KEY`; default sender is `OLSC Brooklyn <DIGITALIDS@OLSCBROOKLYN.COM>` and default reply-to is `OLSC_BK@olscbrooklyn.com`. **Redesigned (Aug 11):** the fulfillment email (`_send_pkpass_email`'s HTML, shared by both the Resend and SMTP paths) no longer uses a generic red/green gradient + soccer emoji — now uses the real crest+wordmark image and a proper red CTA button for the Android/mobile-pass link, matching the pass and web page design language. Verified by rendering to a local file and viewing in-browser (not sent as a real test email, since Resend/SMTP are both live now). |
 | Automatic pass delivery on member add | **Done (Aug 10):** adding a member via `/admin/members` now automatically issues a token, builds a real signed pass, and emails it — same underlying logic as "Resend Pass" (extracted into a shared `_issue_and_email_pass` helper). Deliberately scoped to the single-add form only, not CSV bulk import (importing 100 rows shouldn't silently fire 100 emails). Verified: pass/token get created even when email fails, and the failure is surfaced clearly to the admin rather than silently swallowed. |
 
 **Biggest remaining lift:** production verification. The hosted Wallet pass
@@ -275,7 +275,7 @@ Later:
 Current setup:
 
 - Google Wallet API Issuer account exists.
-- Issuer ID: `3388000000023170524`.
+- Issuer ID: `3388000000023188178`.
 - Assume demo mode until publishing access is explicitly requested and approved.
 
 Required:
@@ -285,6 +285,12 @@ Required:
 - Wallet class/object creation.
 - Save-to-Google-Wallet link.
 - Publishing access before issuing passes broadly to members.
+
+Testing gotcha (Aug 13):
+
+- The service account JSON is tied to the Google Cloud project/service account, not directly to the Wallet Issuer ID.
+- If Android testing fails with authorization/issuer errors, first verify `GOOGLE_WALLET_ISSUER_ID` in Render is `3388000000023188178` and that the exact service account email from the JSON key has been invited as a **Developer** on that same Wallet issuer.
+- A JSON key generated while logged into a different Google account can still be valid if it belongs to the intended Cloud project and its service account has Developer access on the correct Wallet issuer.
 
 MVP can come after Apple Wallet if most members use iPhone.
 
@@ -746,7 +752,7 @@ a real member email send verified after Render finishes redeploying.
 ### Phase 5: Google Wallet MVP
 
 - Post-launch.
-- Issuer ID obtained: `3388000000023170524`.
+- Issuer ID obtained: `3388000000023188178`.
 - Set up Google Cloud service account and Render env vars.
 - Create Google Wallet class/object only after Apple Wallet launch is stable.
 - Generate Save-to-Google-Wallet links.

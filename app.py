@@ -609,29 +609,39 @@ def _send_pkpass_email(to_email, first_name, pkpass_bytes, mobile_pass_url=None)
     .pkpass attachment.
     """
     name = first_name or "Member"
+    wordmark_uri = _asset_data_uri(PASS_THEMES["home"]["wordmark_path"])
     mobile_link_html = (
-        f'<p>On Android (or if the attachment doesn\'t work), use this link instead: '
-        f'<a href="{mobile_pass_url}">{mobile_pass_url}</a></p>'
+        f'<p style="text-align:center; margin: 24px 0;">'
+        f'<a href="{mobile_pass_url}" style="display:inline-block; background:#c8102e; color:#ffffff; '
+        f'padding:14px 28px; text-decoration:none; border-radius:8px; font-weight:600; font-size:14px;">'
+        f'View Pass on Android</a></p>'
+        f'<p style="font-size:12px; color:#888; text-align:center;">Or paste this link into a browser: '
+        f'<a href="{mobile_pass_url}" style="color:#888;">{mobile_pass_url}</a></p>'
         if mobile_pass_url else ""
     )
     html = f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><style>
-body {{ font-family: Arial, sans-serif; color: #333; }}
-.header {{ background: linear-gradient(135deg, #c8102e 0%, #00a65a 100%); color: white; padding: 20px; text-align: center; }}
-.content {{ padding: 20px; }}
-.footer {{ background: #f8f9fa; padding: 15px; text-align: center; font-size: 12px; color: #666; }}
+body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; color: #333; margin: 0; padding: 0; background: #f4f4f4; }}
+.wrapper {{ max-width: 480px; margin: 0 auto; background: white; }}
+.header {{ background: #c8102e; padding: 28px 20px; text-align: center; }}
+.header img {{ max-width: 220px; height: auto; display: block; margin: 0 auto; }}
+.content {{ padding: 28px 24px; }}
+.content p {{ line-height: 1.5; }}
+.footer {{ background: #f8f9fa; padding: 16px; text-align: center; font-size: 12px; color: #888; }}
 </style></head>
 <body>
-<div class="header"><h1>⚽ OLSC Brooklyn</h1></div>
+<div class="wrapper">
+<div class="header"><img src="{wordmark_uri}" alt="OLSC Brooklyn — Official Supporters Club"></div>
 <div class="content">
 <p>Hi {name},</p>
-<p>Your membership pass is attached to this email. Open the attachment on your iPhone and tap "Add to Apple Wallet."</p>
+<p>Your membership pass is attached to this email. Open the attachment on your iPhone and tap <strong>"Add to Apple Wallet."</strong></p>
 {mobile_link_html}
-<p>If you already had a pass, this one replaces it — the old one will stop working the next time it's scanned.</p>
+<p style="font-size:13px; color:#888;">If you already had a pass, this one replaces it — the old one will stop working the next time it's scanned.</p>
 <p>You'll Never Walk Alone!<br>— OLSC Brooklyn</p>
 </div>
-<div class="footer"><p>This email was sent to {to_email}.</p></div>
+<div class="footer">This email was sent to {to_email}.</div>
+</div>
 </body>
 </html>"""
     if _send_email_resend(
