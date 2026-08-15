@@ -9,10 +9,7 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #c8102e 0%, #00a65a 100%);
-            background-image: url("{{ url_for('static', filename='background.png') }}"), linear-gradient(135deg, #c8102e 0%, #00a65a 100%);
-            background-size: cover, auto;
-            background-position: center, 0 0;
+            background: #14161a;
             min-height: 100vh;
             padding: 14px;
         }
@@ -21,95 +18,122 @@
             margin: 0 auto;
             background: #fff;
             border-radius: 22px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.28);
+            box-shadow: 0 16px 48px rgba(0,0,0,0.4);
             overflow: hidden;
         }
+        /* Theme mirrors the 2026/27 kit — home (red) vs road (white, red
+           lettering) — driven by the same is_home source as the pass and
+           mobile web page, so scanner/pass/page never disagree. */
         .header {
-            padding: 18px;
+            padding: 22px 18px;
             text-align: center;
-            background: #111;
-            color: #fff;
         }
-        .header h1 { font-size: 24px; margin-bottom: 6px; }
-        .header p { color: #ddd; font-size: 14px; line-height: 1.35; }
+        .header.theme-home { background: linear-gradient(160deg, #c8102e 0%, #a30d25 100%); color: #fff; }
+        .header.theme-away { background: linear-gradient(160deg, #ffffff 0%, #f0f0f0 100%); color: #c8102e; border-bottom: 1px solid #eee; }
+        .wordmark { max-width: 170px; height: auto; display: block; margin: 0 auto 10px; }
+        .header .role { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; opacity: 0.75; margin-bottom: 2px; }
         .match {
             margin-top: 10px;
             display: inline-block;
-            background: rgba(255,255,255,0.12);
-            border: 1px solid rgba(255,255,255,0.18);
             border-radius: 999px;
-            padding: 8px 12px;
+            padding: 8px 14px;
             font-size: 13px;
+            font-weight: 600;
         }
-        .section { padding: 16px; }
+        .header.theme-home .match { background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.2); }
+        .header.theme-away .match { background: rgba(200,16,46,0.08); border: 1px solid rgba(200,16,46,0.2); }
+
+        .section { padding: 18px; }
         .camera-wrap {
-            border: 4px solid #111;
+            border: 4px solid #14161a;
             border-radius: 18px;
             overflow: hidden;
-            background: #111;
+            background: #14161a;
             min-height: 280px;
             transition: border-color 0.18s ease, box-shadow 0.18s ease;
         }
-        .camera-wrap.success {
-            border-color: #00a65a;
-            box-shadow: 0 0 0 8px rgba(0,166,90,0.18);
-        }
-        .camera-wrap.warning {
-            border-color: #ffb000;
-            box-shadow: 0 0 0 8px rgba(255,176,0,0.2);
-        }
-        .camera-wrap.error {
-            border-color: #c8102e;
-            box-shadow: 0 0 0 8px rgba(200,16,46,0.18);
-        }
-        #reader {
-            width: 100%;
-            min-height: 280px;
-        }
-        .controls {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-top: 12px;
-        }
+        .camera-wrap.success { border-color: #00a65a; box-shadow: 0 0 0 8px rgba(0,166,90,0.18); }
+        .camera-wrap.warning { border-color: #ffb000; box-shadow: 0 0 0 8px rgba(255,176,0,0.2); }
+        .camera-wrap.error { border-color: #c8102e; box-shadow: 0 0 0 8px rgba(200,16,46,0.18); }
+        #reader { width: 100%; min-height: 280px; }
+
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
         button {
             border: 0;
             border-radius: 12px;
             padding: 15px 12px;
-            font-size: 16px;
-            font-weight: 800;
+            font-size: 15px;
+            font-weight: 700;
             color: #fff;
             background: #c8102e;
             cursor: pointer;
+            transition: transform 0.1s ease, opacity 0.1s ease;
         }
-        button.secondary { background: #333; }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
-        .manual {
-            margin-top: 14px;
-            border-top: 1px solid #eee;
-            padding-top: 14px;
+        button:active { transform: scale(0.98); }
+        button.secondary { background: #22252b; }
+        button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+        .mode-toggle {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 14px;
         }
-        label {
+        .mode-btn {
+            background: #f0f0f0;
+            color: #666;
+            font-weight: 700;
+            padding: 12px;
+        }
+        .mode-btn.active {
+            background: #14161a;
+            color: #fff;
+        }
+
+        #rosterSearch {
+            width: 100%;
+            border: 2px solid #e4e4e4;
+            border-radius: 12px;
+            padding: 15px;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        #rosterSearch:focus { outline: none; border-color: #c8102e; }
+
+        .roster-results { display: flex; flex-direction: column; gap: 8px; }
+        .roster-result-row {
             display: block;
-            color: #555;
-            font-size: 13px;
-            margin-bottom: 6px;
+            width: 100%;
+            text-align: left;
+            background: #f7f7f7;
+            border: 2px solid #eee;
+            border-radius: 12px;
+            padding: 14px 16px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #14161a;
         }
+        .roster-result-row:active { background: #eee; }
+        .roster-hint { color: #999; font-size: 13px; text-align: center; padding: 10px; }
+        .sell-membership { text-align: center; padding: 10px 0; }
+        .sell-qr { width: 160px; height: 160px; margin: 8px auto; display: block; border: 4px solid #f0f0f0; border-radius: 12px; }
+
         input {
             width: 100%;
-            border: 2px solid #ddd;
+            border: 2px solid #e4e4e4;
             border-radius: 12px;
             padding: 13px;
             font-size: 15px;
         }
         input:focus { outline: none; border-color: #c8102e; }
+
         .result {
             margin: 16px;
             border-radius: 20px;
-            padding: 18px 14px;
+            padding: 20px 16px;
             text-align: center;
-            border: 4px solid #ddd;
-            background: #f7f7f7;
+            border: 4px solid #e4e4e4;
+            background: #fafafa;
             min-height: 132px;
             display: flex;
             flex-direction: column;
@@ -119,60 +143,39 @@
             top: 8px;
             z-index: 10;
         }
-        .result.idle { color: #555; }
-        .result.success {
-            background: #d9fbe6;
-            color: #063d1d;
-            border-color: #00a65a;
-            box-shadow: 0 0 0 8px rgba(0,166,90,0.18);
-        }
-        .result.warning {
-            background: #fff4cf;
-            color: #4a3300;
-            border-color: #ffb000;
-            box-shadow: 0 0 0 8px rgba(255,176,0,0.2);
-        }
-        .result.error {
-            background: #ffe1e6;
-            color: #5c0010;
-            border-color: #c8102e;
-            box-shadow: 0 0 0 8px rgba(200,16,46,0.18);
-        }
-        .result h2 { font-size: 38px; line-height: 1.0; margin-bottom: 8px; text-transform: uppercase; }
+        .result.idle { color: #666; }
+        .result.success { background: #d9fbe6; color: #063d1d; border-color: #00a65a; box-shadow: 0 0 0 8px rgba(0,166,90,0.18); }
+        .result.warning { background: #fff4cf; color: #4a3300; border-color: #ffb000; box-shadow: 0 0 0 8px rgba(255,176,0,0.2); }
+        .result.error { background: #ffe1e6; color: #5c0010; border-color: #c8102e; box-shadow: 0 0 0 8px rgba(200,16,46,0.18); }
+        .result h2 { font-size: 38px; line-height: 1.0; margin-bottom: 8px; letter-spacing: -0.5px; }
         .result .member { font-size: 23px; font-weight: 800; margin-bottom: 6px; }
-        .result .detail { font-size: 15px; line-height: 1.35; }
-        .ball {
-            display: none;
-            font-size: 32px;
-            margin-bottom: 6px;
-            animation: bounce 0.55s ease-in-out 4;
-        }
+        .result .detail { font-size: 15px; line-height: 1.4; }
+
+        .ball { display: none; font-size: 32px; margin-bottom: 6px; animation: bounce 0.55s ease-in-out 4; }
         .success .ball { display: block; }
         @keyframes bounce {
             0%, 100% { transform: translateY(0) scale(1); }
             50% { transform: translateY(-12px) scale(1.15); }
         }
-        .links {
-            padding: 0 16px 16px;
-            text-align: center;
-            font-size: 14px;
-        }
-        .links a { color: #c8102e; text-decoration: none; margin: 0 8px; }
-        .muted { color: #777; font-size: 13px; line-height: 1.35; }
+
+        .links { padding: 4px 18px 20px; text-align: center; font-size: 13px; }
+        .links a { color: #888; text-decoration: none; margin: 0 8px; }
+        .links a:hover { color: #c8102e; }
+
         @media (max-width: 430px) {
             body { padding: 8px; }
-            .header { padding: 14px; }
-            .result { margin: 10px; min-height: 118px; padding: 14px 10px; }
+            .header { padding: 16px; }
+            .result { margin: 10px; min-height: 118px; padding: 16px 12px; }
             .result h2 { font-size: 34px; }
-            .section { padding: 10px; }
+            .section { padding: 12px; }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>Door Scanner</h1>
-            <p>{{ season.name if season else 'No current season set' }}</p>
+        <div class="header {{ 'theme-home' if is_home else 'theme-away' }}">
+            <div class="role">Door Scanner</div>
+            <img class="wordmark" src="{{ wordmark_data_uri }}" alt="OLSC Brooklyn — Official Supporters Club">
             <div class="match">
                 {% if match %}
                     {{ match.label }}{% if match.kickoff %} · {{ match.kickoff }}{% endif %}
@@ -185,33 +188,35 @@
         <div id="result" class="result idle">
             <div class="ball">⚽</div>
             <h2>Ready</h2>
-            <div class="detail">Scan an Apple Wallet pass QR code.</div>
+            <div class="detail">Scan a pass QR code.</div>
             {% if not match %}
                 <div class="detail" style="margin-top:8px; font-weight:700;">Set a current match before the door opens.</div>
             {% endif %}
         </div>
 
         <div class="section">
-            <div id="cameraWrap" class="camera-wrap">
-                <div id="reader"></div>
-            </div>
-            <div class="controls">
-                <button id="startBtn" type="button">Start Camera</button>
-                <button id="stopBtn" type="button" class="secondary" disabled>Stop</button>
+            <div class="mode-toggle">
+                <button id="modeCameraBtn" type="button" class="mode-btn active">Camera</button>
+                <button id="modeSearchBtn" type="button" class="mode-btn">Search</button>
             </div>
 
-            <div class="manual">
-                <label for="manualToken">Manual backup: paste scanned URL or token</label>
-                <input id="manualToken" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://.../checkin/t/...">
-                <button id="manualBtn" type="button" style="width:100%; margin-top:10px;">Check In Manually</button>
+            <div id="cameraMode">
+                <div id="cameraWrap" class="camera-wrap">
+                    <div id="reader"></div>
+                </div>
+                <div class="controls">
+                    <button id="startBtn" type="button">Start Camera</button>
+                    <button id="stopBtn" type="button" class="secondary" disabled>Stop</button>
+                </div>
+            </div>
+
+            <div id="searchMode" style="display:none;">
+                <input id="rosterSearch" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Type at least 3 letters of a name...">
+                <div id="rosterResults" class="roster-results"></div>
             </div>
         </div>
 
-        <div class="links">
-            <a href="{{ url_for('admin_matches') }}">Matches</a>
-            <a href="{{ url_for('admin_members') }}">Members</a>
-            <a href="{{ url_for('admin_index') }}">Admin Home</a>
-        </div>
+        {% include '_admin_footer.html' %}
     </div>
 
     <script>
@@ -219,8 +224,6 @@
         let busy = false;
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
-        const manualBtn = document.getElementById('manualBtn');
-        const manualToken = document.getElementById('manualToken');
         const result = document.getElementById('result');
         const cameraWrap = document.getElementById('cameraWrap');
         let audioContext = null;
@@ -338,7 +341,6 @@
                 setResult('error', 'Error', '', 'Scanner could not reach the server.');
                 playFeedback('error');
             } finally {
-                manualToken.value = '';
                 window.setTimeout(() => { busy = false; }, 1800);
             }
         }
@@ -373,15 +375,122 @@
             }
             startBtn.disabled = false;
             stopBtn.disabled = true;
-            setResult('idle', 'Ready', '', 'Scan an Apple Wallet pass QR code.');
+            setResult('idle', 'Ready', '', 'Scan a pass QR code.');
         }
 
         startBtn.addEventListener('click', startCamera);
         stopBtn.addEventListener('click', stopCamera);
-        manualBtn.addEventListener('click', () => submitScan(manualToken.value));
-        manualToken.addEventListener('keydown', event => {
-            if (event.key === 'Enter') submitScan(manualToken.value);
+
+        // Auto-start on load — one less tap for door staff every time this
+        // page opens. Falls back silently to the Start button if the
+        // browser blocks camera access without an explicit user gesture.
+        window.addEventListener('DOMContentLoaded', () => {
+            startCamera().catch(() => {});
         });
+
+        // --- Roster search fallback ---
+        // Names + IDs only for the current season (no email/phone — see
+        // /api/members/roster.json), fetched once and filtered entirely
+        // client-side so search stays instant regardless of venue wifi.
+        // Nothing shows until 3+ characters are typed, so one common
+        // letter doesn't dump half the roster onto a small screen.
+        const modeCameraBtn = document.getElementById('modeCameraBtn');
+        const modeSearchBtn = document.getElementById('modeSearchBtn');
+        const cameraMode = document.getElementById('cameraMode');
+        const searchMode = document.getElementById('searchMode');
+        const rosterSearch = document.getElementById('rosterSearch');
+        const rosterResults = document.getElementById('rosterResults');
+        let roster = [];
+        let rosterLoaded = false;
+
+        async function loadRosterOnce() {
+            if (rosterLoaded) return;
+            try {
+                const response = await fetch('{{ url_for("api_members_roster") }}');
+                roster = await response.json();
+                rosterLoaded = true;
+            } catch (error) {
+                rosterResults.innerHTML = '<div class="roster-hint">Could not load the roster. Check your connection.</div>';
+            }
+        }
+
+        function renderRosterResults(query) {
+            if (query.length < 3) {
+                rosterResults.innerHTML = '<div class="roster-hint">Type at least 3 letters to search.</div>';
+                return;
+            }
+            const q = query.toLowerCase();
+            const matches = roster.filter(m => m.name.toLowerCase().includes(q)).slice(0, 8);
+            if (matches.length === 0) {
+                rosterResults.innerHTML = `
+                    <div class="sell-membership">
+                        <div class="roster-hint" style="padding-bottom: 4px;">Not finding them? They may not have joined this season yet.</div>
+                        <img src="{{ shop_qr_data_uri }}" alt="Scan to join OLSC Brooklyn" class="sell-qr">
+                        <div class="roster-hint">Have them scan to join on the spot.</div>
+                    </div>
+                `;
+                return;
+            }
+            rosterResults.innerHTML = matches.map(m =>
+                `<button type="button" class="roster-result-row" data-member-id="${m.id}">${escapeHtml(m.name)}</button>`
+            ).join('');
+            rosterResults.querySelectorAll('.roster-result-row').forEach(row => {
+                row.addEventListener('click', () => checkInMemberId(row.dataset.memberId));
+            });
+        }
+
+        async function checkInMemberId(memberId) {
+            if (busy) return;
+            busy = true;
+            try {
+                const response = await fetch('{{ url_for("api_checkins_manual") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ member_id: memberId }),
+                });
+                const data = await response.json();
+
+                if (data.status === 'success' && data.result === 'checked_in') {
+                    setResult('success', 'Good', data.member.name, `${escapeHtml(data.match.label)}<br>Checked in ${escapeHtml(data.checked_in_at)}`);
+                    playFeedback('success');
+                } else if (data.status === 'success' && data.result === 'already_checked_in') {
+                    setResult('warning', 'Already Used', data.member.name, `${escapeHtml(data.match.label)}<br>First scan ${escapeHtml(data.checked_in_at || 'already recorded')}`);
+                    playFeedback('warning');
+                } else {
+                    setResult('error', 'Stop', '', escapeHtml(data.message || 'Could not check in.'));
+                    playFeedback('error');
+                }
+            } catch (error) {
+                setResult('error', 'Error', '', 'Could not reach the server.');
+                playFeedback('error');
+            } finally {
+                rosterSearch.value = '';
+                rosterResults.innerHTML = '';
+                window.setTimeout(() => { busy = false; }, 1800);
+            }
+        }
+
+        function setMode(mode) {
+            if (mode === 'search') {
+                modeCameraBtn.classList.remove('active');
+                modeSearchBtn.classList.add('active');
+                cameraMode.style.display = 'none';
+                searchMode.style.display = 'block';
+                stopCamera();
+                loadRosterOnce();
+                rosterSearch.focus();
+            } else {
+                modeSearchBtn.classList.remove('active');
+                modeCameraBtn.classList.add('active');
+                searchMode.style.display = 'none';
+                cameraMode.style.display = 'block';
+                startCamera().catch(() => {});
+            }
+        }
+
+        modeCameraBtn.addEventListener('click', () => setMode('camera'));
+        modeSearchBtn.addEventListener('click', () => setMode('search'));
+        rosterSearch.addEventListener('input', () => renderRosterResults(rosterSearch.value.trim()));
     </script>
 </body>
 </html>

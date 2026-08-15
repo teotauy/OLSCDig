@@ -50,6 +50,7 @@
         tr:hover { background: #fafafa; }
         .muted { color: #999; font-size: 13px; }
         .badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; background: #00a65a; color: white; }
+        .edit-link { color: #c8102e; text-decoration: none; font-size: 13px; }
 
         .links { text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0; }
         .links a { color: #c8102e; text-decoration: none; font-size: 14px; margin: 0 10px; }
@@ -58,7 +59,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <p class="brand">OLSC Brooklyn</p>
+            <img src="{{ wordmark_data_uri }}" alt="OLSC Brooklyn — Official Supporters Club" style="max-width: 200px; height: auto; margin: 0 auto 8px; display: block;">
             <h1>🗓️ Matches</h1>
             <p class="season">Season: {{ season.name if season else 'No current season set' }} &middot; {{ matches|length }} match(es)</p>
         </div>
@@ -111,6 +112,7 @@
                         <th>Competition</th>
                         <th>Kickoff</th>
                         <th>Current</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -128,6 +130,7 @@
                                 </form>
                             {% endif %}
                         </td>
+                        <td><a class="edit-link" href="{{ url_for('admin_export_match_checkins', match_id=m.id) }}">Export CSV</a></td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -137,12 +140,7 @@
             {% endif %}
         </div>
 
-        <div class="links">
-            <a href="{{ url_for('scanner') }}">Scanner</a>
-            <a href="{{ url_for('admin_members') }}">👥 Members</a>
-            <a href="{{ url_for('admin_index') }}">← Admin Home</a>
-            <a href="/logout">Logout</a>
-        </div>
+        {% include '_admin_footer.html' %}
     </div>
 </body>
 </html>

@@ -23,7 +23,7 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 from datetime import datetime, timedelta
-from flask import Flask, render_template, jsonify, request, session, redirect, url_for, send_file
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for, send_file, Response
 from dotenv import load_dotenv
 import pytz
 import bcrypt
@@ -46,9 +46,27 @@ app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'false'
 # Auth: stored hash file (gitignored); fallback to env
 HASH_FILE = os.path.join(os.path.dirname(__file__), '.admin_hash')
 ADMIN_USERNAME = (os.getenv('ADMIN_USERNAME') or '').strip()
+MEMBERSHIP_SHOP_URL = "https://olscbrooklyn.com/shop/p/lfc-brooklyn-2627-membership"
 LOGIN_RATE_LIMIT_WINDOW = 900   # 15 minutes
 LOGIN_RATE_LIMIT_MAX = 5
 _login_attempts = {}  # ip -> [timestamp, ...]
+
+RECOVERY_RATE_LIMIT_WINDOW = 900   # 15 minutes
+RECOVERY_RATE_LIMIT_MAX = 5
+_recovery_attempts = {}  # ip -> [timestamp, ...]
+
+def _is_recovery_rate_limited(ip):
+    now = time.time()
+    if ip not in _recovery_attempts:
+        return False
+    _recovery_attempts[ip] = [t for t in _recovery_attempts[ip] if now - t < RECOVERY_RATE_LIMIT_WINDOW]
+    return len(_recovery_attempts[ip]) >= RECOVERY_RATE_LIMIT_MAX
+
+def _record_recovery_attempt(ip):
+    now = time.time()
+    _recovery_attempts.setdefault(ip, [])
+    _recovery_attempts[ip].append(now)
+    _recovery_attempts[ip] = [t for t in _recovery_attempts[ip] if now - t < RECOVERY_RATE_LIMIT_WINDOW]
 
 def _get_stored_hash():
     """Read admin password hash from file or env. File takes precedence."""
@@ -315,7 +333,7 @@ def index():
 @app.route('/admin')
 def admin_index():
     """Admin page with headcount display and checkout button."""
-    return render_template('index.html')
+    return render_template('index.html', wordmark_data_uri=_current_theme_wordmark_data_uri())
 
 @app.route('/add-member')
 def add_member_page():
@@ -609,6 +627,64 @@ body {{ font-family: Arial, sans-serif; color: #333; }}
         return True
     except Exception:
         return False
+
+def _send_signup_nudge_email(to_email):
+    """Email someone who asked for a pass but isn't a current-season member.
+    Points them at the real membership signup page. Returns True if sent."""
+    wordmark_uri = _asset_data_uri(PASS_THEMES["home"]["wordmark_path"])
+    signup_url = "https://olscbrooklyn.com/shop/p/lfc-brooklyn-2627-membership"
+    html = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><style>
+body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; color: #333; margin: 0; padding: 0; background: #f4f4f4; }}
+.wrapper {{ max-width: 480px; margin: 0 auto; background: white; }}
+.header {{ background: #c8102e; padding: 28px 20px; text-align: center; }}
+.header img {{ max-width: 220px; height: auto; display: block; margin: 0 auto; }}
+.content {{ padding: 28px 24px; }}
+.content p {{ line-height: 1.5; }}
+.footer {{ background: #f8f9fa; padding: 16px; text-align: center; font-size: 12px; color: #888; }}
+</style></head>
+<body>
+<div class="wrapper">
+<div class="header"><img src="{wordmark_uri}" alt="OLSC Brooklyn — Official Supporters Club"></div>
+<div class="content">
+<p>Hi,</p>
+<p>We looked for an active OLSC Brooklyn membership under this email and didn't find one.</p>
+<p>Membership renews every season, so if you joined previously but not yet for 2026/27, this would be why. If that's the case, you can join here:</p>
+<p style="text-align:center; margin: 24px 0;">
+<a href="{signup_url}" style="display:inline-block; background:#c8102e; color:#ffffff; padding:14px 28px; text-decoration:none; border-radius:8px; font-weight:600; font-size:14px;">Join OLSC Brooklyn</a>
+</p>
+<p style="font-size:13px; color:#888;">If you believe this is a mistake and you already have a current membership, reply to this email and we'll sort it out.</p>
+<p>You'll Never Walk Alone!<br>— OLSC Brooklyn</p>
+</div>
+<div class="footer">This email was sent to {to_email}.</div>
+</div>
+</body>
+</html>"""
+    if _send_email_resend(to_email, "Join OLSC Brooklyn for 2026/27", html=html):
+        return True
+
+    host = os.getenv("SMTP_HOST")
+    user = os.getenv("SMTP_USER")
+    password = os.getenv("SMTP_PASSWORD")
+    if not all([host, user, password]):
+        return False
+    port = int(os.getenv("SMTP_PORT", "587"))
+    from_addr = os.getenv("EMAIL_FROM", user)
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "Join OLSC Brooklyn for 2026/27"
+    msg["From"] = from_addr
+    msg["To"] = to_email
+    msg.attach(MIMEText(html, "html"))
+    try:
+        with smtplib.SMTP(host, port) as server:
+            server.starttls()
+            server.login(user, password)
+            server.sendmail(from_addr, [to_email], msg.as_string())
+        return True
+    except Exception:
+        return False
+
 
 def _send_pkpass_email(to_email, first_name, pkpass_bytes, mobile_pass_url=None, google_wallet_url=None):
     """Email a signed .pkpass attachment to a member. Returns True if sent.
@@ -1185,7 +1261,12 @@ def _localize_kickoff(value):
 
 
 def _extract_scan_token(raw_value):
-    """Accept either a raw wallet token or a full /checkin/t/<token> URL."""
+    """Accept a raw wallet token, a full /checkin/t/<token> URL (what's
+    actually embedded in the QR), or a /pass/<token> URL (the mobile pass
+    page / the link that's actually in the resend/recovery emails — this is
+    the one realistic thing a person might have as copyable text, so it
+    needs to work here too, not just the QR-only URL shape).
+    """
     value = (raw_value or "").strip()
     if not value:
         return ""
@@ -1195,12 +1276,14 @@ def _extract_scan_token(raw_value):
             parts = [part for part in parsed.path.split("/") if part]
             if len(parts) >= 3 and parts[-3:-1] == ["checkin", "t"]:
                 return parts[-1].strip()
-            if len(parts) >= 2 and parts[-2:] and parts[-2] == "t":
+            if len(parts) >= 2 and parts[-2] in ("t", "pass"):
                 return parts[-1].strip()
     except Exception:
         pass
     if "/checkin/t/" in value:
         return value.rsplit("/checkin/t/", 1)[-1].split("?", 1)[0].split("#", 1)[0].strip()
+    if "/pass/" in value:
+        return value.rsplit("/pass/", 1)[-1].split("?", 1)[0].split("#", 1)[0].strip()
     return value
 
 
@@ -1324,6 +1407,7 @@ def admin_members():
         error=error,
         added=added,
         info=info,
+        wordmark_data_uri=_current_theme_wordmark_data_uri(),
     )
 
 
@@ -1463,6 +1547,22 @@ def _issue_and_email_pass(member, season):
     return False, "Pass generated but email failed to send (check SMTP env vars)."
 
 
+@app.route('/admin/members/send-signup-link', methods=['POST'])
+def admin_send_signup_link():
+    """For when a lookup comes up empty: email the person a link to buy
+    membership instead of just turning them away."""
+    if not require_password():
+        return redirect(url_for('login'))
+
+    to_email = (request.form.get('email') or '').strip().lower()
+    if not to_email:
+        return redirect(url_for('admin_members', resend_error="Enter an email to send the signup link."))
+
+    if _send_signup_nudge_email(to_email):
+        return redirect(url_for('admin_members', signup_sent=to_email))
+    return redirect(url_for('admin_members', resend_error="Could not send the signup link (check SMTP/Resend env vars)."))
+
+
 @app.route('/admin/members/<int:member_id>/resend-pass', methods=['POST'])
 def admin_member_resend_pass(member_id):
     if not require_password():
@@ -1595,7 +1695,97 @@ def admin_matches():
         if m['kickoff_at']:
             m['kickoff_at'] = m['kickoff_at'].astimezone(tz)
 
-    return render_template('admin_matches.html', season=season, matches=matches, error=error)
+    return render_template(
+        'admin_matches.html',
+        season=season,
+        matches=matches,
+        error=error,
+        wordmark_data_uri=_current_theme_wordmark_data_uri(),
+    )
+
+
+@app.route('/admin/matches/<int:match_id>/export-checkins.csv')
+def admin_export_match_checkins(match_id):
+    """CSV of everyone checked in to a specific match."""
+    if not require_password():
+        return redirect(url_for('login'))
+
+    with db.cursor() as cur:
+        cur.execute("SELECT * FROM matches WHERE id = %s", (match_id,))
+        match = cur.fetchone()
+        if not match:
+            return jsonify({"status": "error", "error": "Match not found"}), 404
+
+        cur.execute(
+            """
+            SELECT m.first_name, m.last_name, m.email, m.phone,
+                   c.checked_in_at, c.source
+            FROM checkins c
+            JOIN members m ON m.id = c.member_id
+            WHERE c.match_id = %s
+            ORDER BY c.checked_in_at
+            """,
+            (match_id,),
+        )
+        rows = cur.fetchall()
+
+    tz = pytz.timezone(os.getenv('TIMEZONE', 'America/New_York'))
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["first_name", "last_name", "email", "phone", "checked_in_at", "source"])
+    for r in rows:
+        checked_in_local = r['checked_in_at'].astimezone(tz).strftime('%Y-%m-%d %H:%M:%S %Z') if r['checked_in_at'] else ""
+        writer.writerow([r['first_name'], r['last_name'], r['email'], r['phone'] or '', checked_in_local, r['source']])
+
+    filename = f"checkins_{match['opponent'].replace(' ', '_')}_{match_id}.csv"
+    return Response(
+        buf.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@app.route('/admin/members/export.csv')
+def admin_export_members():
+    """CSV of the current season's roster, with each member's check-in count."""
+    if not require_password():
+        return redirect(url_for('login'))
+
+    season = db.get_current_season()
+    if not season:
+        return jsonify({"status": "error", "error": "No current season set"}), 400
+
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            SELECT m.first_name, m.last_name, m.email, m.phone, m.created_at,
+                   (SELECT COUNT(*) FROM checkins c
+                    JOIN matches mt ON mt.id = c.match_id
+                    WHERE c.member_id = m.id AND mt.season_id = %s) AS checkins_this_season
+            FROM members m
+            JOIN member_seasons ms ON ms.member_id = m.id
+            WHERE ms.season_id = %s
+            ORDER BY m.last_name, m.first_name
+            """,
+            (season['id'], season['id']),
+        )
+        rows = cur.fetchall()
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["first_name", "last_name", "email", "phone", "checkins_this_season", "member_since"])
+    for r in rows:
+        writer.writerow([
+            r['first_name'], r['last_name'], r['email'], r['phone'] or '',
+            r['checkins_this_season'], r['created_at'].strftime('%Y-%m-%d') if r['created_at'] else '',
+        ])
+
+    filename = f"members_{season['name'].replace('/', '-')}.csv"
+    return Response(
+        buf.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @app.route('/admin/matches/<int:match_id>/set-current', methods=['POST'])
@@ -1624,6 +1814,84 @@ def _asset_data_uri(path):
     images directly into a template with no separate static route."""
     encoded = base64.b64encode(path.read_bytes()).decode("ascii")
     return f"data:image/png;base64,{encoded}"
+
+
+def _current_theme():
+    """(is_home, wordmark_data_uri) for whatever page is rendering right
+    now, using the same is_home source (get_next_match) as the pass and
+    mobile web page, so nothing can disagree about which kit's showing."""
+    is_home = True
+    try:
+        next_match = get_next_match()
+        if next_match:
+            is_home = bool(next_match.get("is_home", True))
+    except Exception:
+        pass
+    theme = PASS_THEMES["home"] if is_home else PASS_THEMES["away"]
+    return is_home, _asset_data_uri(theme["wordmark_path"])
+
+
+def _current_theme_wordmark_data_uri():
+    """Convenience wrapper for callers that only need the image."""
+    return _current_theme()[1]
+
+
+@app.route('/recover-pass', methods=['GET', 'POST'])
+def recover_pass():
+    """Public self-service pass recovery.
+
+    Deliberately reveals found-vs-not-found (see plan doc "Decision
+    Aug 13-14 under Self-Service Pass Recovery") instead of a generic
+    "if that email is active..." message. Membership is single-season, so
+    "not found" usually just means "you haven't joined this season yet" —
+    a real conversion moment, not just an error state.
+    """
+    message = None
+    message_type = None  # 'success' | 'not_found' | 'error'
+
+    if request.method == 'POST':
+        ip = request.remote_addr or 'unknown'
+        email = (request.form.get('email') or '').strip().lower()
+
+        if not email:
+            message = "Enter your email address."
+            message_type = "error"
+        elif _is_recovery_rate_limited(ip):
+            message = "Too many attempts. Please try again in a bit."
+            message_type = "error"
+        else:
+            _record_recovery_attempt(ip)
+            season = db.get_current_season()
+            member = None
+            if season:
+                with db.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT m.* FROM members m
+                        JOIN member_seasons ms ON ms.member_id = m.id
+                        WHERE ms.season_id = %s AND m.email = %s
+                        """,
+                        (season['id'], email),
+                    )
+                    member = cur.fetchone()
+
+            if member and season:
+                ok, error_detail = _issue_and_email_pass(member, season)
+                if ok:
+                    message_type = "success"
+                    message = "Found it! A fresh pass is on its way to your email."
+                else:
+                    message_type = "error"
+                    message = "We found your membership but couldn't send the email just now. Try again shortly, or reach out to the club."
+            else:
+                message_type = "not_found"
+
+    return render_template(
+        'recover_pass.html',
+        message=message,
+        message_type=message_type,
+        shop_url=MEMBERSHIP_SHOP_URL,
+    )
 
 
 @app.route('/pass/<token>')
@@ -1687,10 +1955,16 @@ def scanner():
 
     season = db.get_current_season()
     match = db.get_current_match()
+    is_home, wordmark_data_uri = _current_theme()
+
     return render_template(
         'scanner.html',
         season=season,
         match=_format_match_for_scan(match),
+        is_home=is_home,
+        wordmark_data_uri=wordmark_data_uri,
+        shop_qr_data_uri=_qr_data_uri(MEMBERSHIP_SHOP_URL),
+        shop_url=MEMBERSHIP_SHOP_URL,
     )
 
 
@@ -1806,6 +2080,133 @@ def api_checkins_scan():
             "code": "server_error",
             "message": f"Scanner failed: {e}",
         }), 500
+
+
+def _format_checkin_time(checked_in_at):
+    if not checked_in_at:
+        return ""
+    try:
+        tz = pytz.timezone(os.getenv('TIMEZONE', 'America/New_York'))
+        return checked_in_at.astimezone(tz).strftime('%-I:%M:%S %p')
+    except Exception:
+        return str(checked_in_at)
+
+
+@app.route('/api/checkins/manual', methods=['POST'])
+def api_checkins_manual():
+    """Check in a member found via the roster-search fallback, bypassing
+    the wallet token entirely — the admin has already identified who this
+    is by name, so there's no QR/token to look up. Same idempotency and
+    response shape as /api/checkins/scan, but source='manual' so the two
+    paths stay distinguishable in exports later."""
+    if not require_password():
+        return jsonify({"status": "error", "code": "unauthorized", "message": "Login required."}), 401
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        member_id = int(payload.get('member_id'))
+    except (TypeError, ValueError):
+        return jsonify({"status": "error", "code": "missing_member_id", "message": "No member selected."}), 400
+
+    try:
+        with db.cursor() as cur:
+            cur.execute("SELECT id, name FROM seasons WHERE is_current")
+            season = cur.fetchone()
+            if not season:
+                return jsonify({"status": "error", "code": "no_current_season", "message": "No current season is configured."}), 400
+
+            cur.execute("SELECT * FROM matches WHERE is_current")
+            match = cur.fetchone()
+            if not match:
+                return jsonify({"status": "error", "code": "no_current_match", "message": "No current match is configured. Set one in Matches before scanning."}), 400
+
+            cur.execute(
+                """
+                SELECT m.id, m.first_name, m.last_name, m.email
+                FROM members m
+                JOIN member_seasons ms ON ms.member_id = m.id
+                WHERE m.id = %s AND ms.season_id = %s
+                """,
+                (member_id, season['id']),
+            )
+            member = cur.fetchone()
+            if not member:
+                return jsonify({
+                    "status": "error",
+                    "code": "not_in_current_season",
+                    "message": "That member isn't in the current season.",
+                    "match": _format_match_for_scan(match),
+                }), 404
+
+            scanner_admin_id = session.get('username') or ADMIN_USERNAME or "admin"
+            cur.execute(
+                """
+                INSERT INTO checkins (member_id, match_id, scanner_admin_id, source)
+                VALUES (%s, %s, %s, 'manual')
+                ON CONFLICT (member_id, match_id) DO NOTHING
+                RETURNING id, checked_in_at
+                """,
+                (member['id'], match['id'], scanner_admin_id),
+            )
+            inserted = cur.fetchone()
+
+            if inserted:
+                result = "checked_in"
+                checked_in_at = inserted['checked_in_at']
+                message = "Checked in."
+            else:
+                cur.execute(
+                    "SELECT id, checked_in_at FROM checkins WHERE member_id = %s AND match_id = %s",
+                    (member['id'], match['id']),
+                )
+                existing = cur.fetchone()
+                result = "already_checked_in"
+                checked_in_at = existing['checked_in_at'] if existing else None
+                message = "Already used for this match."
+
+        return jsonify({
+            "status": "success",
+            "result": result,
+            "message": message,
+            "checked_in_at": _format_checkin_time(checked_in_at),
+            "member": {
+                "id": member['id'],
+                "name": f"{member['first_name']} {member['last_name']}".strip(),
+                "email": member['email'],
+            },
+            "match": _format_match_for_scan(match),
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "code": "server_error", "message": f"Manual check-in failed: {e}"}), 500
+
+
+@app.route('/api/members/roster.json')
+def api_members_roster():
+    """Name + ID only for the current season, for the scanner's client-side
+    search fallback. Deliberately excludes email/phone — if this ends up on
+    a lost/borrowed phone, it should only ever leak names, not contact info.
+    """
+    if not require_password():
+        return jsonify({"status": "error", "code": "unauthorized", "message": "Login required."}), 401
+
+    season = db.get_current_season()
+    if not season:
+        return jsonify([])
+
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            SELECT m.id, m.first_name, m.last_name
+            FROM members m
+            JOIN member_seasons ms ON ms.member_id = m.id
+            WHERE ms.season_id = %s
+            ORDER BY m.last_name, m.first_name
+            """,
+            (season['id'],),
+        )
+        rows = cur.fetchall()
+
+    return jsonify([{"id": r['id'], "name": f"{r['first_name']} {r['last_name']}".strip()} for r in rows])
 
 
 if __name__ == '__main__':

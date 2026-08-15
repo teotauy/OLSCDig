@@ -224,15 +224,27 @@
             to { transform: rotate(360deg); }
         }
 
-        .nav-footer {
+        .links {
             text-align: center;
             margin-top: 20px;
             padding-top: 20px;
             border-top: 1px solid #e0e0e0;
         }
 
-        .nav-footer a {
+        .links a {
             color: #c8102e;
+            text-decoration: none;
+            font-size: 14px;
+            margin: 0 8px;
+        }
+
+        .nav-footer {
+            text-align: center;
+            margin-top: 12px;
+        }
+
+        .nav-footer a {
+            color: #999;
             text-decoration: none;
             font-size: 12px;
         }
@@ -259,16 +271,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>⚽ OLSC Brooklyn</h1>
+            <img src="{{ wordmark_data_uri }}" alt="OLSC Brooklyn — Official Supporters Club" style="max-width: 200px; height: auto; margin: 0 auto 10px;">
             <p>Admin Panel</p>
-            <p style="margin-top: 10px; font-size: 12px;">
-                <a href="/admin/members" style="color: #00a65a; text-decoration: none; margin-right: 15px;">+ Add Member</a>
-                <a href="/update-match" style="color: #c8102e; text-decoration: none; margin-right: 15px;">⚽ Update Match</a>
-                <a href="/resend-welcome" style="color: #c8102e; text-decoration: none; margin-right: 15px;">📧 Resend Welcome</a>
-                <a href="/admin/members" style="color: #00a65a; text-decoration: none; margin-right: 15px;">👥 Members (new DB)</a>
-                <a href="/admin/matches" style="color: #00a65a; text-decoration: none; margin-right: 15px;">🗓️ Matches (new DB)</a>
-                <a href="/scanner" style="color: #00a65a; text-decoration: none;">Scanner</a>
-            </p>
         </div>
 
         <div class="headcount" id="headcount">
@@ -294,6 +298,7 @@
             <span id="countdown">{{ headcount_refresh_seconds }}</span>s until next refresh
         </div>
 
+        {% include '_admin_footer.html' %}
         <div class="nav-footer">
             <a href="/">← Public View</a>
         </div>

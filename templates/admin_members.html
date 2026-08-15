@@ -74,7 +74,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <p class="brand">OLSC Brooklyn</p>
+            <img src="{{ wordmark_data_uri }}" alt="OLSC Brooklyn — Official Supporters Club" style="max-width: 200px; height: auto; margin: 0 auto 8px; display: block;">
             <h1>👥 Members</h1>
             <p class="season">Season: {{ season.name if season else 'No current season set' }} &middot; {{ members|length }} member(s)</p>
         </div>
@@ -124,7 +124,7 @@
         </div>
 
         <div class="panel">
-            <h2>Roster</h2>
+            <h2>Roster <a class="edit-link" style="font-size:13px; font-weight:normal;" href="{{ url_for('admin_export_members') }}">Export CSV</a></h2>
             {% if members %}
             <div class="roster-toolbar">
                 <div class="field">
@@ -175,12 +175,7 @@
             {% endif %}
         </div>
 
-        <div class="links">
-            <a href="{{ url_for('scanner') }}">Scanner</a>
-            <a href="{{ url_for('admin_matches') }}">🗓️ Matches</a>
-            <a href="{{ url_for('admin_index') }}">← Admin Home</a>
-            <a href="/logout">Logout</a>
-        </div>
+        {% include '_admin_footer.html' %}
     </div>
     <script>
         const searchInput = document.getElementById('memberSearch');

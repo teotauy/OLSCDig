@@ -14,16 +14,17 @@ Replace the expensive PassKit dependency with a system we own:
 
 PassKit becomes unnecessary once Wallet generation, pass links, updates, and check-ins are handled here.
 
-## Status (as of Aug 10, Monday afternoon)
+## Status (last consolidated Aug 15 — see gate table for latest per-item dates)
 
 **Corrected runway (Aug 10):** the Alamo checkpoint moved from Aug 12 to
 **Wednesday Aug 19** — the real constraints are Aug 21 (last work day before
 travel) and Aug 23 (first match, Newcastle), not the placeholder Aug 17-18
 target this doc originally guessed at. That's ~11 days of work time from
-today, not ~2. The single highest-risk unknown (Apple Wallet signing,
-including the production/hosted path) is fully resolved, which matters more
-than any percentage — everything left is predictable web-app work
-(scanner, a web page, an export), not open questions about feasibility.
+today, not ~2. Both wallet platforms are now proven end-to-end (Apple Wallet
+in production since Aug 10, Google Wallet confirmed with a real successful
+save-to-wallet flow on Aug 15) — everything left is predictable web-app work
+(export, real-device confirmation, Google's own approval timeline), not open
+questions about feasibility.
 
 Gate-by-gate (see full list under "Go/No-Go Gates" below):
 
@@ -37,22 +38,37 @@ Gate-by-gate (see full list under "Go/No-Go Gates" below):
 | Mobile web pass page (Android path) | **Done (Aug 10, extended later same day):** animated ring around the QR (motion confined to the ring only via `overflow: hidden` + oversized rotating conic-gradient — confirmed via two screenshots that the ring moves while the QR itself is pixel-identical), automatic home/away theming matching the Wallet pass (same `is_home` source as "Next Match" text, so they can't disagree — verified against the real live fixture, which is actually away), and the real crest+wordmark image now shown on the page too (previously text-only — no platform reason for that, just an oversight). `GET /pass/<token>` built and verified — looks up by hashed token (`db.find_active_wallet_pass_by_token`), shows name/season/live next-match/QR, generic 404 for invalid/expired tokens (no info leak). Wired into the resend-pass email so it's actually reachable, not just a route that exists. Tested via Flask test client (valid + invalid token) and confirmed visually in a real browser. Still needs production deploy + a real non-iPhone browser test. |
 | Scanner scans the QR | **Done (Aug 10): deployed to Render and scanning in production**, not just locally. |
 | Fresh scan creates a check-in | **Done (Aug 10): confirmed working on Render** against live Supabase data. |
-| Duplicate scan shows "already used" | Confirming now (Aug 10) on production. |
-| Google Wallet demo-mode links | **Built (Aug 13):** the app now signs Google Wallet Generic Pass Save URLs using `GOOGLE_WALLET_SERVICE_ACCOUNT_JSON_BASE64` and issuer `3388000000023170524`. The same raw token used by Apple Wallet/mobile web is encoded in the Google Wallet QR, so `/scanner` behavior stays identical. Links are included in pass emails and on `/pass/<token>` when Google config is present. Still needs real Android add-to-wallet testing with an approved test account after deploy. |
-| Last-match/check-in CSV export | **Not started** |
+| Duplicate scan shows "already used" | **Confirmed (Aug 15).** `checkins` has `UNIQUE (member_id, match_id)`; the scan endpoint does `INSERT ... ON CONFLICT DO NOTHING RETURNING` — a fresh insert returns `checked_in`, a conflict falls back to looking up the existing row and returns `already_checked_in` with its *original* timestamp. Verified with a real functional test (not just code review): two scans of the same token against the real current match, both timestamps identical, second scan correctly flagged as a duplicate. Tested against Supabase directly. |
+| Google Wallet demo-mode links | **Confirmed fully working end-to-end (Aug 15).** Root cause of the whole Aug 13 debugging saga: `GOOGLE_WALLET_ISSUER_ID` was set to `3388000000023170524`, a leftover from an earlier account mixup — the real, authoritative issuer (confirmed live in the Google Pay & Wallet Console under the correct OLSC Brooklyn login) is `3388000000023188178`. Every "Permission denied" was the service account correctly being denied access to an issuer it had nothing to do with; it was never a JWT/payload/cert problem (all of those were separately verified correct along the way). Fixed by updating `GOOGLE_WALLET_ISSUER_ID` in `.env` and Render. Verified via direct Google Wallet REST API calls (GET returned a clean 404 "class not found" instead of 403 once the ID was fixed — confirming real authorization — then a POST successfully created the real production class, status 200) and then via an actual save-to-wallet flow on desktop Safari: a real pass now lives in Google Wallet with the correct crest, season, and live next-match data, QR scannable. Still shows `[TEST ONLY]` — that's expected, demo/publishing-access mode. **Open: check whether Google publishing access has been requested/granted** so this works for all members, not just approved test accounts; still worth a real Android device confirmation too, though the underlying save flow is now proven. |
+| Last-match/check-in CSV export | **Done (Aug 15).** `GET /admin/matches/<id>/export-checkins.csv` (name/email/phone/checked-in time/source for one match — "Export CSV" link per row on `/admin/matches`) and `GET /admin/members/export.csv` (current-season roster with each member's check-in count — "Export CSV" link on `/admin/members`). Verified against real production Supabase data, not test rows — the match export correctly included a real check-in from earlier scanner testing. |
 | Documented resend flow | Built and deployed; pass/report email now uses Resend first with SMTP fallback. Render has `RESEND_API_KEY`; default sender is `OLSC Brooklyn <DIGITALIDS@OLSCBROOKLYN.COM>` and default reply-to is `OLSC_BK@olscbrooklyn.com`. **Redesigned (Aug 11):** the fulfillment email (`_send_pkpass_email`'s HTML, shared by both the Resend and SMTP paths) no longer uses a generic red/green gradient + soccer emoji — now uses the real crest+wordmark image and a proper red CTA button for the Android/mobile-pass link, matching the pass and web page design language. Verified by rendering to a local file and viewing in-browser (not sent as a real test email, since Resend/SMTP are both live now). |
 | Automatic pass delivery on member add | **Done (Aug 10):** adding a member via `/admin/members` now automatically issues a token, builds a real signed pass, and emails it — same underlying logic as "Resend Pass" (extracted into a shared `_issue_and_email_pass` helper). Deliberately scoped to the single-add form only, not CSV bulk import (importing 100 rows shouldn't silently fire 100 emails). Verified: pass/token get created even when email fails, and the failure is surfaced clearly to the admin rather than silently swallowed. |
 
-**Biggest remaining lift:** production verification. The hosted Wallet pass
-path is verified on Render, and DB/admin/scanner/mobile-web code exists
-locally, but the full loop still needs to be deployed and tested against
-real Supabase data: add/import member -> issue pass -> scan -> duplicate scan.
+**Biggest remaining lift:** CSV/check-in export — still the only Must Have
+item with zero code written (see gate table). Everything else core to the
+check-in loop (DB, admin, Apple Wallet, Google Wallet, mobile web, scanner,
+check-in) has at least a "done" entry in the gate table below; the
+duplicate-scan confirmation was in progress as of Aug 10 and hasn't been
+explicitly re-confirmed in writing since, so don't assume it without checking.
 
-**Picking back up:** next is end-to-end verification on local/Render:
-create a current match, add/import a member, resend/generate the pass,
-scan it from `/scanner`, then scan it again to confirm the duplicate state.
-Local dev/test artifacts were cleaned up before this scanner pass; re-check
-before deploy.
+**Next up, roughly in order:**
+
+1. **CSV/check-in export** — zero code exists, still a Must Have gate item.
+2. **Confirm duplicate-scan behavior** in production if it wasn't already explicitly verified.
+3. **Google Wallet publishing access** — Business Profile **approved** as of Aug 16. Next: find and click "Request publishing access" in the console (separate step/review from Business Profile approval, not automatic) — once granted, `[TEST ONLY]` drops off for everyone, not just approved test accounts. Nothing to build on our side, just navigate the console and submit.
+4. **Real-device confirmation** — 2nd iPhone install, real Android add-to-Google-Wallet with an approved test account, a real non-Safari/non-Chrome browser check on the mobile pass page. None of these can be done from this side — they need an actual phone in hand.
+5. **Self-service pass recovery page** — **Done (Aug 15/16).** `GET/POST /recover-pass`: found in current season → issues a fresh token and emails the pass (reuses `_issue_and_email_pass`, so it's the exact same rotate-on-resend logic as the admin "Resend Pass" button); not found → points straight at the real membership purchase link (`https://olscbrooklyn.com/shop/p/lfc-brooklyn-2627-membership`) instead of a generic "not found," per the Aug 13-14 decision. Rate-limited per IP (5 attempts / 15 min, same pattern as admin login) to prevent abuse. Linked from the mobile pass page's "Pass Not Found" state, since that's the most natural place someone lands needing it. Verified: form loads, found-member path issues a real token even when email delivery fails (local env has no SMTP/Resend creds — expected, not a bug), not-found path shows the shop link, empty-email validation, and rate limiting all confirmed via functional tests.
+6. **Admin roster-search scanner fallback — Done (Aug 16), design changed from the original idea.** Originally phased to later as "admin looks up a member and shows their QR" — reconsidered after a real UX gap surfaced: the scanner's old manual-paste field (see below) required the member to *transmit* a token/link to whoever's running the scanner, and there's no practical way to do that at a busy door (dictating a 40+ character token isn't realistic; AirDrop/text both require multi-step handoff mid-line). The actual fix doesn't need the member to have or send anything: `/scanner` now has a **Camera / Search** toggle. Search mode fetches `GET /api/members/roster.json` once on page load — **names + IDs only, deliberately no email/phone**, so a lost/borrowed phone only ever leaks names — and filters entirely client-side (no network dependency while typing, which matters on shaky venue wifi). Nothing renders until 3+ characters are typed, so one common letter doesn't dump half the roster onto a small screen. Tapping a result hits a new `POST /api/checkins/manual` (member ID directly, no token at all) — same idempotency (`checkins.UNIQUE(member_id, match_id)`) and response shape as the QR path, but recorded with `source='manual'` so the two paths stay distinguishable later. Verified end-to-end: roster payload contains no PII, search UI renders, first manual check-in succeeds, duplicate correctly shows the original timestamp, `source` correctly recorded as `'manual'` in the DB.
+
+**Extended same day:** when a search comes up with zero matches, the empty
+state now shows a QR code linking straight to the real membership shop page
+(`https://olscbrooklyn.com/shop/p/lfc-brooklyn-2627-membership`) instead of
+just "no matches" — "not on the list" becomes an on-the-spot sale
+opportunity (scan with their own phone right there) instead of a dead end.
+Generated server-side with the same `qrcode` library already used
+everywhere else, embedded as a data URI like the wordmark images.
+
+   The old manual-paste-a-token field this replaced also had its own real bug, found and fixed in the same conversation before being removed entirely: `_extract_scan_token()` only recognized a bare token or a `/checkin/t/<token>` URL (the shape inside the QR) — not `/pass/<token>` (the shape that's actually in emails/the mobile pass page), which was the one link a person might realistically have as copyable text. Fixed, verified, then removed anyway once the roster-search replacement made it moot.
 
 ## Product Scope
 
@@ -181,9 +197,20 @@ Add a public page:
 - App always responds with the same generic message: "If that email is active, we sent your pass link."
 - If a current-season member exists, send a fresh pass email.
 
+**Decision (Aug 13-14, not yet built):** deliberately override the
+"don't reveal whether an email exists" rule below for the not-found case
+specifically. Membership is single-season, so a real, common case is
+"you just haven't joined this season yet" — when the lookup fails, tell them
+that plainly and point straight at the real purchase link:
+`https://olscbrooklyn.com/shop/p/lfc-brooklyn-2627-membership`. This is a
+conscious tradeoff (small email-enumeration risk, traded for an actual
+conversion opportunity for a small supporters club), not an oversight.
+
 Security rules:
 
-- Do not reveal whether an email exists.
+- Do not reveal whether an email exists **for the found case** — a match
+  should look identical whether or not they're logged in/aware. The
+  not-found case is the deliberate exception above.
 - Rate limit by IP and email.
 - Log recovery attempts.
 - Send only to the email on file.
@@ -266,6 +293,22 @@ Still using the `generic` pass style (flat `backgroundColor`) — switching to
 `storeCard` for real background artwork (not just a logo) was raised and
 left as an open, undecided option for later, not rejected.
 
+**2026/27 home/away kit theming (Aug 10-11):** both the Wallet pass and the
+mobile web page automatically switch color scheme based on whether the next
+match is home or away, using `is_home` from `get_next_match()` — the exact
+same source already driving the "Next Match" text, so the two can never
+disagree with each other. Home = red background, white crest/wordmark
+(existing look). Away = white background, red crest/wordmark, matching the
+actual 2026/27 road jersey (white, red lettering) — deliberately *not* the
+green away-kit color `pass_themes.py` used for a prior season's kit, since
+kit colors change every year and that file was stale. Required a second set
+of bundled assets, `wallet_pass_assets/olsc_crest_red.png` and
+`olsc_wordmark_red.png` (same extraction as the white versions, just without
+the recolor step, since the source art is already red). Defined once as
+`PASS_THEMES` (home/away dict with colors + asset paths) so both `wallet_pass.py`
+and `app.py`'s mobile-pass route read from one shared source instead of two
+copies that could drift apart. No manual toggle needed — genuinely automatic.
+
 Later:
 
 - Add Apple Wallet web service registration.
@@ -324,6 +367,51 @@ aren't left with only a mobile-web fallback for long. If Google Wallet isn't
 ready by Aug 17-18, launch proceeds Apple-first with the mobile-web QR page
 covering Android in the interim, rather than falling back to PassKit over
 this alone.
+
+## Pass Content Ideas (discussed, not built)
+
+Brainstormed for the back of the Apple Wallet pass / mobile web page.
+None of this is built — captured so the ideas aren't lost to scrollback.
+
+- **Favorite player + their current-season goals.** Real data exists —
+  `orders.csv` (Squarespace export) has a "favorite player" checkout
+  question, free text, tied to email, but not in our `members` table yet
+  and only answered on ~9 of however-many total orders (question may not
+  have existed on older signup forms). Goals-per-player is genuinely free
+  via football-data.org's existing `scorers` endpoint (same API key
+  already in use). Assists are not free — that needs their paid "Deep
+  Data" plan (€29/mo), so drop assists. Two real blockers if this gets
+  built: (1) staleness — goal totals change multiple times a week
+  regardless of what a member does, so this must live on the mobile web
+  page (rendered fresh each time), never baked into the static `.pkpass`;
+  (2) name matching — free-text answers ("Mo," "Szobo," "Curtis
+  Jones!!!!") won't reliably auto-match to real API player names, so this
+  needs a manual admin mapping step, not a fully automatic pipeline.
+  Goalkeepers/defenders are usually a near-empty stat under a pure-goals
+  model (no free per-player clean-sheet/save data exists) — the discussed
+  fallback is: omit the stat line entirely when there's no real entry for
+  that player, don't show "0 goals."
+- **All-time attendance count / "first match ever attended."** Not
+  possible with current data — our `checkins` table only has depth from
+  when this system went live; there's no imported check-in history from
+  the PassKit era to compute this from.
+- **Full season-by-season membership history** ("member since 2023,"
+  every season attended) — this one *is* buildable now from
+  `member_seasons`, no new data needed, whenever there's time.
+- **A "member number"** (just `members.id`, framed as "Member No. 0047")
+  — free, buildable, discussed as a fun exclusivity touch.
+- **ASCII art on the back of the pass.** Real open question, not decided:
+  Apple renders back fields in a proportional system font (San Francisco),
+  not monospace, so precise multi-line ASCII art will likely warp — simple
+  single-line stuff has a real shot, anything alignment-dependent probably
+  doesn't survive. Not yet spike-tested on a real device; cheap to just
+  try once someone wants an answer instead of guessing.
+- **Chant/song lyrics for a member's favorite player.** Raised, declined —
+  real chant lyrics are copyrighted and can't be reproduced (including
+  close paraphrases). Alternative that stays legally clean: original,
+  factual terrace-style text we write ourselves (e.g. referencing a real
+  moment/date, not a song), or original text OLSC Brooklyn writes itself
+  rather than an existing copyrighted chant.
 
 ## QR Credential Design
 
@@ -479,6 +567,40 @@ Important browser notes:
 - Camera access requires HTTPS in production.
 - iOS Safari camera behavior should be tested early.
 - The scanner page should have a manual token/member search fallback in case camera access fails.
+
+**Bug found and fixed (Aug 16):** the manual-paste fallback only ever correctly
+parsed a bare token or a `/checkin/t/<token>` URL (the shape embedded in the
+QR itself) — but that's not what a person would ever realistically have as
+copyable text. The one link that's actually in emails/the mobile pass page
+(`/pass/<token>`) silently failed to parse and would never have checked
+anyone in. Fixed `_extract_scan_token()` to also recognize `/pass/<token>`.
+Verified end-to-end: pasting a real `/pass/<token>` link now produces a real
+check-in, not just correct parsing in isolation.
+
+**Visual redesign (Aug 13):** `/scanner` restyled to match the crest/wordmark
+design language used everywhere else (previously plain black header, old
+red-green gradient body). Now theme-aware (`is_home`, same source as the
+pass and mobile web page — home/away kit colors, no green anywhere in the
+app anymore) and auto-starts the camera on page load so door staff don't
+need an extra tap every time it opens (falls back silently to the Start
+button if the browser blocks camera access without a user gesture). Visual/
+layout only — every element ID and class the scan logic depends on (`#result`,
+`#cameraWrap`, `#reader`, `#startBtn`, `#stopBtn`, `#manualToken`, `#manualBtn`,
+the success/warning/error state classes) was left untouched, verified via
+test client before and after.
+
+**Idea raised and ruled out (Aug 13):** "bump two iPhones together" to
+authenticate a lost-pass member at the door and trigger a resend. Not
+feasible — AirDrop and Apple's actual proximity-identity feature ("Tap to
+Present ID") are both OS-level and require a native app with special Apple
+business entitlements; a web app has no access to either. Web NFC doesn't
+exist on iOS Safari at all (Android-Chrome-only, and read-only for physical
+tags even there). The old "Bump" app (~2010) wasn't real hardware handshake
+either — it matched two phones' accelerometer/timestamp reports via a
+server, which is a weak identity signal even if rebuilt (proves two phones
+moved at the same moment, not who anyone is). Real answer for a lost pass:
+self-service recovery or a fresh purchase link — see "Next up" at the top
+and Self-Service Pass Recovery below.
 
 ## Check-In Rules
 
