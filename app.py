@@ -1528,11 +1528,13 @@ def _issue_member_pkpass(member, season):
     except Exception:
         next_match_text = ""
 
+    display_name = f"{member['first_name']} {member['last_name']}".strip()
     pkpass_bytes = build_member_pkpass(MemberPassData(
-        display_name=f"{member['first_name']} {member['last_name']}".strip(),
+        display_name=display_name,
         season=season['name'],
         serial_number=serial_number,
         barcode_message=raw_token,
+        barcode_alt_text="Walk on.",
         next_match=next_match_text,
         description="OLSC Brooklyn Membership",
         is_home=is_home,

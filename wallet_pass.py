@@ -39,6 +39,7 @@ class MemberPassData:
     season: str
     serial_number: str
     barcode_message: str
+    barcode_alt_text: str = ""
     next_match: str = ""
     description: str = "OLSC Brooklyn Membership"
     is_home: bool = True  # drives home (red) vs away (white/red, 2026/27 road kit) pass theme
@@ -252,6 +253,7 @@ def _build_pass_json(config, pass_data, theme):
                 "message": pass_data.barcode_message,
                 "format": "PKBarcodeFormatQR",
                 "messageEncoding": "iso-8859-1",
+                **({"altText": pass_data.barcode_alt_text} if pass_data.barcode_alt_text else {}),
             }
         ],
         "backgroundColor": theme["background"],
