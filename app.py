@@ -689,28 +689,30 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Aria
 def _send_pkpass_email(to_email, first_name, pkpass_bytes, mobile_pass_url=None, google_wallet_url=None):
     """Email a signed .pkpass attachment to a member. Returns True if sent.
 
-    Always includes a link to the mobile web pass page too — that's the
-    real path for Android members, who can't do anything useful with a
-    .pkpass attachment.
+    Rebuilt (Aug 16) around one goal: people skim emails and miss things,
+    so this needs to work even if they only read the bold line. Two
+    clearly separated, device-specific instructions instead of a paragraph
+    plus multiple buttons/caveats to parse. Google Wallet's button is
+    deliberately left out for now — it's real and configured, but only
+    approved test accounts can actually use it while demo mode is active,
+    and a third option that's broken for almost everyone works directly
+    against "very very very clear." `google_wallet_url` is still accepted
+    (harmless if passed) so call sites don't need to change when it's
+    reintroduced later; it's just not rendered.
     """
+    if os.getenv('EMAIL_SENDING_ENABLED', 'true').strip().lower() == 'false':
+        print(f"EMAIL_SENDING_ENABLED=false — not sending pass email to {to_email} (pass was still generated).")
+        return False
+
     name = first_name or "Member"
     wordmark_uri = _asset_data_uri(PASS_THEMES["home"]["wordmark_path"])
-    mobile_link_html = (
-        f'<p style="text-align:center; margin: 24px 0;">'
-        f'<a href="{mobile_pass_url}" style="display:inline-block; background:#c8102e; color:#ffffff; '
-        f'padding:14px 28px; text-decoration:none; border-radius:8px; font-weight:600; font-size:14px;">'
-        f'View Pass on Android</a></p>'
-        f'<p style="font-size:12px; color:#888; text-align:center;">Or paste this link into a browser: '
-        f'<a href="{mobile_pass_url}" style="color:#888;">{mobile_pass_url}</a></p>'
+    android_step_html = (
+        f'<div class="step">'
+        f'<div class="step-label">🤖&nbsp; IF YOU HAVE AN ANDROID PHONE</div>'
+        f'<p class="step-text">Do not open the attachment — it will not work. Tap this button instead:</p>'
+        f'<a href="{mobile_pass_url}" class="step-button">Get My Pass</a>'
+        f'</div>'
         if mobile_pass_url else ""
-    )
-    google_link_html = (
-        f'<p style="text-align:center; margin: 24px 0;">'
-        f'<a href="{google_wallet_url}" style="display:inline-block; background:#111111; color:#ffffff; '
-        f'padding:14px 28px; text-decoration:none; border-radius:8px; font-weight:600; font-size:14px;">'
-        f'Add to Google Wallet</a></p>'
-        f'<p style="font-size:12px; color:#888; text-align:center;">Android test accounts only while Google Wallet is in demo mode.</p>'
-        if google_wallet_url else ""
     )
     html = f"""<!DOCTYPE html>
 <html>
@@ -720,7 +722,13 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Aria
 .header {{ background: #c8102e; padding: 28px 20px; text-align: center; }}
 .header img {{ max-width: 220px; height: auto; display: block; margin: 0 auto; }}
 .content {{ padding: 28px 24px; }}
-.content p {{ line-height: 1.5; }}
+.content > p {{ line-height: 1.5; }}
+.step {{ border: 2px solid #eee; border-radius: 12px; padding: 18px; margin: 18px 0; text-align: center; }}
+.step-label {{ font-size: 13px; font-weight: 800; letter-spacing: 0.5px; color: #c8102e; margin-bottom: 8px; }}
+.step-text {{ font-size: 15px; margin-bottom: 12px; }}
+.step-text strong {{ color: #111; }}
+.step-button {{ display: inline-block; background: #c8102e; color: #ffffff !important; padding: 14px 30px; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 15px; }}
+.fine-print {{ font-size: 12px; color: #999; text-align: center; margin-top: 20px; }}
 .footer {{ background: #f8f9fa; padding: 16px; text-align: center; font-size: 12px; color: #888; }}
 </style></head>
 <body>
@@ -728,10 +736,12 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Aria
 <div class="header"><img src="{wordmark_uri}" alt="OLSC Brooklyn — Official Supporters Club"></div>
 <div class="content">
 <p>Hi {name},</p>
-<p>Your membership pass is attached to this email. Open the attachment on your iPhone and tap <strong>"Add to Apple Wallet."</strong></p>
-{google_link_html}
-{mobile_link_html}
-<p style="font-size:13px; color:#888;">If you already had a pass, this one replaces it — the old one will stop working the next time it's scanned.</p>
+<div class="step">
+<div class="step-label">📱&nbsp; IF YOU HAVE AN IPHONE</div>
+<p class="step-text">Open the attachment on this email, then tap <strong>Add to Apple Wallet</strong>.</p>
+</div>
+{android_step_html}
+<p class="fine-print">Already had a pass? This one replaces it — the old one stops working next time it's scanned.</p>
 <p>You'll Never Walk Alone!<br>— OLSC Brooklyn</p>
 </div>
 <div class="footer">This email was sent to {to_email}.</div>
@@ -1544,7 +1554,10 @@ def _issue_and_email_pass(member, season):
 
     if _send_pkpass_email(member['email'], member['first_name'], pkpass_bytes, mobile_pass_url=mobile_pass_url, google_wallet_url=google_wallet_url):
         return True, None
-    return False, "Pass generated but email failed to send (check SMTP env vars)."
+
+    if os.getenv('EMAIL_SENDING_ENABLED', 'true').strip().lower() == 'false':
+        return False, "Pass generated, but email sending is deliberately paused right now (EMAIL_SENDING_ENABLED=false) — not a bug."
+    return False, "Pass generated but email failed to send (check SMTP/Resend env vars)."
 
 
 @app.route('/admin/members/send-signup-link', methods=['POST'])
