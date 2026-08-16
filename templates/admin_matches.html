@@ -65,6 +65,12 @@
         </div>
 
         {% if error %}<div class="message error">{{ error }}</div>{% endif %}
+        {% if pushed is not none %}
+        <div class="message" style="background:#d1ecf1; color:#0c5460; border:1px solid #bee5eb;">
+            Pushed pass-update notifications to {{ pushed }} of {{ push_total }} registered device(s).
+            {% if push_total == '0' %}No devices have registered for updates yet (nobody's added a pass on this build, or Apple Wallet push isn't configured).{% endif %}
+        </div>
+        {% endif %}
 
         <div class="panel">
             <h2>Add a match</h2>
@@ -103,7 +109,11 @@
         </div>
 
         <div class="panel">
-            <h2>Schedule</h2>
+            <h2>Schedule
+                <form method="POST" action="{{ url_for('admin_push_pass_updates') }}" style="display:inline; float:right;" onsubmit="return confirm('Push a pass-update notification to every installed Apple Wallet pass now?');">
+                    <button type="submit" class="btn small">Push Pass Updates Now</button>
+                </form>
+            </h2>
             {% if matches %}
             <table>
                 <thead>

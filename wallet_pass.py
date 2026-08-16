@@ -40,6 +40,8 @@ class MemberPassData:
     serial_number: str
     barcode_message: str
     barcode_alt_text: str = ""
+    auth_token: str = ""
+    web_service_url: str = ""
     next_match: str = ""
     description: str = "OLSC Brooklyn Membership"
     is_home: bool = True  # drives home (red) vs away (white/red, 2026/27 road kit) pass theme
@@ -264,6 +266,13 @@ def _build_pass_json(config, pass_data, theme):
         pass_json["locations"] = list(pass_data.locations)
     if pass_data.relevant_date:
         pass_json["relevantDate"] = pass_data.relevant_date
+    # Both fields are required together for Apple to treat this pass as
+    # eligible for push updates — Wallet registers the device for updates
+    # only when it sees a webServiceURL, and authenticationToken is what
+    # it presents back on every subsequent web-service call for this pass.
+    if pass_data.web_service_url and pass_data.auth_token:
+        pass_json["webServiceURL"] = pass_data.web_service_url
+        pass_json["authenticationToken"] = pass_data.auth_token
     return pass_json
 
 
@@ -312,6 +321,67 @@ def _sign_manifest(pass_dir, config):
     finally:
         signer_key.unlink(missing_ok=True)
         signer_pem.unlink(missing_ok=True)
+
+
+def _extract_apns_cert_and_key(config):
+    """Extract the pass-signing cert + private key as separate PEM files,
+    for use as an APNs mutual-TLS client certificate. Apple doesn't issue a
+    separate "push certificate" for Wallet passes — the same Pass Type ID
+    certificate that signs the pass also authenticates the push, with the
+    pass type identifier as the APNs topic. Caller must delete the
+    returned directory."""
+    temp_dir = Path(tempfile.mkdtemp(prefix="olsc-apns-cert-"))
+    cert_pem = temp_dir / "apns_cert.pem"
+    key_pem = temp_dir / "apns_key.pem"
+    _run_openssl(
+        [
+            "openssl", "pkcs12", "-in", str(config.pass_cert_p12),
+            "-clcerts", "-nokeys", "-out", str(cert_pem),
+            "-passin", "stdin", "-legacy",
+        ],
+        stdin_data=config.cert_password,
+        retry_without_legacy=True,
+    )
+    _run_openssl(
+        [
+            "openssl", "pkcs12", "-in", str(config.pass_cert_p12),
+            "-nocerts", "-nodes", "-out", str(key_pem),
+            "-passin", "stdin", "-legacy",
+        ],
+        stdin_data=config.cert_password,
+        retry_without_legacy=True,
+    )
+    return temp_dir, cert_pem, key_pem
+
+
+def send_apns_pass_update(config, push_token):
+    """Tell one device (by APNs push token) that an installed pass has an
+    update waiting. This is a silent push with an empty payload — it
+    doesn't display anything, it just makes Wallet call back into our
+    web service to check what changed and re-fetch the pass.
+
+    Returns True on success. Logs and returns False on any failure
+    (unreachable APNs, bad/expired push token, misconfigured cert) rather
+    than raising, since one bad device token shouldn't stop the rest of
+    the fan-out.
+    """
+    import httpx
+
+    temp_dir, cert_pem, key_pem = _extract_apns_cert_and_key(config)
+    try:
+        url = f"https://api.push.apple.com/3/device/{push_token}"
+        headers = {"apns-topic": config.pass_type_id}
+        with httpx.Client(http2=True, cert=(str(cert_pem), str(key_pem)), timeout=10.0) as client:
+            resp = client.post(url, headers=headers, json={})
+        if resp.status_code == 200:
+            return True
+        print(f"APNs push to {push_token[:12]}... failed ({resp.status_code}): {resp.text}")
+        return False
+    except Exception as e:
+        print(f"APNs push to {push_token[:12]}... errored: {e}")
+        return False
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def _zip_pass(pass_dir):

@@ -16,7 +16,10 @@ import smtplib
 import time
 import secrets
 import base64
+import shutil
+import tempfile
 import qrcode
+from pathlib import Path
 from urllib.parse import urlparse
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -29,7 +32,10 @@ import pytz
 import bcrypt
 from team_abbreviations import format_match_display, abbreviate_team_name
 from match_updates import get_next_match
-from wallet_pass import AppleWalletConfigError, MemberPassData, build_member_pkpass, PASS_THEMES
+from wallet_pass import (
+    AppleWalletConfigError, MemberPassData, build_member_pkpass, PASS_THEMES,
+    load_apple_wallet_config, send_apns_pass_update,
+)
 from google_wallet import GoogleWalletConfigError, build_google_wallet_save_url, google_wallet_configured
 import db
 # Notifications feature removed
@@ -1514,10 +1520,17 @@ def _build_google_wallet_url(member, season, raw_token, serial_number, next_matc
     return ""
 
 
-def _issue_member_pkpass(member, season):
-    """Issue/rotate a wallet token and return signed pass bytes plus web URLs."""
-    raw_token, serial_number = db.issue_wallet_token(member['id'], season['id'], platform='apple')
+PASSKIT_WEBSERVICE_PREFIX = "/passkit/v1"
 
+
+def _passkit_web_service_url():
+    return f"{_public_base_url()}{PASSKIT_WEBSERVICE_PREFIX}"
+
+
+def _member_pass_data(member, serial_number, raw_token, season_name, auth_token=""):
+    """Build the MemberPassData for a given member/pass, pulling live
+    next-match/theme data. Shared by initial issue and by the PassKit web
+    service refresh path, so the two can never drift out of sync."""
     next_match_text = ""
     is_home = True
     try:
@@ -1528,21 +1541,147 @@ def _issue_member_pkpass(member, season):
     except Exception:
         next_match_text = ""
 
-    display_name = f"{member['first_name']} {member['last_name']}".strip()
-    pkpass_bytes = build_member_pkpass(MemberPassData(
-        display_name=display_name,
-        season=season['name'],
+    pass_data = MemberPassData(
+        display_name=f"{member['first_name']} {member['last_name']}".strip(),
+        season=season_name,
         serial_number=serial_number,
         barcode_message=raw_token,
         barcode_alt_text="Walk on.",
+        auth_token=auth_token,
+        web_service_url=_passkit_web_service_url() if auth_token else "",
         next_match=next_match_text,
         description="OLSC Brooklyn Membership",
         is_home=is_home,
         relevant_date=_current_match_relevant_date(),
-    ))
+    )
+    return pass_data, next_match_text, is_home
+
+
+def _issue_member_pkpass(member, season):
+    """Issue/rotate a wallet token and return signed pass bytes plus web URLs."""
+    raw_token, serial_number, auth_token = db.issue_wallet_token(member['id'], season['id'], platform='apple')
+    pass_data, next_match_text, is_home = _member_pass_data(
+        member, serial_number, raw_token, season['name'], auth_token=auth_token,
+    )
+    pkpass_bytes = build_member_pkpass(pass_data)
     mobile_pass_url = f"{_public_base_url()}{url_for('mobile_pass', token=raw_token)}"
     google_wallet_url = _build_google_wallet_url(member, season, raw_token, serial_number, next_match_text, is_home)
     return pkpass_bytes, mobile_pass_url, google_wallet_url
+
+
+def _notify_apple_pass_updates():
+    """Bump the shared pass-content tag and push every registered Apple
+    Wallet device so it re-fetches (next match / theme changed). Silently
+    no-ops if Apple Wallet isn't configured — this should never block an
+    admin action like adding a match. Returns (pushed_count, total_count).
+    """
+    db.bump_passes_updated_tag()
+    materialize_dir = Path(tempfile.mkdtemp(prefix="olsc-push-certs-"))
+    try:
+        try:
+            config = load_apple_wallet_config(materialize_dir)
+        except AppleWalletConfigError as e:
+            print(f"Skipping APNs push, Apple Wallet not configured: {e}")
+            return 0, 0
+        tokens = db.all_pass_device_push_tokens()
+        sent = sum(1 for t in tokens if send_apns_pass_update(config, t))
+        print(f"Pushed pass-update notification to {sent}/{len(tokens)} device(s).")
+        return sent, len(tokens)
+    finally:
+        shutil.rmtree(materialize_dir, ignore_errors=True)
+
+
+def _passkit_auth_ok(wallet_pass):
+    auth_header = request.headers.get('Authorization', '')
+    expected = wallet_pass.get('auth_token') or ''
+    return bool(expected) and auth_header == f"ApplePass {expected}"
+
+
+@app.route(f'{PASSKIT_WEBSERVICE_PREFIX}/devices/<device_library_identifier>/registrations/<pass_type_id>/<serial_number>', methods=['POST'])
+def passkit_register_device(device_library_identifier, pass_type_id, serial_number):
+    """Apple Wallet calls this right after a member adds the pass, to
+    register the device for push updates."""
+    if pass_type_id != os.getenv('APPLE_PASS_TYPE_ID', '').strip():
+        return jsonify({"error": "unknown pass type"}), 404
+    wallet_pass = db.find_wallet_pass_by_serial(serial_number)
+    if not wallet_pass or not _passkit_auth_ok(wallet_pass):
+        return jsonify({"error": "unauthorized"}), 401
+    push_token = (request.get_json(silent=True) or {}).get('pushToken', '')
+    if not push_token:
+        return jsonify({"error": "pushToken required"}), 400
+    created = db.register_pass_device(device_library_identifier, wallet_pass['id'], push_token)
+    return ('', 201) if created else ('', 200)
+
+
+@app.route(f'{PASSKIT_WEBSERVICE_PREFIX}/devices/<device_library_identifier>/registrations/<pass_type_id>/<serial_number>', methods=['DELETE'])
+def passkit_unregister_device(device_library_identifier, pass_type_id, serial_number):
+    """Apple Wallet calls this when a member removes the pass."""
+    wallet_pass = db.find_wallet_pass_by_serial(serial_number)
+    if not wallet_pass or not _passkit_auth_ok(wallet_pass):
+        return jsonify({"error": "unauthorized"}), 401
+    db.unregister_pass_device(device_library_identifier, wallet_pass['id'])
+    return ('', 200)
+
+
+@app.route(f'{PASSKIT_WEBSERVICE_PREFIX}/devices/<device_library_identifier>/registrations/<pass_type_id>', methods=['GET'])
+def passkit_registrations_for_device(device_library_identifier, pass_type_id):
+    """Apple Wallet polls this (usually right after our APNs push lands)
+    to ask "which of my registered passes changed?" No auth header on this
+    one per Apple's spec — it only ever reveals serial numbers the device
+    itself already registered."""
+    if pass_type_id != os.getenv('APPLE_PASS_TYPE_ID', '').strip():
+        return ('', 204)
+    since = request.args.get('passesUpdatedSince')
+    current_tag = db.get_passes_updated_tag()
+    try:
+        is_newer = since is None or float(current_tag) > float(since)
+    except ValueError:
+        is_newer = True
+    if not is_newer:
+        return ('', 204)
+    serials = db.registered_serials_for_device(device_library_identifier)
+    if not serials:
+        return ('', 204)
+    return jsonify({"lastUpdated": current_tag, "serialNumbers": serials}), 200
+
+
+@app.route(f'{PASSKIT_WEBSERVICE_PREFIX}/passes/<pass_type_id>/<serial_number>', methods=['GET'])
+def passkit_get_latest_pass(pass_type_id, serial_number):
+    """Apple Wallet calls this to fetch the freshly-updated pass. Rebuilds
+    the exact same barcode (decrypted, not rotated) with current next-match
+    and theme data — a content refresh, not a reissue."""
+    if pass_type_id != os.getenv('APPLE_PASS_TYPE_ID', '').strip():
+        return jsonify({"error": "unknown pass type"}), 404
+    wallet_pass = db.find_wallet_pass_by_serial(serial_number)
+    if not wallet_pass or not _passkit_auth_ok(wallet_pass):
+        return jsonify({"error": "unauthorized"}), 401
+    if wallet_pass['platform'] != 'apple' or not wallet_pass.get('token_encrypted'):
+        return jsonify({"error": "pass not refreshable"}), 404
+
+    raw_token = db.decrypt_wallet_token(wallet_pass['token_encrypted'])
+    member = {'first_name': wallet_pass['first_name'], 'last_name': wallet_pass['last_name']}
+    pass_data, _, _ = _member_pass_data(
+        member, wallet_pass['serial_number'], raw_token, wallet_pass['season_name'],
+        auth_token=wallet_pass['auth_token'],
+    )
+    try:
+        pkpass_bytes = build_member_pkpass(pass_data)
+    except AppleWalletConfigError as e:
+        return jsonify({"error": f"wallet not configured: {e}"}), 500
+
+    resp = send_file(io.BytesIO(pkpass_bytes), mimetype="application/vnd.apple.pkpass", max_age=0)
+    resp.headers['Last-Modified'] = datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S GMT')
+    return resp
+
+
+@app.route(f'{PASSKIT_WEBSERVICE_PREFIX}/log', methods=['POST'])
+def passkit_device_log():
+    """Apple Wallet posts error logs here — just capture them so a broken
+    device doesn't also break with a 404 on top."""
+    body = request.get_json(silent=True) or {}
+    for line in body.get('logs', []):
+        print(f"[PassKit device log] {line}")
+    return ('', 200)
 
 
 def _issue_and_email_pass(member, season):
@@ -1710,12 +1849,17 @@ def admin_matches():
         if m['kickoff_at']:
             m['kickoff_at'] = m['kickoff_at'].astimezone(tz)
 
+    pushed = request.args.get('pushed')
+    push_total = request.args.get('push_total')
+
     return render_template(
         'admin_matches.html',
         season=season,
         matches=matches,
         error=error,
         wordmark_data_uri=_current_theme_wordmark_data_uri(),
+        pushed=pushed,
+        push_total=push_total,
     )
 
 
@@ -1812,7 +1956,20 @@ def admin_match_set_current(match_id):
         cur.execute("UPDATE matches SET is_current = FALSE WHERE is_current")
         cur.execute("UPDATE matches SET is_current = TRUE WHERE id = %s", (match_id,))
 
+    _notify_apple_pass_updates()
     return redirect(url_for('admin_matches'))
+
+
+@app.route('/admin/passes/push-updates', methods=['POST'])
+def admin_push_pass_updates():
+    """Manually force every installed Apple Wallet pass to refresh right
+    now — the button for "the next-match text is stale, fix it before
+    people notice," independent of any specific admin match action."""
+    if not require_password():
+        return redirect(url_for('login'))
+
+    sent, total = _notify_apple_pass_updates()
+    return redirect(url_for('admin_matches', pushed=sent, push_total=total))
 
 
 def _qr_data_uri(payload):
