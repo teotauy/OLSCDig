@@ -1817,6 +1817,52 @@ def admin_member_download_pass(member_id):
     )
 
 
+@app.route('/api/squarespace/order', methods=['POST'])
+def squarespace_order_webhook():
+    """Auto-add a member when a Squarespace membership order comes in.
+    Squarespace's Core plan has no native webhooks, so this is meant to be
+    called by a Make.com scenario ("Watch Orders" trigger -> HTTP action)
+    rather than Squarespace directly — hence a shared-secret header instead
+    of the admin session cookie. See SELF_HOSTED_WALLET_PLAN.md for the
+    exact Make.com field mapping."""
+    expected_secret = os.getenv('SQUARESPACE_WEBHOOK_SECRET', '').strip()
+    if not expected_secret:
+        return jsonify({"error": "SQUARESPACE_WEBHOOK_SECRET not configured"}), 503
+    if request.headers.get('X-Webhook-Secret', '') != expected_secret:
+        return jsonify({"error": "unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    order_id = (data.get('order_id') or '').strip()
+    email = (data.get('email') or '').strip().lower()
+    first_name = (data.get('first_name') or '').strip()
+    last_name = (data.get('last_name') or '').strip()
+    phone = (data.get('phone') or '').strip()
+
+    if not email or not first_name or not last_name:
+        return jsonify({"error": "email, first_name, and last_name are required"}), 400
+
+    if not db.record_squarespace_order_if_new(order_id, email):
+        return jsonify({"status": "already_processed", "order_id": order_id}), 200
+
+    season = db.get_current_season()
+    if not season:
+        return jsonify({"error": "no current season set"}), 400
+
+    with db.cursor() as cur:
+        member_id = _upsert_member_in_season(cur, first_name, last_name, email, phone, season['id'])
+
+    new_member = {"id": member_id, "first_name": first_name, "last_name": last_name, "email": email}
+    pass_ok, pass_message = _issue_and_email_pass(new_member, season)
+
+    return jsonify({
+        "status": "ok",
+        "member_id": member_id,
+        "email": email,
+        "pass_sent": pass_ok,
+        "pass_message": None if pass_ok else pass_message,
+    }), 200
+
+
 @app.route('/admin/members/import', methods=['POST'])
 def admin_members_import():
     if not require_password():

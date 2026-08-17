@@ -134,6 +134,16 @@ CREATE TABLE IF NOT EXISTS match_overrides (
 -- admin to notice and click "Push Pass Updates Now".
 ALTER TABLE pass_update_state ADD COLUMN IF NOT EXISTS last_next_match_key TEXT;
 
+-- Idempotency log for the Squarespace-order-to-member webhook (via
+-- Make.com's "Watch Orders" trigger, since Squarespace's Core plan has no
+-- native webhooks). Recording order_id here lets a retried/duplicate
+-- delivery no-op instead of re-emailing a welcome pass.
+CREATE TABLE IF NOT EXISTS squarespace_orders_processed (
+    order_id TEXT PRIMARY KEY,
+    email TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS checkins (
     id SERIAL PRIMARY KEY,
     member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,

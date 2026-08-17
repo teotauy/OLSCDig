@@ -268,6 +268,26 @@ def get_active_upcoming_match_overrides(today):
         return cur.fetchall()
 
 
+def record_squarespace_order_if_new(order_id, email):
+    """Returns True if this order hasn't been processed before (caller
+    should proceed), False if it's a duplicate delivery (caller should
+    no-op). order_id may be empty, in which case every call is treated as
+    new — callers should encourage mapping a real order_id upstream."""
+    if not order_id:
+        return True
+    with cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO squarespace_orders_processed (order_id, email)
+            VALUES (%s, %s)
+            ON CONFLICT (order_id) DO NOTHING
+            RETURNING order_id
+            """,
+            (order_id, email),
+        )
+        return cur.fetchone() is not None
+
+
 def get_last_next_match_key():
     with cursor() as cur:
         cur.execute("SELECT last_next_match_key FROM pass_update_state WHERE id = 1")
