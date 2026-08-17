@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import pytz
 from team_abbreviations import format_match_display
+import db
 
 # Load environment variables
 load_dotenv()
@@ -160,41 +161,36 @@ def get_liverpool_fixtures():
         api_dates = {m["sort_key"][:10] for m in upcoming_matches}
         now_utc = datetime.now(pytz.UTC)
         try:
-            override_file = os.path.join(os.path.dirname(__file__), "match_overrides.json")
-            if os.path.exists(override_file):
-                with open(override_file, 'r') as f:
-                    overrides_data = json.load(f)
-                if overrides_data.get("enabled") and "overrides" in overrides_data:
-                    current_year = now_utc.year
-                    for date_key, override in overrides_data["overrides"].items():
-                        if date_key in api_dates:
-                            continue
-                        time_str = (override.get("time") or "12:00 PM").strip()
-                        try:
-                            t = datetime.strptime(time_str, "%I:%M %p").time()
-                        except ValueError:
-                            try:
-                                t = datetime.strptime(time_str, "%I:%M%p").time()
-                            except ValueError:
-                                t = datetime.strptime("12:00", "%H:%M").time()
-                        d = datetime.strptime(date_key, "%Y-%m-%d").date()
-                        dt_local = display_tz.localize(datetime.combine(d, t))
-                        sort_key_utc = dt_local.astimezone(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%S")
-                        if sort_key_utc < now_utc.strftime("%Y-%m-%dT%H:%M:%S"):
-                            continue
-                        override_date = datetime.strptime(date_key, "%Y-%m-%d")
-                        full_date = override_date.strftime("%A, %B %d")
-                        upcoming_matches.append({
-                            "opponent": override["opponent"],
-                            "date": override["date"],
-                            "time": override["time"],
-                            "venue": "Away",
-                            "is_home": False,
-                            "full_date": full_date,
-                            "kickoff": override["time"],
-                            "pass_display": override["pass_display"],
-                            "sort_key": sort_key_utc,
-                        })
+            for override in db.get_active_upcoming_match_overrides(now_utc.date()):
+                date_key = override["match_date"].strftime("%Y-%m-%d")
+                if date_key in api_dates:
+                    continue
+                time_str = (override.get("display_time") or "12:00 PM").strip()
+                try:
+                    t = datetime.strptime(time_str, "%I:%M %p").time()
+                except ValueError:
+                    try:
+                        t = datetime.strptime(time_str, "%I:%M%p").time()
+                    except ValueError:
+                        t = datetime.strptime("12:00", "%H:%M").time()
+                dt_local = display_tz.localize(datetime.combine(override["match_date"], t))
+                sort_key_utc = dt_local.astimezone(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%S")
+                if sort_key_utc < now_utc.strftime("%Y-%m-%dT%H:%M:%S"):
+                    continue
+                full_date = override["match_date"].strftime("%A, %B %d")
+                display_date = override.get("display_date") or override["match_date"].strftime("%-m/%-d")
+                pass_display = override.get("pass_display") or format_match_display(override["opponent"], display_date, time_str)
+                upcoming_matches.append({
+                    "opponent": override["opponent"],
+                    "date": display_date,
+                    "time": time_str,
+                    "venue": override.get("venue") or "Away",
+                    "is_home": bool(override.get("is_home", False)),
+                    "full_date": full_date,
+                    "kickoff": time_str,
+                    "pass_display": pass_display,
+                    "sort_key": sort_key_utc,
+                })
         except Exception as e:
             print(f"Warning: Could not add override-only matches: {e}")
         upcoming_matches.sort(key=lambda m: m.get("sort_key", ""))
@@ -207,18 +203,23 @@ def get_liverpool_fixtures():
         return []
 
 def check_manual_override(match_date_str):
-    """Check if there's a manual override for this match date."""
+    """Check if there's a manual override for this match date (YYYY-MM-DD).
+    Returns a dict shaped like the old JSON-file entries, for callers that
+    still expect 'date'/'time' keys rather than the DB column names."""
     try:
-        override_file = os.path.join(os.path.dirname(__file__), "match_overrides.json")
-        if os.path.exists(override_file):
-            with open(override_file, 'r') as f:
-                overrides = json.load(f)
-                if overrides.get("enabled") and "overrides" in overrides:
-                    # Check for override by date (format: YYYY-MM-DD)
-                    if match_date_str in overrides["overrides"]:
-                        override = overrides["overrides"][match_date_str]
-                        print(f"⚠️  Using manual override for {match_date_str}: {override.get('note', '')}")
-                        return override
+        row = db.get_active_match_override_for_date(match_date_str)
+        if not row:
+            return None
+        print(f"Using manual override for {match_date_str}: {row.get('note', '')}")
+        return {
+            "opponent": row["opponent"],
+            "date": row.get("display_date") or "",
+            "time": row.get("display_time") or "",
+            "pass_display": row.get("pass_display") or "",
+            "note": row.get("note") or "",
+            "venue": row.get("venue") or "",
+            "is_home": bool(row.get("is_home", False)),
+        }
     except Exception as e:
         print(f"Warning: Could not load match overrides: {e}")
     return None
@@ -230,54 +231,32 @@ def _get_forced_next_match_from_overrides():
     fixtures that the external API doesn't return correctly.
     """
     try:
-        override_file = os.path.join(os.path.dirname(__file__), "match_overrides.json")
-        if not os.path.exists(override_file):
-            return None
-        with open(override_file, 'r') as f:
-            overrides_data = json.load(f)
-        if not overrides_data.get("enabled"):
-            return None
-        overrides = overrides_data.get("overrides") or {}
-        if not isinstance(overrides, dict):
-            return None
-
         # Work in configured display timezone so "today" matches what admins see
         display_tz = pytz.timezone(PASSKIT_CONFIG.get("TIMEZONE", "America/New_York"))
         now_local = datetime.now(display_tz).date()
 
-        candidates = []
-        for date_key, override in overrides.items():
-            try:
-                override_date = datetime.strptime(date_key, "%Y-%m-%d").date()
-            except ValueError:
-                continue
-            # Skip overrides that are already in the past
-            if override_date < now_local:
-                continue
-            candidates.append((override_date, date_key, override))
-
+        candidates = db.get_active_upcoming_match_overrides(now_local)
         if not candidates:
             return None
 
-        # Earliest upcoming override wins
-        candidates.sort(key=lambda x: x[0])
-        override_date, _date_key, override = candidates[0]
+        # Rows already come back ordered by match_date ascending.
+        override = candidates[0]
+        override_date = override["match_date"]
 
-        opponent = override.get("opponent", "").strip()
+        opponent = (override.get("opponent") or "").strip()
         if not opponent:
             return None
 
-        # Use override's raw time/date/pass_display for consistency
-        time_str = (override.get("time") or "").strip()
-        display_date = (override.get("date") or "").strip()
+        time_str = (override.get("display_time") or "").strip()
+        display_date = (override.get("display_date") or "").strip()
         pass_display = (override.get("pass_display") or "").strip()
         full_date = override_date.strftime("%A, %B %d")
 
         return {
             "opponent": opponent,
-            "date": display_date or override_date.strftime("%-m/%-d") if hasattr(override_date, "strftime") else "",
+            "date": display_date or override_date.strftime("%-m/%-d"),
             "time": time_str,
-            "venue": override.get("venue", "Away"),
+            "venue": override.get("venue") or "Away",
             "is_home": bool(override.get("is_home", False)),
             "full_date": full_date,
             "kickoff": time_str,

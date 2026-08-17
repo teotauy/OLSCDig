@@ -1591,6 +1591,58 @@ def _notify_apple_pass_updates():
         shutil.rmtree(materialize_dir, ignore_errors=True)
 
 
+def _next_match_fingerprint():
+    """A short string that changes whenever the computed 'next match'
+    changes (opponent, date, kickoff, or venue) — cheap way to detect
+    "should we push pass updates" without re-deriving all of get_next_match's
+    logic. Also picks up manual overrides, since get_next_match() already
+    checks those first."""
+    try:
+        next_match = get_next_match()
+    except Exception:
+        next_match = None
+    if not next_match:
+        return "none"
+    return "|".join([
+        str(next_match.get('opponent', '')),
+        str(next_match.get('full_date', '')),
+        str(next_match.get('kickoff', '')),
+        str(next_match.get('is_home', '')),
+    ])
+
+
+@app.route('/internal/check-next-match', methods=['POST'])
+def internal_check_next_match():
+    """Meant to be hit by a scheduled job (see .github/workflows), not a
+    browser — auth is a shared secret header, not the admin session cookie.
+    Compares today's computed 'next match' against the last one we saw; if
+    it changed (a fixture advanced, a cup tie got confirmed, an admin
+    override was added), pushes an update to every installed Apple Wallet
+    pass automatically, no admin click required."""
+    expected_secret = os.getenv('INTERNAL_TASK_SECRET', '').strip()
+    if not expected_secret:
+        return jsonify({"error": "INTERNAL_TASK_SECRET not configured"}), 503
+    if request.headers.get('X-Internal-Secret', '') != expected_secret:
+        return jsonify({"error": "unauthorized"}), 401
+
+    current_key = _next_match_fingerprint()
+    last_key = db.get_last_next_match_key()
+    changed = current_key != last_key
+
+    sent, total = 0, 0
+    if changed:
+        db.set_last_next_match_key(current_key)
+        sent, total = _notify_apple_pass_updates()
+
+    return jsonify({
+        "changed": changed,
+        "next_match_key": current_key,
+        "previous_key": last_key,
+        "pushed": sent,
+        "total_devices": total,
+    })
+
+
 def _passkit_auth_ok(wallet_pass):
     auth_header = request.headers.get('Authorization', '')
     expected = wallet_pass.get('auth_token') or ''
@@ -1970,6 +2022,59 @@ def admin_push_pass_updates():
 
     sent, total = _notify_apple_pass_updates()
     return redirect(url_for('admin_matches', pushed=sent, push_total=total))
+
+
+@app.route('/admin/match-overrides', methods=['GET', 'POST'])
+def admin_match_overrides():
+    """Fix a 'next match' the football-data.org feed gets wrong or misses
+    entirely (cup ties, friendlies, corrected kickoff times) — stored in
+    the DB so it actually survives a deploy, unlike the old
+    match_overrides.json file it replaces."""
+    if not require_password():
+        return redirect(url_for('login'))
+
+    error = None
+    if request.method == 'POST':
+        date_raw = request.form.get('match_date', '').strip()
+        opponent = request.form.get('opponent', '').strip()
+        display_time = request.form.get('display_time', '').strip()
+        is_home = request.form.get('is_home') == 'home'
+        venue = request.form.get('venue', '').strip()
+        pass_display = request.form.get('pass_display', '').strip()
+        note = request.form.get('note', '').strip()
+
+        if not date_raw or not opponent or not display_time:
+            error = "Date, opponent, and kickoff time are required."
+        else:
+            try:
+                match_date = datetime.strptime(date_raw, '%Y-%m-%d').date()
+                display_date = f"{match_date.month}/{match_date.day}"
+                if not pass_display:
+                    pass_display = format_match_display(opponent, display_date, display_time)
+                db.upsert_match_override(
+                    match_date, opponent, display_date, display_time,
+                    is_home, venue, pass_display, note,
+                )
+            except ValueError:
+                error = "Date must be in YYYY-MM-DD format."
+            except Exception as e:
+                error = f"Could not save override: {e}"
+
+    overrides = db.list_match_overrides()
+    return render_template(
+        'admin_match_overrides.html',
+        overrides=overrides,
+        error=error,
+        wordmark_data_uri=_current_theme_wordmark_data_uri(),
+    )
+
+
+@app.route('/admin/match-overrides/<int:override_id>/delete', methods=['POST'])
+def admin_match_override_delete(override_id):
+    if not require_password():
+        return redirect(url_for('login'))
+    db.delete_match_override(override_id)
+    return redirect(url_for('admin_match_overrides'))
 
 
 def _qr_data_uri(payload):

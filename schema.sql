@@ -109,6 +109,31 @@ CREATE UNIQUE INDEX IF NOT EXISTS one_current_match
     ON matches (is_current)
     WHERE is_current;
 
+-- Manual overrides for "next match" data (e.g. cup ties football-data.org
+-- doesn't return, or a kickoff time it has wrong). Previously a JSON file
+-- (match_overrides.json) that had to be edited and redeployed to change —
+-- moved to the DB so admins can fix a wrong/missing match themselves,
+-- without needing a code deploy, the same way everything else here works.
+CREATE TABLE IF NOT EXISTS match_overrides (
+    id SERIAL PRIMARY KEY,
+    match_date DATE NOT NULL UNIQUE,   -- the date this override applies to
+    opponent TEXT NOT NULL,
+    display_date TEXT,                 -- e.g. "3/6", shown on the pass
+    display_time TEXT,                 -- e.g. "3 PM", shown on the pass
+    is_home BOOLEAN NOT NULL DEFAULT FALSE,
+    venue TEXT,
+    pass_display TEXT,                 -- full pre-formatted pass text; auto-generated if blank
+    note TEXT,                         -- why this override exists, e.g. "FA Cup - not in API"
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Fingerprint of the last "next match" the auto-check saw, so a scheduled
+-- job can tell when it changes (a cup tie announced, a fixture played,
+-- etc.) and push pass updates automatically instead of waiting for an
+-- admin to notice and click "Push Pass Updates Now".
+ALTER TABLE pass_update_state ADD COLUMN IF NOT EXISTS last_next_match_key TEXT;
+
 CREATE TABLE IF NOT EXISTS checkins (
     id SERIAL PRIMARY KEY,
     member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,

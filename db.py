@@ -216,6 +216,70 @@ def all_pass_device_push_tokens():
         return [r['push_token'] for r in cur.fetchall()]
 
 
+def list_match_overrides():
+    with cursor() as cur:
+        cur.execute("SELECT * FROM match_overrides ORDER BY match_date")
+        return cur.fetchall()
+
+
+def upsert_match_override(match_date, opponent, display_date, display_time, is_home, venue, pass_display, note):
+    """Create or replace the override for a given date (one per date)."""
+    with cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO match_overrides
+                (match_date, opponent, display_date, display_time, is_home, venue, pass_display, note, enabled)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, TRUE)
+            ON CONFLICT (match_date) DO UPDATE SET
+                opponent = EXCLUDED.opponent,
+                display_date = EXCLUDED.display_date,
+                display_time = EXCLUDED.display_time,
+                is_home = EXCLUDED.is_home,
+                venue = EXCLUDED.venue,
+                pass_display = EXCLUDED.pass_display,
+                note = EXCLUDED.note,
+                enabled = TRUE
+            """,
+            (match_date, opponent, display_date, display_time, is_home, venue, pass_display, note),
+        )
+
+
+def delete_match_override(override_id):
+    with cursor() as cur:
+        cur.execute("DELETE FROM match_overrides WHERE id = %s", (override_id,))
+
+
+def get_active_match_override_for_date(match_date):
+    """match_date: a date object or 'YYYY-MM-DD' string."""
+    with cursor() as cur:
+        cur.execute(
+            "SELECT * FROM match_overrides WHERE match_date = %s AND enabled",
+            (match_date,),
+        )
+        return cur.fetchone()
+
+
+def get_active_upcoming_match_overrides(today):
+    with cursor() as cur:
+        cur.execute(
+            "SELECT * FROM match_overrides WHERE enabled AND match_date >= %s ORDER BY match_date",
+            (today,),
+        )
+        return cur.fetchall()
+
+
+def get_last_next_match_key():
+    with cursor() as cur:
+        cur.execute("SELECT last_next_match_key FROM pass_update_state WHERE id = 1")
+        row = cur.fetchone()
+        return row['last_next_match_key'] if row else None
+
+
+def set_last_next_match_key(key):
+    with cursor() as cur:
+        cur.execute("UPDATE pass_update_state SET last_next_match_key = %s WHERE id = 1", (key,))
+
+
 def get_passes_updated_tag():
     with cursor() as cur:
         cur.execute("SELECT last_updated_tag FROM pass_update_state WHERE id = 1")

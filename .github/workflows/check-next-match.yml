@@ -1,0 +1,15 @@
+name: Check next match and push pass updates
+
+on:
+  schedule:
+    - cron: "0 */3 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping check-next-match endpoint
+        run: |
+          curl -sf -X POST "https://olsc-web-app.onrender.com/internal/check-next-match" \
+            -H "X-Internal-Secret: ${{ secrets.INTERNAL_TASK_SECRET }}"
