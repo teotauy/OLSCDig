@@ -31,7 +31,7 @@ from dotenv import load_dotenv
 import pytz
 import bcrypt
 from team_abbreviations import format_match_display, abbreviate_team_name
-from match_updates import get_next_match
+from match_updates import get_next_match, get_finished_liverpool_matches
 from wallet_pass import (
     AppleWalletConfigError, MemberPassData, build_member_pkpass, PASS_THEMES,
     load_apple_wallet_config, send_apns_pass_update,
@@ -1649,6 +1649,60 @@ def internal_check_next_match():
     })
 
 
+def _sync_finished_match_results():
+    """Fill in the result (win/draw/loss) for any of our own past matches
+    that don't have one yet, by matching against football-data.org's
+    finished-matches feed on date (Liverpool plays at most once a day, so
+    date alone is an unambiguous match — no opponent-name fuzzy-matching
+    needed). Skips the API call entirely if nothing needs it. Returns the
+    number of matches updated."""
+    pending = db.get_matches_missing_result()
+    if not pending:
+        return 0
+
+    finished = get_finished_liverpool_matches()
+    finished_by_date = {f["date"]: f for f in finished}
+
+    updated = 0
+    for match in pending:
+        kickoff_date = match['kickoff_at'].date()
+        finished_match = finished_by_date.get(kickoff_date)
+        if not finished_match:
+            continue
+        lfc_goals = finished_match["liverpool_goals"]
+        opp_goals = finished_match["opponent_goals"]
+        if lfc_goals > opp_goals:
+            result = "win"
+        elif lfc_goals < opp_goals:
+            result = "loss"
+        else:
+            result = "draw"
+        home_label = "Liverpool" if match['is_home'] else match['opponent']
+        away_label = match['opponent'] if match['is_home'] else "Liverpool"
+        home_goals = lfc_goals if match['is_home'] else opp_goals
+        away_goals = opp_goals if match['is_home'] else lfc_goals
+        final_score = f"{home_label} {home_goals}-{away_goals} {away_label}"
+        db.set_match_result(match['id'], result, final_score)
+        updated += 1
+    return updated
+
+
+@app.route('/internal/sync-match-results', methods=['POST'])
+def internal_sync_match_results():
+    """Same shared-secret auth pattern as /internal/check-next-match, for
+    the daily scheduled job. Separate route (rather than folded into that
+    one) because it's a genuinely different concern — filling in past
+    results for the leaderboard, not pushing pass updates."""
+    expected_secret = os.getenv('INTERNAL_TASK_SECRET', '').strip()
+    if not expected_secret:
+        return jsonify({"error": "INTERNAL_TASK_SECRET not configured"}), 503
+    if request.headers.get('X-Internal-Secret', '') != expected_secret:
+        return jsonify({"error": "unauthorized"}), 401
+
+    updated = _sync_finished_match_results()
+    return jsonify({"status": "ok", "results_updated": updated})
+
+
 def _passkit_auth_ok(wallet_pass):
     auth_header = request.headers.get('Authorization', '')
     expected = wallet_pass.get('auth_token') or ''
@@ -1964,6 +2018,30 @@ def admin_matches():
         wordmark_data_uri=_current_theme_wordmark_data_uri(),
         pushed=pushed,
         push_total=push_total,
+    )
+
+
+@app.route('/admin/leaderboard')
+def admin_leaderboard():
+    """Season check-in leaderboard: 3 points for a win, 1 for a draw, 0
+    for a loss or a match whose result isn't known yet. Points come only
+    from matches a member actually checked into — we've never run the
+    scanner for every match, and that's fine, it just means fewer scoring
+    opportunities, not a penalty."""
+    if not require_password():
+        return redirect(url_for('login'))
+
+    season = db.get_current_season()
+    if not season:
+        return render_template('admin_leaderboard.html', season=None, rows=[],
+                                wordmark_data_uri=_current_theme_wordmark_data_uri())
+
+    rows = db.get_leaderboard(season['id'])
+    return render_template(
+        'admin_leaderboard.html',
+        season=season,
+        rows=rows,
+        wordmark_data_uri=_current_theme_wordmark_data_uri(),
     )
 
 

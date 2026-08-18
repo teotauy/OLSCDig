@@ -109,6 +109,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS one_current_match
     ON matches (is_current)
     WHERE is_current;
 
+-- Result ('win' | 'draw' | 'loss', from Liverpool's perspective), filled in
+-- automatically once the match is finished, via football-data.org — used
+-- to award check-in leaderboard points (3 / 1 / 0). NULL until known.
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS result TEXT;
+
 -- Manual overrides for "next match" data (e.g. cup ties football-data.org
 -- doesn't return, or a kickoff time it has wrong). Previously a JSON file
 -- (match_overrides.json) that had to be edited and redeployed to change —

@@ -92,6 +92,55 @@ def count_checkins_for_match(match_id):
         return cur.fetchone()['n']
 
 
+def get_matches_missing_result():
+    """Past matches with no result recorded yet — candidates to check
+    against football-data.org's finished-matches feed."""
+    with cursor() as cur:
+        cur.execute(
+            "SELECT * FROM matches WHERE result IS NULL AND kickoff_at < now() ORDER BY kickoff_at"
+        )
+        return cur.fetchall()
+
+
+def set_match_result(match_id, result, final_score):
+    with cursor() as cur:
+        cur.execute(
+            "UPDATE matches SET result = %s, final_score = %s WHERE id = %s",
+            (result, final_score, match_id),
+        )
+
+
+def get_leaderboard(season_id):
+    """Points per member for a season: 3 for a win, 1 for a draw, 0 for a
+    loss or a not-yet-known result, summed across every match they checked
+    into. Members with zero check-ins still appear, ranked last."""
+    with cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                m.id AS member_id,
+                m.first_name,
+                m.last_name,
+                COALESCE(SUM(
+                    CASE mt.result
+                        WHEN 'win' THEN 3
+                        WHEN 'draw' THEN 1
+                        ELSE 0
+                    END
+                ), 0) AS points,
+                COUNT(c.id) AS matches_checked_in
+            FROM members m
+            JOIN member_seasons ms ON ms.member_id = m.id AND ms.season_id = %s
+            LEFT JOIN checkins c ON c.member_id = m.id
+            LEFT JOIN matches mt ON mt.id = c.match_id AND mt.season_id = %s
+            GROUP BY m.id, m.first_name, m.last_name
+            ORDER BY points DESC, matches_checked_in DESC, m.last_name, m.first_name
+            """,
+            (season_id, season_id),
+        )
+        return cur.fetchall()
+
+
 def _wallet_token_fernet():
     """Symmetric key for encrypting (not hashing) the barcode token copy
     kept for PassKit web-service refreshes. Derived from FLASK_SECRET_KEY

@@ -222,6 +222,46 @@ def get_liverpool_fixtures():
         print(f"Error fetching fixtures: {e}")
         return []
 
+
+def get_finished_liverpool_matches(limit=15):
+    """Recently finished Liverpool matches from football-data.org, for
+    filling in results on our own `matches` rows (leaderboard scoring).
+
+    Returns a list of dicts: {date (a date object, UTC), is_home,
+    liverpool_goals, opponent_goals}. Computed from score.fullTime's raw
+    home/away goal counts rather than the API's own `winner` field, so a
+    result can't be wrong just because we misread the meaning of an enum
+    value we're not fully certain of.
+    """
+    api_key = os.getenv("FOOTBALL_DATA_API_KEY")
+    if not api_key:
+        raise ValueError("FOOTBALL_DATA_API_KEY is not set in environment")
+    headers = {"X-Auth-Token": api_key}
+    team_id = 64  # Liverpool FC
+
+    url = f"https://api.football-data.org/v4/teams/{team_id}/matches"
+    params = {"status": "FINISHED", "limit": limit}
+    response = requests.get(url, headers=headers, params=params, timeout=30)
+    response.raise_for_status()
+    data = response.json()
+
+    results = []
+    for match in data.get("matches", []):
+        full_time = (match.get("score") or {}).get("fullTime") or {}
+        home_goals, away_goals = full_time.get("home"), full_time.get("away")
+        if home_goals is None or away_goals is None:
+            continue  # e.g. abandoned/no score recorded
+        is_home = match["homeTeam"]["name"] == "Liverpool FC"
+        match_date = datetime.fromisoformat(match["utcDate"].replace("Z", "+00:00")).date()
+        results.append({
+            "date": match_date,
+            "is_home": is_home,
+            "liverpool_goals": home_goals if is_home else away_goals,
+            "opponent_goals": away_goals if is_home else home_goals,
+        })
+    return results
+
+
 def check_manual_override(match_date_str):
     """Check if there's a manual override for this match date (YYYY-MM-DD).
     Returns a dict shaped like the old JSON-file entries, for callers that

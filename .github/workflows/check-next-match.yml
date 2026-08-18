@@ -1,4 +1,4 @@
-name: Check next match and push pass updates
+name: Daily match sync (next-match push + finished-match results)
 
 on:
   schedule:
@@ -16,4 +16,8 @@ jobs:
       - name: Ping check-next-match endpoint
         run: |
           curl -sf -X POST "https://olsc-web-app.onrender.com/internal/check-next-match" \
+            -H "X-Internal-Secret: ${{ secrets.INTERNAL_TASK_SECRET }}"
+      - name: Ping sync-match-results endpoint
+        run: |
+          curl -sf -X POST "https://olsc-web-app.onrender.com/internal/sync-match-results" \
             -H "X-Internal-Secret: ${{ secrets.INTERNAL_TASK_SECRET }}"
