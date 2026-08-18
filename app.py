@@ -727,7 +727,11 @@ def _send_pkpass_email(to_email, first_name, pkpass_bytes, mobile_pass_url=None,
     )
     html = f"""<!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><style>
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<style>
 body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; color: #333; margin: 0; padding: 0; background: #f4f4f4; }}
 .wrapper {{ max-width: 480px; margin: 0 auto; background: white; }}
 .header {{ background: #c8102e; padding: 28px 20px; text-align: center; }}
@@ -743,6 +747,19 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Aria
 .step-alt a {{ color: #888; text-decoration: underline; }}
 .fine-print {{ font-size: 12px; color: #999; text-align: center; margin-top: 20px; }}
 .footer {{ background: #f8f9fa; padding: 16px; text-align: center; font-size: 12px; color: #888; }}
+/* Explicit dark-mode overrides — without these, mail clients that auto-invert
+   do so per-client and inconsistently; #111 text and #999/#888 captions are
+   exactly the kind of near-black/near-white pair that can end up illegible
+   (dark-on-dark or light-on-light) under a different client's heuristic. */
+@media (prefers-color-scheme: dark) {{
+  body {{ background: #121212; color: #d8d8d8; }}
+  .wrapper {{ background: #1c1c1e; }}
+  .step {{ border-color: #3a3a3c; }}
+  .step-text strong {{ color: #f2f2f2; }}
+  .step-alt a {{ color: #aaaaaa; }}
+  .fine-print {{ color: #a0a0a0; }}
+  .footer {{ background: #161616; color: #a0a0a0; }}
+}}
 </style></head>
 <body>
 <div class="wrapper">
