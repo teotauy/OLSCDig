@@ -83,6 +83,28 @@
         {% if added %}<div class="message success">Added {{ added }}.</div>{% endif %}
         {% if info %}<div class="message info">{{ info }}</div>{% endif %}
 
+        {% if possible_typos %}
+        <div class="message" style="background:#fff3cd; color:#7a5c00; border:1px solid #ffe08a;">
+            <strong>{{ possible_typos|length }} email(s) look like they might have a typo</strong> — still imported as entered, but worth a glance:
+            <ul style="margin:8px 0 0 20px; padding:0;">
+                {% for t in possible_typos %}
+                <li>Line {{ t.line }}{% if t.name %} ({{ t.name }}){% endif %}: <code>{{ t.email }}</code> &mdash; did they mean <code>{{ t.suggested }}</code>?</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if already_existed %}
+        <div class="message" style="background:#d1ecf1; color:#0c5460; border:1px solid #bee5eb;">
+            <strong>{{ already_existed|length }} row(s) matched a member who already existed</strong> — could be a returning member, or a second purchase meant for someone else (e.g. a spouse) that used the same email by mistake:
+            <ul style="margin:8px 0 0 20px; padding:0;">
+                {% for m in already_existed %}
+                <li>Line {{ m.line }}: {{ m.name }} &mdash; <code>{{ m.email }}</code></li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
         <div class="panel">
             <h2>Add a member</h2>
             <form method="POST">

@@ -11,6 +11,7 @@ import requests
 import json
 import csv
 import io
+import difflib
 import hashlib
 import smtplib
 import time
@@ -1329,7 +1330,37 @@ def _format_match_for_scan(match):
     }
 
 
+COMMON_EMAIL_DOMAINS = [
+    "gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "aol.com",
+    "icloud.com", "live.com", "msn.com", "comcast.net", "me.com",
+]
+
+
+def _likely_email_typo(email):
+    """Best-effort, non-blocking check: is this email's domain suspiciously
+    close to a major provider without exactly matching it (gmial.com,
+    gmail.con, yaho.com)? Returns a suggested correction, or None if the
+    domain looks fine (including legitimate less-common domains — this
+    only flags near-misses of the big, common ones, it doesn't try to
+    validate domains in general)."""
+    if "@" not in email:
+        return None
+    local, _, domain = email.rpartition("@")
+    domain = domain.lower()
+    if domain in COMMON_EMAIL_DOMAINS:
+        return None
+    matches = difflib.get_close_matches(domain, COMMON_EMAIL_DOMAINS, n=1, cutoff=0.82)
+    if not matches:
+        return None
+    return f"{local}@{matches[0]}"
+
+
 def _upsert_member_in_season(cur, first_name, last_name, email, phone, season_id):
+    """Returns (member_id, was_new) — was_new is False whenever this email
+    already had a members row, whether from earlier in the same import,
+    a previous season, or an earlier add. Callers that care about
+    flagging likely-duplicate purchases use that; callers that don't can
+    ignore it."""
     cur.execute(
         """
         INSERT INTO members (first_name, last_name, email, phone)
@@ -1338,11 +1369,12 @@ def _upsert_member_in_season(cur, first_name, last_name, email, phone, season_id
             first_name = EXCLUDED.first_name,
             last_name = EXCLUDED.last_name,
             phone = EXCLUDED.phone
-        RETURNING id
+        RETURNING id, (xmax = 0) AS was_new
         """,
         (first_name, last_name, email, phone),
     )
-    member_id = cur.fetchone()['id']
+    row = cur.fetchone()
+    member_id, was_new = row['id'], row['was_new']
     cur.execute(
         """
         INSERT INTO member_seasons (member_id, season_id)
@@ -1351,7 +1383,7 @@ def _upsert_member_in_season(cur, first_name, last_name, email, phone, season_id
         """,
         (member_id, season_id),
     )
-    return member_id
+    return member_id, was_new
 
 
 @app.route('/admin/members', methods=['GET', 'POST'])
@@ -1374,7 +1406,7 @@ def admin_members():
         else:
             try:
                 with db.cursor() as cur:
-                    member_id = _upsert_member_in_season(cur, first_name, last_name, email, phone, season['id'])
+                    member_id, _ = _upsert_member_in_season(cur, first_name, last_name, email, phone, season['id'])
                 added = f"{first_name} {last_name}"
 
                 new_member = {"id": member_id, "first_name": first_name, "last_name": last_name, "email": email}
@@ -1391,6 +1423,11 @@ def admin_members():
     info = None
     if imported is not None:
         info = f"Imported {imported} member(s)." + (f" Skipped {skipped}." if skipped and skipped != '0' else "")
+
+    # Popped (not just read) so these only show once, right after the
+    # import that produced them — not on every later visit to this page.
+    already_existed = session.pop('import_already_existed', None)
+    possible_typos = session.pop('import_possible_typos', None)
 
     resent = request.args.get('resent')
     resend_error = request.args.get('resend_error')
@@ -1429,6 +1466,8 @@ def admin_members():
         error=error,
         added=added,
         info=info,
+        already_existed=already_existed,
+        possible_typos=possible_typos,
         wordmark_data_uri=_current_theme_wordmark_data_uri(),
     )
 
@@ -1909,7 +1948,7 @@ def squarespace_order_webhook():
         return jsonify({"error": "no current season set"}), 400
 
     with db.cursor() as cur:
-        member_id = _upsert_member_in_season(cur, first_name, last_name, email, phone, season['id'])
+        member_id, _ = _upsert_member_in_season(cur, first_name, last_name, email, phone, season['id'])
 
     new_member = {"id": member_id, "first_name": first_name, "last_name": last_name, "email": email}
     pass_ok, pass_message = _issue_and_email_pass(new_member, season)
@@ -1938,6 +1977,14 @@ def admin_members_import():
 
     imported = 0
     skipped = 0
+    already_existed = []  # rows whose email already had a members row —
+                           # could be a returning member, or an accidental
+                           # second purchase (e.g. meant for a spouse but
+                           # checked out under the same email)
+    possible_typos = []   # rows whose email domain looks like a near-miss
+                           # of a major provider (gmial.com, gmail.con) —
+                           # still imported as-is, just flagged for a human
+                           # to double-check and correct if needed
     BATCH_SIZE = 25
 
     # Committed in batches rather than one transaction for the whole file:
@@ -1975,18 +2022,37 @@ def admin_members_import():
                     skipped += 1
                     continue
 
+                suggested_email = _likely_email_typo(email)
+                if suggested_email:
+                    possible_typos.append({
+                        "line": line_num,
+                        "name": f"{first_name} {last_name}".strip(),
+                        "email": email,
+                        "suggested": suggested_email,
+                    })
+
                 phone = (field('phone', 'person.mobilenumber') or '').strip()
 
                 try:
                     cur.execute("SAVEPOINT row_import")
-                    _upsert_member_in_season(cur, first_name, last_name, email, phone, season['id'])
+                    _, was_new = _upsert_member_in_season(cur, first_name, last_name, email, phone, season['id'])
                     cur.execute("RELEASE SAVEPOINT row_import")
                     imported += 1
+                    if not was_new:
+                        already_existed.append({
+                            "line": line_num,
+                            "name": f"{first_name} {last_name}".strip(),
+                            "email": email,
+                        })
                 except Exception as e:
                     cur.execute("ROLLBACK TO SAVEPOINT row_import")
                     skipped += 1
                     print(f"CSV import: skipped line {line_num} ({email}): {e}")
 
+    if already_existed:
+        session['import_already_existed'] = already_existed
+    if possible_typos:
+        session['import_possible_typos'] = possible_typos
     return redirect(url_for('admin_members', imported=imported, skipped=skipped))
 
 
