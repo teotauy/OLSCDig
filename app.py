@@ -1934,32 +1934,58 @@ def admin_members_import():
         return redirect(url_for('admin_members'))
 
     text = file.read().decode('utf-8-sig', errors='ignore')
-    reader = csv.DictReader(io.StringIO(text))
+    rows = list(enumerate(csv.DictReader(io.StringIO(text)), start=2))  # header is line 1
 
     imported = 0
     skipped = 0
+    BATCH_SIZE = 25
 
-    with db.cursor() as cur:
-        for row in reader:
-            email = (row.get('email') or row.get('person.emailAddress') or '').strip().lower()
-            if not email:
-                skipped += 1
-                continue
+    # Committed in batches rather than one transaction for the whole file:
+    # each DB round-trip costs real time with no connection pooling, and a
+    # multi-hundred-row import can run for minutes. If the request got cut
+    # off partway through a single giant transaction, NOTHING would be
+    # saved — not even rows already processed. Committing every 25 rows
+    # means a cut-off import keeps whatever it already finished, and
+    # re-running the same file is harmless (upserts are idempotent).
+    for batch_start in range(0, len(rows), BATCH_SIZE):
+        batch = rows[batch_start:batch_start + BATCH_SIZE]
+        with db.cursor() as cur:
+            for line_num, row in batch:
+                row_ci = {(k or '').strip().lower(): v for k, v in row.items()}
 
-            if row.get('first_name') or row.get('last_name'):
-                first_name = (row.get('first_name') or '').strip()
-                last_name = (row.get('last_name') or '').strip()
-            else:
-                first_name, last_name = _split_name(row.get('person.displayName'))
+                def field(*names):
+                    for name in names:
+                        val = row_ci.get(name.lower())
+                        if val:
+                            return val
+                    return None
 
-            if not first_name and not last_name:
-                skipped += 1
-                continue
+                email = (field('email', 'person.emailaddress', 'product form: email') or '').strip().lower()
+                if not email:
+                    skipped += 1
+                    continue
 
-            phone = (row.get('phone') or row.get('person.mobileNumber') or '').strip()
+                first_name = (field('first_name') or '').strip()
+                last_name = (field('last_name') or '').strip()
+                if not first_name and not last_name:
+                    full_name = field('person.displayname', 'product form: name')
+                    first_name, last_name = _split_name(full_name)
 
-            _upsert_member_in_season(cur, first_name, last_name, email, phone, season['id'])
-            imported += 1
+                if not first_name and not last_name:
+                    skipped += 1
+                    continue
+
+                phone = (field('phone', 'person.mobilenumber') or '').strip()
+
+                try:
+                    cur.execute("SAVEPOINT row_import")
+                    _upsert_member_in_season(cur, first_name, last_name, email, phone, season['id'])
+                    cur.execute("RELEASE SAVEPOINT row_import")
+                    imported += 1
+                except Exception as e:
+                    cur.execute("ROLLBACK TO SAVEPOINT row_import")
+                    skipped += 1
+                    print(f"CSV import: skipped line {line_num} ({email}): {e}")
 
     return redirect(url_for('admin_members', imported=imported, skipped=skipped))
 

@@ -114,13 +114,22 @@
             <h2>Import from CSV</h2>
             <p class="muted" style="margin-bottom: 10px;">
                 Accepts a simple CSV with <code>first_name, last_name, email, phone</code> columns,
-                or a raw PassKit export (uses <code>person.displayName</code>, <code>person.emailAddress</code>, <code>person.mobileNumber</code>).
-                Existing emails are attached to the current season rather than duplicated.
+                a raw PassKit export (uses <code>person.displayName</code>, <code>person.emailAddress</code>, <code>person.mobileNumber</code>),
+                or a Squarespace order export (uses <code>Product Form: Name</code>, <code>Product Form: Email</code>).
+                Existing emails are attached to the current season rather than duplicated — someone who bought two
+                memberships in one file won't be added twice.
             </p>
-            <form method="POST" action="{{ url_for('admin_members_import') }}" enctype="multipart/form-data">
+            <form method="POST" action="{{ url_for('admin_members_import') }}" enctype="multipart/form-data" id="importForm">
                 <input type="file" name="file" accept=".csv" required>
-                <button type="submit" class="btn secondary" style="margin-top: 10px;">Import</button>
+                <button type="submit" class="btn secondary" style="margin-top: 10px;" id="importSubmitBtn">Import</button>
+                <p class="muted" style="margin-top: 8px;" id="importHint">A large file can take a few minutes — leave this page open and don't click Import twice.</p>
             </form>
+            <script>
+                document.getElementById('importForm').addEventListener('submit', function () {
+                    document.getElementById('importSubmitBtn').disabled = true;
+                    document.getElementById('importSubmitBtn').textContent = 'Importing… please wait';
+                });
+            </script>
         </div>
 
         <div class="panel">
