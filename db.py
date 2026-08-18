@@ -86,6 +86,12 @@ def get_current_match():
         return cur.fetchone()
 
 
+def count_checkins_for_match(match_id):
+    with cursor() as cur:
+        cur.execute("SELECT COUNT(*) AS n FROM checkins WHERE match_id = %s", (match_id,))
+        return cur.fetchone()['n']
+
+
 def _wallet_token_fernet():
     """Symmetric key for encrypting (not hashing) the barcode token copy
     kept for PassKit web-service refreshes. Derived from FLASK_SECRET_KEY

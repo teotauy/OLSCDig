@@ -2285,6 +2285,7 @@ def scanner():
     season = db.get_current_season()
     match = db.get_current_match()
     is_home, wordmark_data_uri = _current_theme()
+    checked_in_count = db.count_checkins_for_match(match['id']) if match else 0
 
     return render_template(
         'scanner.html',
@@ -2294,7 +2295,21 @@ def scanner():
         wordmark_data_uri=wordmark_data_uri,
         shop_qr_data_uri=_qr_data_uri(MEMBERSHIP_SHOP_URL),
         shop_url=MEMBERSHIP_SHOP_URL,
+        checked_in_count=checked_in_count,
     )
+
+
+@app.route('/api/checkins/count')
+def api_checkins_count():
+    """Running check-in count for the current match — lets door staff watch
+    for fire-marshal capacity on early-entry nights. Grows only; there's no
+    "check out" in this system, checkins are a permanent per-match record."""
+    if not require_password():
+        return jsonify({"status": "error", "code": "unauthorized"}), 401
+    match = db.get_current_match()
+    if not match:
+        return jsonify({"status": "ok", "count": 0, "match_id": None})
+    return jsonify({"status": "ok", "count": db.count_checkins_for_match(match['id']), "match_id": match['id']})
 
 
 @app.route('/api/checkins/scan', methods=['POST'])

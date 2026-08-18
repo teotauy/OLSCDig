@@ -183,6 +183,9 @@
                     No current match set
                 {% endif %}
             </div>
+            {% if match %}
+            <div class="match" id="checkedInCount" style="margin-left:6px;">{{ checked_in_count }} checked in</div>
+            {% endif %}
         </div>
 
         <div id="result" class="result idle">
@@ -227,6 +230,23 @@
         const result = document.getElementById('result');
         const cameraWrap = document.getElementById('cameraWrap');
         let audioContext = null;
+
+        const checkedInCountEl = document.getElementById('checkedInCount');
+        async function refreshCheckedInCount() {
+            if (!checkedInCountEl) return;
+            try {
+                const response = await fetch('{{ url_for("api_checkins_count") }}');
+                const data = await response.json();
+                if (data.status === 'success' || data.status === 'ok') {
+                    checkedInCountEl.textContent = `${data.count} checked in`;
+                }
+            } catch (error) {
+                // Silent — a missed refresh isn't worth surfacing to door staff.
+            }
+        }
+        if (checkedInCountEl) {
+            setInterval(refreshCheckedInCount, {{ headcount_refresh_seconds }} * 1000);
+        }
 
         function escapeHtml(value) {
             return String(value || '').replace(/[&<>"']/g, char => ({
@@ -330,6 +350,7 @@
                 if (data.status === 'success' && data.result === 'checked_in') {
                     setResult('success', 'Good', data.member.name, `${escapeHtml(data.match.label)}<br>Checked in ${escapeHtml(data.checked_in_at)}`);
                     playFeedback('success');
+                    refreshCheckedInCount();
                 } else if (data.status === 'success' && data.result === 'already_checked_in') {
                     setResult('warning', 'Already Used', data.member.name, `${escapeHtml(data.match.label)}<br>First scan ${escapeHtml(data.checked_in_at || 'already recorded')}`);
                     playFeedback('warning');
@@ -453,6 +474,7 @@
                 if (data.status === 'success' && data.result === 'checked_in') {
                     setResult('success', 'Good', data.member.name, `${escapeHtml(data.match.label)}<br>Checked in ${escapeHtml(data.checked_in_at)}`);
                     playFeedback('success');
+                    refreshCheckedInCount();
                 } else if (data.status === 'success' && data.result === 'already_checked_in') {
                     setResult('warning', 'Already Used', data.member.name, `${escapeHtml(data.match.label)}<br>First scan ${escapeHtml(data.checked_in_at || 'already recorded')}`);
                     playFeedback('warning');
