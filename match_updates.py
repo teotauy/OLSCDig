@@ -69,17 +69,37 @@ def get_liverpool_fixtures():
         for match in fixtures[:1]:  # Print first match for debugging
             print(f"   Raw UTC time: {match.get('utcDate')}")
         
+        # Fetch every active override once, up front — not per fixture. Each
+        # DB round-trip here costs ~1.3s (no connection pooling), so doing
+        # this inside the loop below turned a fast local lookup into a
+        # 25-fixture-long chain of network calls (~30s total) the moment
+        # overrides moved off the JSON file and onto the DB.
+        overrides_by_date = {
+            o["match_date"].strftime("%Y-%m-%d"): o
+            for o in db.get_active_upcoming_match_overrides(datetime.now(pytz.UTC).date())
+        }
+
         # Process fixtures
         upcoming_matches = []
         for match in fixtures:
             home_team = match["homeTeam"]["name"]
             away_team = match["awayTeam"]["name"]
             match_date = datetime.fromisoformat(match["utcDate"].replace("Z", "+00:00"))
-            
+
             # Check for manual override BEFORE processing
             date_key = match_date.strftime("%Y-%m-%d")
-            override = check_manual_override(date_key)
-            
+            override_row = overrides_by_date.get(date_key)
+            override = None
+            if override_row:
+                override = {
+                    "opponent": override_row["opponent"],
+                    "date": override_row.get("display_date") or "",
+                    "time": override_row.get("display_time") or "",
+                    "pass_display": override_row.get("pass_display") or "",
+                    "venue": override_row.get("venue") or "",
+                    "is_home": bool(override_row.get("is_home", False)),
+                }
+
             # Determine if Liverpool is home or away
             if home_team == "Liverpool FC":
                 opponent = away_team
