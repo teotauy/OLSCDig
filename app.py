@@ -714,6 +714,14 @@ def _send_pkpass_email(to_email, first_name, pkpass_bytes, mobile_pass_url=None,
     season = db.get_current_season()
     season_name = season['name'] if season else ""
     subject = f"Your {season_name} Digital ID".strip() if season_name else "Your Digital ID"
+    # "2026/27" -> "26/27": short form for the preview text, derived rather
+    # than hardcoded so it doesn't go stale next season the way the old
+    # fixed subject line did.
+    short_season = ""
+    if season_name and "/" in season_name:
+        year_part, rest = season_name.split("/", 1)
+        short_season = f"{year_part[-2:]}/{rest}"
+    preview_text = f"{short_season} Season Digital ID".strip() if short_season else "Your Digital ID"
     wordmark_uri = _asset_data_uri(PASS_THEMES["home"]["wordmark_path"])
     google_wallet_link_html = (
         f'<p class="step-alt"><a href="{google_wallet_url}">or add it straight to Google Wallet</a></p>'
@@ -765,6 +773,7 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Aria
 }}
 </style></head>
 <body>
+<div style="display:none; max-height:0; overflow:hidden; mso-hide:all;">{preview_text}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</div>
 <div class="wrapper">
 <div class="header"><img src="{wordmark_uri}" alt="OLSC Brooklyn — Official Supporters Club"></div>
 <div class="content">
