@@ -200,15 +200,24 @@ def _paste_centered(canvas, art, margin_frac=0.14):
     canvas.alpha_composite(resized, offset)
 
 
-def _paste_left_aligned(canvas, art, margin_frac=0.06):
+def _paste_left_aligned(canvas, art, margin_frac=0.06, vertical_margin_frac=0.22):
     """Like _paste_centered, but flush against the left edge (a small
     margin in from it) with the remaining space on the right — for the
     Wallet pass header logo, which Apple renders left-anchored, so any
-    slack space belongs on the right, not split evenly on both sides."""
+    slack space belongs on the right, not split evenly on both sides.
+
+    Vertical margin is deliberately much larger than the horizontal one:
+    confirmed on a real device that Apple's own rendering of the
+    collapsed-stack header row clips into the logo when it's sized too
+    close to the full canvas height, trimming the top/bottom of the
+    crest and wordmark. The canvas has more vertical headroom than
+    Apple actually gives the logo, so this leaves real breathing room
+    rather than trusting the nominal canvas size.
+    """
     cw, ch = canvas.size
     left_margin = int(cw * margin_frac)
     max_w = cw - left_margin
-    max_h = int(ch * (1 - margin_frac * 2))
+    max_h = int(ch * (1 - vertical_margin_frac * 2))
     scale = min(max_w / art.width, max_h / art.height)
     resized = art.resize((max(1, int(art.width * scale)), max(1, int(art.height * scale))), Image.LANCZOS)
     offset = (left_margin, (ch - resized.height) // 2)
