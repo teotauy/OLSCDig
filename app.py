@@ -604,9 +604,9 @@ def _send_welcome_email_smtp(to_email, first_name, pass_url):
 <html>
 <head><meta charset="utf-8"><style>
 body {{ font-family: Arial, sans-serif; color: #333; }}
-.header {{ background: linear-gradient(135deg, #c8102e 0%, #00a65a 100%); color: white; padding: 20px; text-align: center; }}
+.header {{ background: linear-gradient(135deg, #e31b23 0%, #00a65a 100%); color: white; padding: 20px; text-align: center; }}
 .content {{ padding: 20px; }}
-.button {{ background: #c8102e; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 15px 0; }}
+.button {{ background: #e31b23; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 15px 0; }}
 .footer {{ background: #f8f9fa; padding: 15px; text-align: center; font-size: 12px; color: #666; }}
 </style></head>
 <body>
@@ -645,7 +645,7 @@ def _send_signup_nudge_email(to_email):
 <head><meta charset="utf-8"><style>
 body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; color: #333; margin: 0; padding: 0; background: #f4f4f4; }}
 .wrapper {{ max-width: 480px; margin: 0 auto; background: white; }}
-.header {{ background: #c8102e; padding: 28px 20px; text-align: center; }}
+.header {{ background: #e31b23; padding: 28px 20px; text-align: center; }}
 .header img {{ max-width: 220px; height: auto; display: block; margin: 0 auto; }}
 .content {{ padding: 28px 24px; }}
 .content p {{ line-height: 1.5; }}
@@ -659,7 +659,7 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Aria
 <p>We looked for an active OLSC Brooklyn membership under this email and didn't find one.</p>
 <p>Membership renews every season, so if you joined previously but not yet for 2026/27, this would be why. If that's the case, you can join here:</p>
 <p style="text-align:center; margin: 24px 0;">
-<a href="{signup_url}" style="display:inline-block; background:#c8102e; color:#ffffff; padding:14px 28px; text-decoration:none; border-radius:8px; font-weight:600; font-size:14px;">Join OLSC Brooklyn</a>
+<a href="{signup_url}" style="display:inline-block; background:#e31b23; color:#ffffff; padding:14px 28px; text-decoration:none; border-radius:8px; font-weight:600; font-size:14px;">Join OLSC Brooklyn</a>
 </p>
 <p style="font-size:13px; color:#888;">If you believe this is a mistake and you already have a current membership, reply to this email and we'll sort it out.</p>
 <p>You'll Never Walk Alone!<br>— OLSC Brooklyn</p>
@@ -734,15 +734,15 @@ def _send_pkpass_email(to_email, first_name, pkpass_bytes, mobile_pass_url=None,
 <style>
 body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; color: #333; margin: 0; padding: 0; background: #f4f4f4; }}
 .wrapper {{ max-width: 480px; margin: 0 auto; background: white; }}
-.header {{ background: #c8102e; padding: 28px 20px; text-align: center; }}
+.header {{ background: #e31b23; padding: 28px 20px; text-align: center; }}
 .header img {{ max-width: 220px; height: auto; display: block; margin: 0 auto; }}
 .content {{ padding: 28px 24px; }}
 .content > p {{ line-height: 1.5; }}
 .step {{ border: 2px solid #eee; border-radius: 12px; padding: 18px; margin: 18px 0; text-align: center; }}
-.step-label {{ font-size: 13px; font-weight: 800; letter-spacing: 0.5px; color: #c8102e; margin-bottom: 8px; }}
+.step-label {{ font-size: 13px; font-weight: 800; letter-spacing: 0.5px; color: #e31b23; margin-bottom: 8px; }}
 .step-text {{ font-size: 15px; margin-bottom: 12px; }}
 .step-text strong {{ color: #111; }}
-.step-button {{ display: inline-block; background: #c8102e; color: #ffffff !important; padding: 14px 30px; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 15px; }}
+.step-button {{ display: inline-block; background: #e31b23; color: #ffffff !important; padding: 14px 30px; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 15px; }}
 .step-alt {{ font-size: 12.5px; margin: 10px 0 0; }}
 .step-alt a {{ color: #888; text-decoration: underline; }}
 .fine-print {{ font-size: 12px; color: #999; text-align: center; margin-top: 20px; }}

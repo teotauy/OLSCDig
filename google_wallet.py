@@ -83,7 +83,7 @@ def build_google_wallet_save_url(
     class_id = f"{issuer_id}.{class_suffix}"
     object_id = f"{issuer_id}.{object_suffix}"
     wordmark = "olsc_wordmark_white.png" if is_home else "olsc_wordmark_red.png"
-    background = "#c8102e" if is_home else "#ffffff"
+    background = "#e31b23" if is_home else "#ffffff"
 
     generic_class = {"id": class_id}
 

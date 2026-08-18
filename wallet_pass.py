@@ -152,23 +152,23 @@ ASSETS_DIR = ROOT / "wallet_pass_assets"
 # with red lettering, not PassKit-era green.
 PASS_THEMES = {
     "home": {
-        "background": "rgb(200,16,46)",
+        "background": "rgb(227,27,35)",
         "foreground": "rgb(255,255,255)",
         "label": "rgb(255,255,255)",
-        "icon_bg": (200, 16, 46, 255),
+        "icon_bg": (227, 27, 35, 255),
         "icon_border": None,
         "crest_path": ASSETS_DIR / "olsc_crest_white.png",
         "wordmark_path": ASSETS_DIR / "olsc_wordmark_white.png",
     },
     "away": {
         "background": "rgb(255,255,255)",
-        "foreground": "rgb(200,16,46)",
-        "label": "rgb(200,16,46)",
+        "foreground": "rgb(227,27,35)",
+        "label": "rgb(227,27,35)",
         "icon_bg": (255, 255, 255, 255),
         # A plain white icon can disappear against Wallet's own light-mode
         # chrome (notifications, lock screen) — a thin red frame keeps it
         # defined without changing the away color story.
-        "icon_border": (200, 16, 46, 255),
+        "icon_border": (227, 27, 35, 255),
         "crest_path": ASSETS_DIR / "olsc_crest_red.png",
         "wordmark_path": ASSETS_DIR / "olsc_wordmark_red.png",
     },
@@ -176,12 +176,16 @@ PASS_THEMES = {
 
 
 def _load_art(path):
-    """Load one of the bundled crest/wordmark assets (extracted from the
-    club's real logo art in Desktop/Artwork-Assets/Official Logos/OLSC
-    Logos/ and recolored per theme). Bundled in the repo, not referenced
-    from outside it, so it's available on Render too.
-    """
-    return Image.open(path).convert("RGBA")
+    """Load one of the bundled crest/wordmark assets and trim to its actual
+    content bounding box. The wordmark source files in particular are
+    centered inside a canvas several times wider than the artwork itself
+    (Desktop/logos export) — without trimming, "left-align the logo" is
+    impossible, since the untrimmed image still has its own huge built-in
+    side margins baked in before we ever get to position it."""
+    img = Image.open(path).convert("RGBA")
+    alpha = img.split()[3]
+    bbox = alpha.getbbox()
+    return img.crop(bbox) if bbox else img
 
 
 def _paste_centered(canvas, art, margin_frac=0.14):
@@ -193,6 +197,21 @@ def _paste_centered(canvas, art, margin_frac=0.14):
     scale = min(max_w / art.width, max_h / art.height)
     resized = art.resize((max(1, int(art.width * scale)), max(1, int(art.height * scale))), Image.LANCZOS)
     offset = ((cw - resized.width) // 2, (ch - resized.height) // 2)
+    canvas.alpha_composite(resized, offset)
+
+
+def _paste_left_aligned(canvas, art, margin_frac=0.06):
+    """Like _paste_centered, but flush against the left edge (a small
+    margin in from it) with the remaining space on the right — for the
+    Wallet pass header logo, which Apple renders left-anchored, so any
+    slack space belongs on the right, not split evenly on both sides."""
+    cw, ch = canvas.size
+    left_margin = int(cw * margin_frac)
+    max_w = cw - left_margin
+    max_h = int(ch * (1 - margin_frac * 2))
+    scale = min(max_w / art.width, max_h / art.height)
+    resized = art.resize((max(1, int(art.width * scale)), max(1, int(art.height * scale))), Image.LANCZOS)
+    offset = (left_margin, (ch - resized.height) // 2)
     canvas.alpha_composite(resized, offset)
 
 
@@ -226,7 +245,7 @@ def _make_pass_images(pass_dir, theme):
     logo_sizes = {"logo.png": (160, 50), "logo@2x.png": (320, 100)}
     for name, (w, h) in logo_sizes.items():
         img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        _paste_centered(img, wordmark, margin_frac=0.06)
+        _paste_left_aligned(img, wordmark, margin_frac=0.06)
         img.save(pass_dir / name)
 
 
@@ -234,8 +253,16 @@ def _build_pass_json(config, pass_data, theme):
     secondary_fields = [
         {"key": "season", "label": "SEASON", "value": pass_data.season},
     ]
+
+    # headerFields render in the top-right of the pass, next to the logo —
+    # the one part of a Wallet pass that's still visible when it's
+    # collapsed in a stack of other cards, not just when fully open. Next
+    # match is exactly the thing worth being able to see at a glance
+    # without tapping in, so it lives here instead of (or in addition to
+    # duplicating in) secondaryFields, which only shows once expanded.
+    header_fields = []
     if pass_data.next_match:
-        secondary_fields.append({"key": "nextMatch", "label": "NEXT MATCH", "value": pass_data.next_match})
+        header_fields.append({"key": "nextMatch", "label": "NEXT MATCH", "value": pass_data.next_match})
 
     pass_json = {
         "formatVersion": 1,
@@ -245,6 +272,7 @@ def _build_pass_json(config, pass_data, theme):
         "serialNumber": pass_data.serial_number,
         "description": pass_data.description,
         "generic": {
+            "headerFields": header_fields,
             "primaryFields": [
                 {"key": "name", "label": "MEMBER", "value": pass_data.display_name}
             ],

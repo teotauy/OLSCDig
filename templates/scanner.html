@@ -28,8 +28,8 @@
             padding: 22px 18px;
             text-align: center;
         }
-        .header.theme-home { background: linear-gradient(160deg, #c8102e 0%, #a30d25 100%); color: #fff; }
-        .header.theme-away { background: linear-gradient(160deg, #ffffff 0%, #f0f0f0 100%); color: #c8102e; border-bottom: 1px solid #eee; }
+        .header.theme-home { background: linear-gradient(160deg, #e31b23 0%, #a30d25 100%); color: #fff; }
+        .header.theme-away { background: linear-gradient(160deg, #ffffff 0%, #f0f0f0 100%); color: #e31b23; border-bottom: 1px solid #eee; }
         .wordmark { max-width: 170px; height: auto; display: block; margin: 0 auto 10px; }
         .header .role { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; opacity: 0.75; margin-bottom: 2px; }
         .match {
@@ -41,7 +41,7 @@
             font-weight: 600;
         }
         .header.theme-home .match { background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.2); }
-        .header.theme-away .match { background: rgba(200,16,46,0.08); border: 1px solid rgba(200,16,46,0.2); }
+        .header.theme-away .match { background: rgba(227,27,35,0.08); border: 1px solid rgba(227,27,35,0.2); }
 
         .section { padding: 18px; }
         .camera-wrap {
@@ -54,7 +54,7 @@
         }
         .camera-wrap.success { border-color: #00a65a; box-shadow: 0 0 0 8px rgba(0,166,90,0.18); }
         .camera-wrap.warning { border-color: #ffb000; box-shadow: 0 0 0 8px rgba(255,176,0,0.2); }
-        .camera-wrap.error { border-color: #c8102e; box-shadow: 0 0 0 8px rgba(200,16,46,0.18); }
+        .camera-wrap.error { border-color: #e31b23; box-shadow: 0 0 0 8px rgba(227,27,35,0.18); }
         #reader { width: 100%; min-height: 280px; }
 
         .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
@@ -65,7 +65,7 @@
             font-size: 15px;
             font-weight: 700;
             color: #fff;
-            background: #c8102e;
+            background: #e31b23;
             cursor: pointer;
             transition: transform 0.1s ease, opacity 0.1s ease;
         }
@@ -98,7 +98,7 @@
             font-size: 16px;
             margin-bottom: 10px;
         }
-        #rosterSearch:focus { outline: none; border-color: #c8102e; }
+        #rosterSearch:focus { outline: none; border-color: #e31b23; }
 
         .roster-results { display: flex; flex-direction: column; gap: 8px; }
         .roster-result-row {
@@ -125,7 +125,7 @@
             padding: 13px;
             font-size: 15px;
         }
-        input:focus { outline: none; border-color: #c8102e; }
+        input:focus { outline: none; border-color: #e31b23; }
 
         .result {
             margin: 16px;
@@ -146,7 +146,7 @@
         .result.idle { color: #666; }
         .result.success { background: #d9fbe6; color: #063d1d; border-color: #00a65a; box-shadow: 0 0 0 8px rgba(0,166,90,0.18); }
         .result.warning { background: #fff4cf; color: #4a3300; border-color: #ffb000; box-shadow: 0 0 0 8px rgba(255,176,0,0.2); }
-        .result.error { background: #ffe1e6; color: #5c0010; border-color: #c8102e; box-shadow: 0 0 0 8px rgba(200,16,46,0.18); }
+        .result.error { background: #ffe1e6; color: #5c0010; border-color: #e31b23; box-shadow: 0 0 0 8px rgba(227,27,35,0.18); }
         .result h2 { font-size: 38px; line-height: 1.0; margin-bottom: 8px; letter-spacing: -0.5px; }
         .result .member { font-size: 23px; font-weight: 800; margin-bottom: 6px; }
         .result .detail { font-size: 15px; line-height: 1.4; }
@@ -160,7 +160,7 @@
 
         .links { padding: 4px 18px 20px; text-align: center; font-size: 13px; }
         .links a { color: #888; text-decoration: none; margin: 0 8px; }
-        .links a:hover { color: #c8102e; }
+        .links a:hover { color: #e31b23; }
 
         @media (max-width: 430px) {
             body { padding: 8px; }
@@ -278,7 +278,7 @@
             const color = {
                 success: '#00a65a',
                 warning: '#ffb000',
-                error: '#c8102e'
+                error: '#e31b23'
             }[type];
             if (!color) return;
 
