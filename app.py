@@ -724,7 +724,7 @@ def _send_pkpass_email(to_email, first_name, pkpass_bytes, mobile_pass_url=None,
     preview_text = f"{short_season} Season Digital ID".strip() if short_season else "Your Digital ID"
     wordmark_uri = _asset_data_uri(PASS_THEMES["home"]["wordmark_path"])
     google_wallet_link_html = (
-        f'<p class="step-alt"><a href="{google_wallet_url}">or add it straight to Google Wallet</a></p>'
+        f'<p class="step-alt">or <a href="{google_wallet_url}">add it straight to Google Wallet</a></p>'
         if google_wallet_url else ""
     )
     android_step_html = (
