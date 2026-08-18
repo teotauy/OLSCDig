@@ -514,5 +514,6 @@
         modeSearchBtn.addEventListener('click', () => setMode('search'));
         rosterSearch.addEventListener('input', () => renderRosterResults(rosterSearch.value.trim()));
     </script>
+    {% include '_loading_overlay.html' %}
 </body>
 </html>

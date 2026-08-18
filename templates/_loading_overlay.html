@@ -1,0 +1,70 @@
+<div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-spinner">🧤</div>
+    <div class="loading-message" id="loadingOverlayMessage">Working on it&hellip;</div>
+</div>
+<style>
+    .loading-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: rgba(10, 10, 10, 0.82);
+        color: #ffffff;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 24px;
+    }
+    .loading-overlay.active { display: flex; }
+    .loading-spinner {
+        font-size: 72px;
+        line-height: 1;
+        margin-bottom: 22px;
+        animation: loadingOverlaySpin 0.9s linear infinite;
+    }
+    @keyframes loadingOverlaySpin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+    .loading-message {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 18px;
+        font-weight: 700;
+        max-width: 340px;
+    }
+</style>
+<script>
+(function () {
+    var messages = [
+        "Pickford's diving the wrong way again…",
+        "This is taking longer than a VAR review…",
+        "Nutmegging the server…",
+        "Should be here by the 90th minute…",
+        "Warming up on the touchline…",
+        "Checking for offside…",
+        "Booking a slot on Soccer Saturday…",
+        "Still faster than Everton's build-up play…"
+    ];
+    var overlay = document.getElementById('loadingOverlay');
+    var messageEl = document.getElementById('loadingOverlayMessage');
+    if (!overlay || !messageEl) return;
+
+    function randomMessage() {
+        return messages[Math.floor(Math.random() * messages.length)];
+    }
+
+    function showLoadingOverlay() {
+        messageEl.textContent = randomMessage();
+        overlay.classList.add('active');
+        setInterval(function () { messageEl.textContent = randomMessage(); }, 2200);
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('form').forEach(function (form) {
+            if (form.dataset.noLoadingOverlay) return;
+            form.addEventListener('submit', function () { showLoadingOverlay(); });
+        });
+    });
+})();
+</script>
