@@ -698,13 +698,12 @@ def _send_pkpass_email(to_email, first_name, pkpass_bytes, mobile_pass_url=None,
     Rebuilt (Aug 16) around one goal: people skim emails and miss things,
     so this needs to work even if they only read the bold line. Two
     clearly separated, device-specific instructions instead of a paragraph
-    plus multiple buttons/caveats to parse. Google Wallet's button is
-    deliberately left out for now — it's real and configured, but only
-    approved test accounts can actually use it while demo mode is active,
-    and a third option that's broken for almost everyone works directly
-    against "very very very clear." `google_wallet_url` is still accepted
-    (harmless if passed) so call sites don't need to change when it's
-    reintroduced later; it's just not rendered.
+    plus multiple buttons/caveats to parse. Google Wallet's button was
+    deliberately left out while it only worked for approved test accounts
+    (a third option broken for almost everyone worked directly against
+    "very very very clear") — Google approved real publishing access on
+    Aug 18, so it's back as a secondary option inside the Android box,
+    underneath the one link that's guaranteed to work for everyone.
     """
     if os.getenv('EMAIL_SENDING_ENABLED', 'true').strip().lower() == 'false':
         print(f"EMAIL_SENDING_ENABLED=false — not sending pass email to {to_email} (pass was still generated).")
@@ -712,11 +711,16 @@ def _send_pkpass_email(to_email, first_name, pkpass_bytes, mobile_pass_url=None,
 
     name = first_name or "Member"
     wordmark_uri = _asset_data_uri(PASS_THEMES["home"]["wordmark_path"])
+    google_wallet_link_html = (
+        f'<p class="step-alt"><a href="{google_wallet_url}">or add it straight to Google Wallet</a></p>'
+        if google_wallet_url else ""
+    )
     android_step_html = (
         f'<div class="step">'
         f'<div class="step-label">🤖&nbsp; IF YOU HAVE AN ANDROID PHONE</div>'
         f'<p class="step-text">Do not open the attachment — it will not work. Tap this button instead:</p>'
         f'<a href="{mobile_pass_url}" class="step-button">Get My Pass</a>'
+        f'{google_wallet_link_html}'
         f'</div>'
         if mobile_pass_url else ""
     )
@@ -734,6 +738,8 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Aria
 .step-text {{ font-size: 15px; margin-bottom: 12px; }}
 .step-text strong {{ color: #111; }}
 .step-button {{ display: inline-block; background: #c8102e; color: #ffffff !important; padding: 14px 30px; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 15px; }}
+.step-alt {{ font-size: 12.5px; margin: 10px 0 0; }}
+.step-alt a {{ color: #888; text-decoration: underline; }}
 .fine-print {{ font-size: 12px; color: #999; text-align: center; margin-top: 20px; }}
 .footer {{ background: #f8f9fa; padding: 16px; text-align: center; font-size: 12px; color: #888; }}
 </style></head>
