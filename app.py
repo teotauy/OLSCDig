@@ -711,6 +711,9 @@ def _send_pkpass_email(to_email, first_name, pkpass_bytes, mobile_pass_url=None,
         return False
 
     name = first_name or "Member"
+    season = db.get_current_season()
+    season_name = season['name'] if season else ""
+    subject = f"Your {season_name} Digital ID".strip() if season_name else "Your Digital ID"
     wordmark_uri = _asset_data_uri(PASS_THEMES["home"]["wordmark_path"])
     google_wallet_link_html = (
         f'<p class="step-alt"><a href="{google_wallet_url}">or add it straight to Google Wallet</a></p>'
@@ -780,7 +783,7 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Aria
 </html>"""
     if _send_email_resend(
         to_email,
-        "[ACTION NEEDED] - Your Digital ID",
+        subject,
         html=html,
         attachments=[{
             "filename": "olsc-membership.pkpass",
@@ -798,7 +801,7 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Aria
     from_addr = os.getenv("EMAIL_FROM", user)
 
     msg = MIMEMultipart("mixed")
-    msg["Subject"] = "[ACTION NEEDED] - Your Digital ID"
+    msg["Subject"] = subject
     msg["From"] = from_addr
     msg["To"] = to_email
     alt = MIMEMultipart("alternative")
