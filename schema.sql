@@ -139,6 +139,24 @@ CREATE TABLE IF NOT EXISTS match_overrides (
 -- admin to notice and click "Push Pass Updates Now".
 ALTER TABLE pass_update_state ADD COLUMN IF NOT EXISTS last_next_match_key TEXT;
 
+-- Last-known Resend quota/rate-limit state, captured from response headers
+-- on every real send attempt (Resend has no separate "check my usage"
+-- endpoint) -- powers a small admin-visible usage indicator and lets a
+-- failed send be told apart from "you've hit today's/this month's limit"
+-- rather than a generic, unhelpful failure message.
+CREATE TABLE IF NOT EXISTS resend_usage_state (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    daily_quota_raw TEXT,
+    monthly_quota_raw TEXT,
+    ratelimit_remaining TEXT,
+    reset_at TIMESTAMPTZ,
+    last_status_code INTEGER,
+    last_error_message TEXT,
+    checked_at TIMESTAMPTZ,
+    CHECK (id = 1)
+);
+INSERT INTO resend_usage_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
 -- Idempotency log for the Squarespace-order-to-member webhook (via
 -- Make.com's "Watch Orders" trigger, since Squarespace's Core plan has no
 -- native webhooks). Recording order_id here lets a retried/duplicate

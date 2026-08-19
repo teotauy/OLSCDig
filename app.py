@@ -161,6 +161,27 @@ def inject_headcount_refresh():
     """Make headcount refresh interval (seconds) available in all templates."""
     return {"headcount_refresh_seconds": _headcount_refresh_seconds()}
 
+
+# Only these routes ever render _admin_footer.html — gating the extra DB
+# query in inject_resend_usage() to just these avoids adding a query (and
+# with no connection pooling, a real ~1.3s cost) to every page load across
+# the whole app, member-facing pages included.
+_ADMIN_FOOTER_ENDPOINTS = {
+    'admin_index', 'admin_members', 'admin_matches', 'admin_leaderboard', 'scanner',
+}
+
+
+@app.context_processor
+def inject_resend_usage():
+    """Last-known Resend quota state, for the small usage indicator in
+    _admin_footer.html. Scoped to admin pages only (see above)."""
+    if request.endpoint not in _ADMIN_FOOTER_ENDPOINTS:
+        return {}
+    try:
+        return {"resend_usage": db.get_resend_usage_state()}
+    except Exception:
+        return {}
+
 def _clean_header_value(v):
     """Ensure header value is a clean string (no newlines, no bytes)."""
     if v is None:
@@ -584,9 +605,51 @@ def _send_email_resend(to_email, subject, html=None, text=None, attachments=None
             json=payload,
             timeout=15,
         )
-        return 200 <= response.status_code < 300
-    except Exception:
+    except Exception as e:
+        print(f"Resend request failed (network/timeout), not a quota issue: {e}")
         return False
+
+    ok = 200 <= response.status_code < 300
+    _record_resend_usage(response, ok)
+    return ok
+
+
+def _record_resend_usage(response, ok):
+    """Capture Resend's quota/rate-limit response headers (there's no
+    separate endpoint to check usage — this is the only way to see it) and
+    persist the latest known state. Called on every real send, success or
+    failure, so the DB always reflects the most recent thing we actually
+    observed."""
+    headers = response.headers
+    reset_at = None
+    reset_seconds = headers.get("ratelimit-reset")
+    if reset_seconds:
+        try:
+            reset_at = datetime.now(pytz.utc) + timedelta(seconds=int(reset_seconds))
+        except ValueError:
+            reset_at = None
+
+    error_message = None
+    if not ok:
+        try:
+            body = response.json()
+            error_message = body.get("message") or response.text[:300]
+        except Exception:
+            error_message = response.text[:300]
+        print(f"Resend send failed: status={response.status_code} body={error_message}")
+
+    try:
+        db.update_resend_usage_state(
+            daily_quota_raw=headers.get("x-resend-daily-quota"),
+            monthly_quota_raw=headers.get("x-resend-monthly-quota"),
+            ratelimit_remaining=headers.get("ratelimit-remaining"),
+            reset_at=reset_at,
+            status_code=response.status_code,
+            error_message=error_message,
+        )
+    except Exception as e:
+        # Never let usage-tracking itself break the actual send path.
+        print(f"Could not persist Resend usage state: {e}")
 
 
 def _send_welcome_email_smtp(to_email, first_name, pass_url):
@@ -1878,6 +1941,12 @@ def _issue_and_email_pass(member, season):
 
     if os.getenv('EMAIL_SENDING_ENABLED', 'true').strip().lower() == 'false':
         return False, "Pass generated, but email sending is deliberately paused right now (EMAIL_SENDING_ENABLED=false) — not a bug."
+
+    usage = db.get_resend_usage_state()
+    if usage and usage.get('last_status_code') == 429:
+        reset_at = usage.get('reset_at')
+        when = f" (resets {reset_at.strftime('%-I:%M %p %Z')})" if reset_at else ""
+        return False, f"Pass generated, but Resend's send limit is hit for now{when} — not a config problem, just wait and resend."
     return False, "Pass generated but email failed to send (check SMTP/Resend env vars)."
 
 

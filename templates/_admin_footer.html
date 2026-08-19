@@ -6,3 +6,12 @@
     <a href="{{ url_for('admin_index') }}">Admin Home</a>
     <a href="{{ url_for('logout') }}">Logout</a>
 </div>
+{% if resend_usage and resend_usage.checked_at %}
+<div style="text-align:center; margin-top:10px; font-size:11px; color:#bbb;">
+    Resend
+    {%- if resend_usage.daily_quota_raw %} &middot; daily: {{ resend_usage.daily_quota_raw }}{% endif -%}
+    {%- if resend_usage.monthly_quota_raw %} &middot; monthly: {{ resend_usage.monthly_quota_raw }}{% endif -%}
+    {%- if resend_usage.reset_at %} &middot; resets {{ resend_usage.reset_at.strftime('%-I:%M %p %Z') }}{% endif -%}
+    {%- if resend_usage.last_status_code and resend_usage.last_status_code >= 400 %} &middot; last send failed ({{ resend_usage.last_status_code }}){% endif -%}
+</div>
+{% endif %}

@@ -355,6 +355,35 @@ def set_last_next_match_key(key):
         cur.execute("UPDATE pass_update_state SET last_next_match_key = %s WHERE id = 1", (key,))
 
 
+def update_resend_usage_state(daily_quota_raw=None, monthly_quota_raw=None, ratelimit_remaining=None,
+                               reset_at=None, status_code=None, error_message=None):
+    """Persist the latest known Resend quota/rate-limit info, captured from
+    response headers on a real send attempt. Only overwrites fields we
+    actually got a fresh value for, so a call that lacks a given header
+    doesn't blank out the last known value for it."""
+    with cursor() as cur:
+        cur.execute(
+            """
+            UPDATE resend_usage_state SET
+                daily_quota_raw = COALESCE(%s, daily_quota_raw),
+                monthly_quota_raw = COALESCE(%s, monthly_quota_raw),
+                ratelimit_remaining = COALESCE(%s, ratelimit_remaining),
+                reset_at = COALESCE(%s, reset_at),
+                last_status_code = %s,
+                last_error_message = %s,
+                checked_at = now()
+            WHERE id = 1
+            """,
+            (daily_quota_raw, monthly_quota_raw, ratelimit_remaining, reset_at, status_code, error_message),
+        )
+
+
+def get_resend_usage_state():
+    with cursor() as cur:
+        cur.execute("SELECT * FROM resend_usage_state WHERE id = 1")
+        return cur.fetchone()
+
+
 def get_passes_updated_tag():
     with cursor() as cur:
         cur.execute("SELECT last_updated_tag FROM pass_update_state WHERE id = 1")
