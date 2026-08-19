@@ -168,8 +168,10 @@
         <div class="panel">
             <h2>Roster <a class="edit-link" style="font-size:13px; font-weight:normal;" href="{{ url_for('admin_export_members') }}">Export CSV</a>
                 {% if resend_usage and resend_usage.checked_at %}
-                <span class="resend-badge{% if resend_usage.last_status_code and resend_usage.last_status_code >= 400 %} warn{% endif %}">
-                    &#128231; {{ resend_usage.daily_quota_raw or '?' }}{% if resend_usage.reset_at %} &middot; resets {{ resend_usage.reset_at.strftime('%-I:%M %p') }}{% endif %}
+                <span class="resend-badge{% if resend_usage.last_status_code and resend_usage.last_status_code >= 400 %} warn{% endif %}"
+                      id="resendBadge"
+                      data-reset-at="{{ resend_usage.reset_at.isoformat() if resend_usage.reset_at else '' }}">
+                    &#128231; {{ resend_usage.daily_quota_raw or '?' }} sent today<span id="resendCountdown"></span>
                 </span>
                 {% endif %}
             </h2>
@@ -294,6 +296,34 @@
             updateSortIndicators();
             applyRosterControls();
         }
+
+        // Live countdown instead of a fixed clock time -- a raw "resets
+        // 8:42 AM" is ambiguous about whose timezone that is (server's?
+        // browser's?), a countdown sidesteps the question entirely.
+        (function () {
+            const badge = document.getElementById('resendBadge');
+            const countdownEl = document.getElementById('resendCountdown');
+            if (!badge || !countdownEl) return;
+            const resetAt = badge.dataset.resetAt ? new Date(badge.dataset.resetAt) : null;
+            if (!resetAt || isNaN(resetAt.getTime())) return;
+
+            function render() {
+                const msLeft = resetAt - new Date();
+                if (msLeft <= 0) {
+                    countdownEl.textContent = ' · resets any moment';
+                    return;
+                }
+                const totalMinutes = Math.floor(msLeft / 60000);
+                const hours = Math.floor(totalMinutes / 60);
+                const minutes = totalMinutes % 60;
+                const parts = [];
+                if (hours) parts.push(`${hours}h`);
+                parts.push(`${minutes}m`);
+                countdownEl.textContent = ` · resets in ${parts.join(' ')}`;
+            }
+            render();
+            setInterval(render, 60000);
+        })();
     </script>
     {% include '_loading_overlay.html' %}
 </body>
