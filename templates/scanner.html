@@ -232,6 +232,7 @@
         let audioContext = null;
 
         const checkedInCountEl = document.getElementById('checkedInCount');
+        let checkedInCountInterval = null;
         async function refreshCheckedInCount() {
             if (!checkedInCountEl) return;
             try {
@@ -244,8 +245,24 @@
                 // Silent — a missed refresh isn't worth surfacing to door staff.
             }
         }
+        // Pause while the tab isn't actually visible — a scanner device
+        // left open (screen off, backgrounded) between matches shouldn't
+        // poll forever and quietly keep the server from ever going idle.
+        function startCheckedInCountPolling() {
+            if (!checkedInCountEl || checkedInCountInterval) return;
+            checkedInCountInterval = setInterval(refreshCheckedInCount, {{ headcount_refresh_seconds }} * 1000);
+        }
         if (checkedInCountEl) {
-            setInterval(refreshCheckedInCount, {{ headcount_refresh_seconds }} * 1000);
+            startCheckedInCountPolling();
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    clearInterval(checkedInCountInterval);
+                    checkedInCountInterval = null;
+                } else {
+                    refreshCheckedInCount();
+                    startCheckedInCountPolling();
+                }
+            });
         }
 
         function escapeHtml(value) {

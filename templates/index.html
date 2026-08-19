@@ -453,11 +453,22 @@
             startCountdown();
         }, REFRESH_SECONDS * 1000);
 
-        // Refresh when page becomes visible again (mobile)
+        // Pause polling entirely while the tab isn't visible (backgrounded,
+        // minimized, another tab focused) rather than just letting it keep
+        // firing unseen — a stray tab left open indefinitely was quietly
+        // keeping the server from ever going idle. Resume with an
+        // immediate refresh when it becomes visible again.
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) {
+            if (document.hidden) {
+                clearInterval(refreshInterval);
+                clearInterval(countdownInterval);
+            } else {
                 fetchHeadcount();
                 startCountdown();
+                refreshInterval = setInterval(() => {
+                    fetchHeadcount();
+                    startCountdown();
+                }, REFRESH_SECONDS * 1000);
             }
         });
     </script>
