@@ -162,20 +162,14 @@ def inject_headcount_refresh():
     return {"headcount_refresh_seconds": _headcount_refresh_seconds()}
 
 
-# Only these routes ever render _admin_footer.html — gating the extra DB
-# query in inject_resend_usage() to just these avoids adding a query (and
-# with no connection pooling, a real ~1.3s cost) to every page load across
-# the whole app, member-facing pages included.
-_ADMIN_FOOTER_ENDPOINTS = {
-    'admin_index', 'admin_members', 'admin_matches', 'admin_leaderboard', 'scanner',
-}
-
-
 @app.context_processor
 def inject_resend_usage():
-    """Last-known Resend quota state, for the small usage indicator in
-    _admin_footer.html. Scoped to admin pages only (see above)."""
-    if request.endpoint not in _ADMIN_FOOTER_ENDPOINTS:
+    """Last-known Resend quota state, for the small usage badge on the
+    members page — the only page that actually sends pass emails (Resend
+    Pass / Send Pass / CSV-triggered sends), so that's the only place this
+    needs to be. Scoping this avoids adding a DB query (a real ~1.3s cost
+    with no connection pooling) to every page load app-wide."""
+    if request.endpoint != 'admin_members':
         return {}
     try:
         return {"resend_usage": db.get_resend_usage_state()}

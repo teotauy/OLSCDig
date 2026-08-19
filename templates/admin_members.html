@@ -66,6 +66,17 @@
         .roster-toolbar { display: flex; gap: 10px; align-items: flex-end; margin-bottom: 12px; }
         .roster-toolbar .field { flex: 1; }
         .roster-count { color: #666; font-size: 13px; white-space: nowrap; padding-bottom: 10px; }
+        .resend-badge {
+            float: right;
+            font-size: 12px;
+            color: #666;
+            background: #f4f4f4;
+            border-radius: 999px;
+            padding: 4px 12px;
+            font-variant-numeric: tabular-nums;
+            font-weight: 600;
+        }
+        .resend-badge.warn { background: #fff3cd; color: #7a5c00; }
 
         .links { text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0; }
         .links a { color: #e31b23; text-decoration: none; font-size: 14px; margin: 0 10px; }
@@ -155,7 +166,13 @@
         </div>
 
         <div class="panel">
-            <h2>Roster <a class="edit-link" style="font-size:13px; font-weight:normal;" href="{{ url_for('admin_export_members') }}">Export CSV</a></h2>
+            <h2>Roster <a class="edit-link" style="font-size:13px; font-weight:normal;" href="{{ url_for('admin_export_members') }}">Export CSV</a>
+                {% if resend_usage and resend_usage.checked_at %}
+                <span class="resend-badge{% if resend_usage.last_status_code and resend_usage.last_status_code >= 400 %} warn{% endif %}">
+                    &#128231; {{ resend_usage.daily_quota_raw or '?' }}{% if resend_usage.reset_at %} &middot; resets {{ resend_usage.reset_at.strftime('%-I:%M %p') }}{% endif %}
+                </span>
+                {% endif %}
+            </h2>
             {% if members %}
             <div class="roster-toolbar">
                 <div class="field">
