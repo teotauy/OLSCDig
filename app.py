@@ -1651,11 +1651,20 @@ def _build_google_wallet_url(member, season, raw_token, serial_number, next_matc
     return ""
 
 
-PASSKIT_WEBSERVICE_PREFIX = "/passkit/v1"
+# Apple's Wallet client automatically appends /v1/devices/..., /v1/passes/...,
+# /v1/log to whatever webServiceURL a pass carries -- that "v1" segment is
+# part of Apple's own protocol, not something we add ourselves. Real member
+# devices were hitting /passkit/v1/v1/devices/... (confirmed in production
+# logs) and getting 404s, forever, because webServiceURL itself already had
+# "/v1" baked in via this same constant, doubling it up. BASE (no v1) is
+# what goes in webServiceURL; PREFIX (with v1) is the actual route path,
+# matching what Apple's client correctly constructs from a correct BASE.
+PASSKIT_WEBSERVICE_BASE = "/passkit"
+PASSKIT_WEBSERVICE_PREFIX = f"{PASSKIT_WEBSERVICE_BASE}/v1"
 
 
 def _passkit_web_service_url():
-    return f"{_public_base_url()}{PASSKIT_WEBSERVICE_PREFIX}"
+    return f"{_public_base_url()}{PASSKIT_WEBSERVICE_BASE}"
 
 
 def _member_pass_data(member, serial_number, raw_token, season_name, auth_token=""):
