@@ -33,9 +33,10 @@ as the thing that broke.
 | --- | --- | --- | --- |
 | PassKit webServiceURL / device registration path | ✅ | Fixed and replayed against a real serial number from production logs (404→201). Route path and query param name (`passesUpdatedSince`) independently cross-checked against external documentation, not just my own spec-reading. | None — this specific bug is closed. |
 | PassKit "list updatable passes" response shape (200 body / 204 empty) | ⚠️ | Built to spec, tested only via Flask test client against my own requests. | Confirm against a real Apple Wallet client's actual request/response cycle once a real device has a pass with the fixed webServiceURL installed. |
-| PassKit "get latest pass" — `If-Modified-Since` / `304` support | ❌ | **Real gap found tonight during this audit**, not a guess: the endpoint always rebuilds and returns 200 with fresh content; it never reads the incoming `If-Modified-Since` header to return a cheap 304 when nothing changed. Confirmed via independent source that Apple's spec expects this. | Not broken (degrades to "always send full data," not "always fail"), but should be built properly — add `If-Modified-Since` handling, return 304 when the pass's content hasn't changed since that timestamp. |
+| PassKit "get latest pass" — `If-Modified-Since` / `304` support | ✅ | **Built and closed same day.** Real gap found during this audit (the endpoint always rebuilt and returned 200, never honoring `If-Modified-Since`), not a guess. Fixed and verified through the real route with 4 cases: fresh/200, matching-timestamp/304, stale-timestamp/200, 200-again after a real content change. | None — closed. |
 | APNs push delivery | ⚠️ | Got a real, structurally-valid rejection (`400 BadDeviceToken`) from Apple's live production push servers using the real cert — strong evidence the mTLS handshake, topic, and cert chain are correct. | Never confirmed a real push actually reaches a real device and the device visibly updates. Needs one real device with a real installed pass. |
-| Resend quota header names/values (`x-resend-daily-quota` etc.) | ❌ | Verified only against Resend's documentation text and mocked HTTP responses in tests. **Never seen a real API response's actual headers.** Docs can be wrong or stale — same risk class as the Apple bug. | Next real send (once you approve one) — log and inspect the actual raw headers Resend returns, confirm they match what the code parses. |
+| Resend quota header names/values (`x-resend-daily-quota` etc.) | ✅ | **Confirmed against a real response, Aug 20** — the first real bulk send (5 members) returned real headers: `daily_quota_raw`, `monthly_quota_raw`, and `ratelimit_remaining` all parsed correctly. Real headers exposed a *different* real bug in the process — see next row. | None — the headers themselves parse correctly. |
+| Resend `reset_at` — was conflating the rate-limit window with the daily/monthly quota | ✅ (found + fixed Aug 20) | The first real response showed `reset_at` landing 0.57 seconds after `checked_at`. Checked Resend's actual docs: `ratelimit-reset` is the ~1-second burst-rate window, not the daily/monthly quota — and Resend documents **no** reset-time header for those quotas at all. Before this fix, a real daily-quota 429 would have shown "resets in a few seconds" (false reassurance; the real wait can be up to 24h). Fixed: captures Resend's real error `name` (`rate_limit_exceeded` / `daily_quota_exceeded` / `monthly_quota_exceeded`) and gives each an honest message; dropped the misleading countdown from the usage badge entirely. | None — closed. Exactly the kind of gap this doc exists to catch, found on the first real send after adopting the standard. |
 | Google Wallet — real completed save on a real device | ❌ | Confirmed via your own screenshot that the pre-save screen renders clean (no demo-mode banner). **Never confirmed a real "Add" tap actually completes** and produces a working pass. | Needs one real device (yours or a volunteer's) to actually tap Add and confirm the pass lands correctly in Google Wallet. |
 | Google Wallet — match-week auto-update (new, Aug 20) | ⚠️ | Built the same way Apple's push-update works: `google_object_id`/`google_class_id` are now persisted at issuance ([db.py](db.py) `set_google_wallet_object`), and `_notify_google_pass_updates()` PATCHes every issued object when next-match changes, wired into the same three trigger points as Apple's push. **Verified against Google's real live API**: manually inserted a real test object under our real issuer class, called the actual `patch_google_wallet_object` function against it, and confirmed via an independent GET (not just the PATCH response echo) that `textModulesData` and `hexBackgroundColor` genuinely changed server-side. Also confirmed the real production `_issue_member_pkpass` path persists the ids correctly, and that `_notify_google_pass_updates()` correctly no-ops (logs, doesn't crash) for an object nobody's saved yet — got a real 404 from Google for exactly that case. | Same gap as the row above: never watched a PATCH actually reach a pass sitting in a real person's Google Wallet and visibly update on-screen. Existing pre-Aug-20 Google Wallet saves (if any) have no `google_object_id` on file and won't auto-update until that member is resent a pass. |
 
@@ -58,10 +59,31 @@ as the thing that broke.
 
 ---
 
+## Real sends completed, Aug 20
+
+125 real passes sent and confirmed via the two new bulk-send admin pages
+— 40 via `/admin/pass-remediation` (members whose pass predated the
+webServiceURL fix) and 85 via `/admin/issue-passes` (members who'd never
+had a pass at all), plus 5 sent individually earlier the same day. All
+125 confirmed against real `wallet_passes` rows, not just on-screen
+success messages. This is what surfaced the real Resend headers above,
+and closes most of the practical risk in "does a big batch actually work"
+— see `_bulk_issue_and_email`'s pacing in `app.py` for how a future
+larger batch stays safe.
+
 ## Immediate next actions, in order
 
-1. **Fix the `If-Modified-Since`/304 gap** in the PassKit "get latest pass" endpoint — real, identified, no dependency on you approving anything, safe to do now.
-2. **Audit the three legacy PassKit fallback routes** — confirm broken-and-should-be-retired vs. actually fine. No real member impact either way since they're unlinked, but "unlinked and untested" shouldn't also mean "silently broken and left in place."
-3. **When you're ready to approve exactly one real send**: use it to close two gaps at once — confirm the real Resend quota headers match what the code expects, and visually confirm the dark-mode email in a real inbox.
-4. **When someone's near a real Android phone**: close the Google Wallet real-save gap.
-5. **Aug 23, after the first match**: manually verify the leaderboard's auto-synced result against the real score before trusting that pipeline unattended going forward.
+1. **Real-device confirmation** — watch a real Apple push and a real
+   Google Wallet PATCH actually land on an installed pass and update
+   on-screen. The one open item shared by both Tier 1 wallet rows above;
+   needs physical phones, not code.
+2. **Audit the three legacy PassKit fallback routes** — confirm
+   broken-and-should-be-retired vs. actually fine. No real member impact
+   either way since they're unlinked, but "unlinked and untested"
+   shouldn't also mean "silently broken and left in place."
+3. **Squarespace → Make.com, one real order** — endpoint's tested against
+   hand-built payloads; the Make scenario and a real purchase through it
+   are still unconfirmed.
+4. **Aug 23, after the first match**: manually verify the leaderboard's
+   auto-synced result against the real score before trusting that
+   pipeline unattended going forward.

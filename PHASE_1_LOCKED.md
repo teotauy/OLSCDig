@@ -1,5 +1,10 @@
 # 🔒 PHASE 1 - LOCKED AND WORKING
 
+> **⚠️ ARCHIVED — historical, describes the old PassKit-vendor system.** The live system has since replaced PassKit entirely with a Supabase-backed member/pass/check-in system (Flask app on Render, Apple/Google Wallet passes signed and pushed by us, no PassKit dependency). See [SELF_HOSTED_WALLET_PLAN.md](SELF_HOSTED_WALLET_PLAN.md) for the current system, [README.md](README.md) for an overview, and [QA_VERIFICATION_PLAN.md](QA_VERIFICATION_PLAN.md) for current verification status. Kept here for historical reference only — do not follow these steps against the live system.
+
+---
+
+
 **Status:** ✅ TESTED AND VERIFIED  
 **Date:** October 9, 2025  
 **Git Tag:** `phase-1-working`  
@@ -138,4 +143,3 @@ git reset --hard phase-1-working
 ---
 
 🔴⚽ **Phase 1 is rock solid. You'll Never Walk Alone!**
-

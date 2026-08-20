@@ -1,5 +1,9 @@
 # OLSC Brooklyn Offseason Shutdown & Restart Manual
 
+> **⚠️ ARCHIVED — the premise no longer applies.** This manual assumes PassKit is the live system and needs a subscription cancel/restart each offseason. As of Aug 2026 PassKit has been fully replaced — members, passes, and check-ins live in our own Supabase DB, and Apple/Google Wallet passes are signed and pushed by our own app, not PassKit. There is no PassKit subscription to cancel or reactivate. The handful of PassKit-vendor-API-touching admin routes that still exist in code are mothballed behind `PASSKIT_LEGACY_ENABLED` (default off) purely as an emergency fallback — see `_passkit_legacy_gate()` in `app.py` — not as a system you'd ever "restart." For real offseason/season-rollover procedure (new season row, member rollover, etc.), see [SELF_HOSTED_WALLET_PLAN.md](SELF_HOSTED_WALLET_PLAN.md). Kept here only as a historical record of the May 2026 PassKit mothball, in case old exported season data is ever needed.
+
+---
+
 Use this when the PassKit subscription is about to be turned off, and again when the next season starts.
 
 ## Before Turning Off PassKit

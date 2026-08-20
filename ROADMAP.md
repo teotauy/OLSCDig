@@ -1,91 +1,68 @@
-# OLSC Brooklyn / DigID – Feature Roadmap
+# OLSC Brooklyn / DigID — Feature Roadmap
 
-Single reference for what’s done, what’s next, and what’s on the horizon.
-
----
+> Rewritten Aug 20, 2026. The previous version of this doc described the
+> PassKit-vendor system (bulk checkout, PassKit as source of truth) — all
+> replaced. This reflects what's actually shipped today.
 
 ## Done (shipped)
 
-### Core product
-- **PassKit integration** – Members, check-in/out, passes
-- **Real-time headcount** – Live count, 60s refresh (web + `/api/headcount`)
-- **Bulk checkout** – “Check out everyone” with CSV report + optional email
-- **Match updates** – Liverpool fixtures on passes (CLI + web “Update Match”)
-- **Match overrides** – FA Cup / one-off games via `match_overrides.json`
-- **Add member (web)** – Password-protected form; welcome email
-- **Resend welcome email (admin)** – By member email; uses same SMTP as checkout report
-- **Quick add (CLI)** – `quick_add_members.py` for manual adds
+### Core system
+- **Members, seasons, check-ins** — Supabase Postgres, owned by us, not a vendor.
+- **Apple Wallet passes** — signed `.pkpass`, live next-match data, home/away theming.
+- **Google Wallet passes** — Generic Object save links, same live data.
+- **QR check-in scanner** (`/scanner`) — writes to our own `checkins` table.
+- **Live headcount** — `/admin`, `/api/headcount`.
+- **Attendance leaderboard** — `/admin/leaderboard`.
 
-### Web app (Flask on Render)
-- **Deployed on Render** – HTTPS, env-based config
-- **Auth** – Password + optional Google OAuth; forgot password; rate limiting
-- **Landing / headcount / login / add member / update match / forgot password** – All wired and styled
-- **Background** – Stadium image (`static/background.png`) with gradient fallback
-- **Branding** – “OLSC Brooklyn” + soccer ball in UI
+### Match-day updates
+- **Automatic push to installed passes** when "next match" changes — Apple via APNs + PassKit web-service protocol (with `If-Modified-Since`/304 support), Google via a direct PATCH to the saved object. Daily scheduled check (GitHub Actions, 9am UTC) plus manual trigger from `/admin/matches`.
+- **DB-backed match overrides** (`/admin/match-overrides`) for cup ties / wrong API times — no code deploy needed, replaced the old `match_overrides.json` file.
 
-### Security & ops
-- **No client-side PassKit keys** – Static headcount pages use `/api/headcount`
-- **Env-only secrets** – `FOOTBALL_DATA_API_KEY`, `PUSHOVER_USER_KEY`, `PUSHOVER_API_TOKEN` (see `ENV_UPDATE_INSTRUCTIONS.md`)
-- **Render ENV checklist** – In `WEB_APP_DEPLOYMENT.md`
+### Member management
+- **CSV import** (`/admin/members`) — batched, idempotent, typo-domain detection.
+- **Squarespace → auto member + pass** — webhook via Make.com (Squarespace's plan has no native webhooks).
+- **Bulk first-time pass issuance** (`/admin/issue-passes`) — checkbox review, CSV export, nothing sends until explicitly clicked.
+- **Bulk pass remediation** (`/admin/pass-remediation`) — same pattern, for resending to members whose pass predates a fix.
+- **Self-service pass recovery** (`/recover-pass`) — resend by email, no admin needed.
+- **Mobile web pass fallback** (`/pass/<token>`) — for anyone without Apple/Google Wallet.
 
-### Notifications & automation (optional, can run local or on Render)
-- **Pushover** – Headcount/status via `notifications.py` (env: `PUSHOVER_USER_KEY`, `PUSHOVER_API_TOKEN`)
-- **Match update automation** – Cron/scheduled `match_updates.py` (env: `FOOTBALL_DATA_API_KEY`)
+### Auth & ops
+- **Password + optional Google OAuth login**, forgot-password flow, rate limiting.
+- **Resend email sending** — with real usage tracking (daily/monthly quota, rate-limit vs. quota-exceeded correctly distinguished as of Aug 20) and a visible usage badge on every page that can send in bulk.
+- **PassKit vendor routes mothballed**, not deleted — gated behind `PASSKIT_LEGACY_ENABLED` (default off), kept only as an emergency fallback. See `_passkit_legacy_gate()` in `app.py`.
 
-### Docs
-- **Deployment** – `WEB_APP_DEPLOYMENT.md`, `ENV_UPDATE_INSTRUCTIONS.md`
-- **Match overrides** – `MATCH_OVERRIDES.md`
-- **Match updates** – `MATCH_UPDATES_SETUP.md`
-- **Squarespace** – `SQUARESPACE_INTEGRATION_SETUP.md`, backfill guide, etc.
+## Known gaps (tracked, not hidden)
 
----
+Full detail and status in [QA_VERIFICATION_PLAN.md](QA_VERIFICATION_PLAN.md). Headline items:
 
-## Optional / config-dependent (ready when you enable)
+- **Real-device confirmation** that an automatic Apple push, and an automatic Google Wallet PATCH, actually land on a phone and visibly update — the API calls themselves are verified against the real Apple/Google servers, but nobody's watched it happen on a real installed pass yet.
+- **Squarespace → Make.com → our webhook**, end to end with a real order — built and unit-tested against hand-built payloads, not yet run against an actual Squarespace purchase.
+- **Leaderboard result sync** (`get_finished_liverpool_matches()`) — built against football-data.org's documented schema, unverified against a real finished match until one's actually been played (first one: Aug 23).
+- **The 3 mothballed legacy PassKit pages** (`/legacy/passkit/add-member`, `/update-match`, `/resend-welcome`) — pages load, their form submissions against the real PassKit API were never tested. Decision pending: worth testing, or just retire since they're unlinked and superseded.
 
-- **Squarespace → PassKit** – Webhook + automation when you deploy the webhook and set it in Squarespace
-- **Checkout report email** – When `CHECKOUT_REPORT_EMAIL` + SMTP are set in Render
-- **Google sign-in** – When `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (and optionally `ALLOWED_GOOGLE_EMAILS`) are set
-- **Pushover on Render** – When `notifications.py` runs on Render and `PUSHOVER_*` are in Render env
-- **Match updates on Render** – When `match_updates.py` runs on Render and `FOOTBALL_DATA_API_KEY` is in Render env
+## Planned / backlog
 
----
-
-## Planned / future (backlog)
-
-### High value
-- **Auto midnight checkout** – Scheduled daily checkout (e.g. cron)
-- **Individual checkout** – Check out specific members from the web UI
-- **Squarespace webhook in production** – Deploy and point Squarespace so new purchases auto-create members
-- **Analytics** – Attendance over time, peak times, match-type breakdown
+### Next up
+- **Mobile admin hub** — a dead-simple, large-button mobile page: Scan People In / Look Someone Up / Add a Member / View Leaderboard. Button set agreed, not yet built.
 
 ### Nice to have
-- **Season reports** – Wrapped-style summaries (e.g. “Your season”, “Liverpool’s record when you attended”)
-- **Automated welcome emails** – Delayed welcome + pass download instructions (e.g. SquareSpace integration)
-- **Member self-service** – Update info, re-download pass, view check-in history
-- **Error handling & logging** – Structured logs, retries, optional alerting (email/Slack)
-- **Monitoring** – Uptime, error tracking (e.g. Sentry), rate-limit awareness
+- **Season reports** — attendance summaries, "your season," Liverpool's record when you attended.
+- **Member self-service** — update own info, view own check-in history.
+- **Structured logging / error alerting** — beyond the current print-to-Render-logs approach.
+- **Monitoring** — uptime/error tracking (e.g. Sentry).
 
-### Longer term / advanced
-- **Apple Wallet** – Live Activities, Dynamic Island, Siri
-- **Android** – Live tiles, Google Assistant
-- **Multi-venue / geofencing** – Multiple locations, location-based check-in
-- **Multi-club / white-label** – Template for other supporter clubs
-- **SMS (e.g. Twilio)** – Match reminders, event announcements
-- **Database layer** – Optional DB for history, analytics, backup (PassKit remains source of truth)
-
----
+### Longer term
+- **Multi-venue / geofencing.**
+- **Multi-club / white-label** template for other supporter clubs.
+- **SMS reminders** (e.g. Twilio).
 
 ## Where things live
 
-| Topic              | Doc / place |
-|--------------------|-------------|
-| Deploy web app     | `WEB_APP_DEPLOYMENT.md` |
-| ENV (local + Render) | `ENV_UPDATE_INSTRUCTIONS.md`, `WEB_APP_DEPLOYMENT.md` |
-| Match overrides    | `MATCH_OVERRIDES.md` |
-| Match updates      | `MATCH_UPDATES_SETUP.md` |
-| Full system overview | `COMPREHENSIVE_README.md` |
-| Upgrade/cleanup ideas | `UPGRADE_WORKPLAN.md` |
-
----
-
-*Last updated to reflect OLSC Brooklyn rebrand, Render deployment, security/env changes, background image, and consolidated roadmap.*
+| Topic | Doc |
+| --- | --- |
+| System overview | [README.md](README.md) |
+| Full history / current status | [SELF_HOSTED_WALLET_PLAN.md](SELF_HOSTED_WALLET_PLAN.md) |
+| Verification status per integration | [QA_VERIFICATION_PLAN.md](QA_VERIFICATION_PLAN.md) |
+| Deploy + env vars | [WEB_APP_DEPLOYMENT.md](WEB_APP_DEPLOYMENT.md) |
+| Match overrides | [MATCH_OVERRIDES.md](MATCH_OVERRIDES.md) |
+| Match-day update mechanics | [MATCH_UPDATES_SETUP.md](MATCH_UPDATES_SETUP.md) |

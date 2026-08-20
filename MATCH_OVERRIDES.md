@@ -1,86 +1,68 @@
-# ⚽ Match Overrides (match_overrides.json)
+# Match Overrides
+
+> Rewritten Aug 20, 2026 — this used to describe editing `match_overrides.json`
+> directly and redeploying. That file is gone; overrides are now a DB table
+> with an admin page, so fixing a wrong match takes 30 seconds and no deploy.
 
 ## What This Is
 
-`match_overrides.json` lets you **override or add** the next-match info that appears on passes. The football-data.org API only returns **Premier League** fixtures for the team; it does **not** include FA Cup, League Cup, or other competitions. Overrides fix that and also let you correct wrong times from the API.
+football-data.org only returns **Premier League** fixtures. It does **not**
+include FA Cup, League Cup, Europa League, or friendlies, and it's
+occasionally wrong about a kickoff time. Overrides fix both: add a match
+the API doesn't know about, or correct one it has wrong.
 
-## When to Add an Override
+## Where
 
-1. **Match not in the API** – FA Cup, League Cup, Europa League, friendlies, etc. Add an **override-only** entry (date that isn’t in the API). The app merges these with API fixtures and sorts by date so the real “next match” can be an override.
-2. **API time wrong** – Kickoff is correct in the API but displayed wrong (timezone/format). Add an override for that **exact date** (YYYY-MM-DD). The app will use your time/text instead of the API for that fixture.
-3. **Custom display** – You want a specific opponent name or time format on the pass (e.g. “3 PM” instead of “10:00 AM” in another timezone).
+**`/admin/match-overrides`** (password-protected). Add, edit (re-submitting
+the same date replaces it), or delete an override — no code change, no
+deploy, takes effect immediately.
 
-## File Location and Format
+## Fields
 
-- **File:** `match_overrides.json` in the project root.
-- **Enabled:** Set `"enabled": true` at the top level. If `false`, overrides are ignored.
+| Field | Required | Notes |
+| --- | --- | --- |
+| Match date | Yes | The real calendar date of the match. Used for sorting against API fixtures. |
+| Opponent | Yes | e.g. "Brighton", "Man City". |
+| Kickoff time | Yes | However you want it shown, e.g. "3 PM". |
+| Home/Away | Yes | Drives which pass theme (color/wordmark) is used. |
+| Venue | No | |
+| Pass display text | No | Auto-generated from opponent/date/time if left blank. Fill in only if you want custom wording. |
+| Note | No | For your own reference (e.g. "FA Cup — not in API"). |
 
-Each override is keyed by **date in YYYY-MM-DD** (e.g. `"2026-02-14"`). Example:
+Each override row also has an `enabled` flag in the DB (defaults on) —
+there's no UI toggle for it today; disabling one currently means deleting
+it and re-adding if needed later.
 
-```json
-{
-  "overrides": {
-    "2026-02-14": {
-      "opponent": "Brighton",
-      "time": "3 PM",
-      "date": "2/14",
-      "pass_display": "Brighton | 2/14 3 PM",
-      "note": "FA Cup - not in API"
-    }
-  },
-  "enabled": true
-}
-```
+## How the app uses overrides
 
-### Fields per override
+`get_next_match()` (in `match_updates.py`) checks for a forced override
+first (`_get_forced_next_match_from_overrides()` in the same file), and
+uses the earliest one if it's actually upcoming. Otherwise it falls back
+to the earliest `SCHEDULED` fixture from football-data.org. This is the
+same function driving passes, the mobile pass page, and the daily
+auto-update job — one source of truth, so there's no way for the site and
+the passes to disagree about what "next match" is.
 
-| Field          | Required | Description |
-|----------------|----------|-------------|
-| `opponent`     | Yes      | Name shown in UI and used for display (e.g. "Brighton", "Man City"). |
-| `time`         | Yes      | Kickoff time as you want it on the pass (e.g. "3 PM", "11:30 AM", "2:45PM"). |
-| `date`         | Yes      | Short date for pass: `M/D` (e.g. "2/14", "10/19"). |
-| `pass_display` | Yes      | Exact string that goes on the pass (e.g. "Brighton \| 2/14 3 PM"). Keep it short. |
-| `note`         | No       | For you (e.g. "FA Cup - not in API", "Manual override - ET"). |
+- **Match not in the API at all** (FA Cup, friendly, etc.): add an
+  override for that date. It becomes "next match" once it's the earliest
+  upcoming date, override or API fixture.
+- **API has the date but the time/display is wrong**: add an override for
+  that *same* date — yours takes priority over the API's for that date.
 
-- **Override-only (match not in API):** Use the same fields. The date key (e.g. `2026-02-14`) is used for sorting; the app will show this match as “next” when it’s the earliest upcoming override or API fixture.
-- **Override for API fixture (wrong time/display):** Use the **same date key** as the API fixture (YYYY-MM-DD). Your override replaces the API data for that date.
+## After adding or fixing an override
 
-## How the App Uses Overrides
-
-- **match_updates.py** (CLI and web app “Update Match”):
-  - Fetches scheduled fixtures from the API (PL only).
-  - For each API fixture date, if that date exists in `overrides`, it uses the override instead of the API.
-  - Then it adds any **override-only** dates (dates in `overrides` that did **not** appear in the API).
-  - Sorts all matches (API + override-only) by kickoff and takes the **first** as the next match.
-- So the next match can be:
-  - The next API fixture (with or without an override for that date), or
-  - A future match that exists **only** in overrides (e.g. FA Cup).
-
-## Current Overrides (reference)
-
-As of last update, the file contains:
-
-| Date       | Opponent     | Time      | Note / use case          |
-|-----------|--------------|-----------|---------------------------|
-| 2026-02-14 | Brighton     | 3 PM      | FA Cup – not in API      |
-| 2026-02-08 | Manchester City | 11:30 AM | Manual override (ET)      |
-| 2026-01-21 | Marseille    | 3 PM      | Manual time format       |
-| 2026-01-17 | Burnley      | 2:45PM    | API time wrong           |
-
-Past dates in the file are harmless; they’re ignored once that date is in the past when computing “next” match.
-
-## Quick Add Checklist
-
-1. Open `match_overrides.json`.
-2. Add a new key under `overrides` with date **YYYY-MM-DD** (e.g. `"2026-03-01"`).
-3. Set `opponent`, `time`, `date` (M/D), `pass_display`, and optionally `note`.
-4. Save. No code change needed.
-5. Run **Update Match** (web or `python3 match_updates.py`) so passes refresh.
+If it changes what "next match" currently is, click **Push Pass Updates
+Now** on `/admin/matches` (or just wait for the next daily auto-check) so
+already-installed passes actually pick it up — adding the override alone
+doesn't push anything to devices by itself.
 
 ## Team names on the pass
 
-Short names (e.g. “Brighton”, “Man City”) are defined in `team_abbreviations.py`. If you use a new opponent name in an override, add it there if you want a shortened label; otherwise the override’s `pass_display` is used as-is.
+Short display names (e.g. "Brighton", "Man City") for API-sourced
+fixtures come from `team_abbreviations.py`. An override's `pass_display`
+is used exactly as typed, so there's nothing extra to configure there.
 
 ---
 
-**See also:** [MATCH_UPDATES_SETUP.md](MATCH_UPDATES_SETUP.md) for how to run updates locally or from the web app.
+**See also:** [MATCH_UPDATES_SETUP.md](MATCH_UPDATES_SETUP.md) for how the
+automatic push-to-Wallet side of this works.

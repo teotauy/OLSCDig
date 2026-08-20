@@ -1,108 +1,79 @@
-# 🏆 Liverpool FC Match Updates
+# Liverpool FC Match Updates
 
-## What This Does
+> Rewritten Aug 20, 2026 — this used to describe a script that pushed
+> "next match" text to PassKit passes via their API, run from a local
+> crontab. That's gone. This describes how it actually works now: passes
+> are built with live data on demand, and already-installed passes get
+> pushed a real update via Apple/Google's own APIs, on a schedule that
+> runs in GitHub Actions, not on anyone's laptop.
 
-Automatically updates all PassKit passes with:
-- **Next match opponent** (e.g., "vs Manchester City")
-- **Match date** (e.g., "Oct 15")
-- **Match time** (e.g., "3:00 PM")
-- **Venue** (e.g., "Anfield" or "Away")
-- **Home/Away status** (e.g., "Yes" or "No")
+## What this does
 
-## Setup Required
+Keeps "next match" (opponent, date, kickoff time, home/away theme)
+current on every issued pass — both the freshly-built ones and the ones
+already sitting in someone's Apple or Google Wallet.
 
-### 1. Get Football Data API Key
-- Go to: https://www.football-data.org/
-- Sign up for free account
-- Get your API key
-- Add to `.env` file:
-  ```
-  FOOTBALL_DATA_API_KEY=your_api_key_here
-  ```
+## How it actually works
 
-### 2. Update the Code
-Replace `YOUR_FOOTBALL_DATA_API_KEY` in `match_updates.py` with your actual key.
+1. **`get_next_match()`** (in `match_updates.py`) is the single source of
+   truth: checks DB-backed [match overrides](MATCH_OVERRIDES.md) first,
+   then falls back to the earliest `SCHEDULED` fixture from
+   football-data.org (Premier League only — see MATCH_OVERRIDES.md for
+   cup ties etc.).
+2. **Every pass build already reflects this live** — `_member_pass_data()`
+   in `app.py` calls `get_next_match()` fresh each time a pass is issued,
+   resent, or refetched, so a brand-new pass is never stale.
+3. **Already-installed passes need to be told to update.** That's the
+   part that used to require a script:
+   - **Apple Wallet:** `_notify_apple_pass_updates()` bumps a shared
+     "content changed" tag and sends an APNs push to every device that's
+     registered for updates (via Apple's PassKit web-service protocol —
+     see the `/passkit/v1/*` routes in `app.py`). The device then fetches
+     the freshly-built pass itself; no full pass content is pushed
+     directly.
+   - **Google Wallet:** `_notify_google_pass_updates()` PATCHes every
+     already-saved Generic Object directly via Google's Wallet Objects
+     API — Google delivers that to the member's device on its own, no
+     separate "registered device" step the way Apple has one.
+   - Both run together via `_notify_wallet_pass_updates()`.
 
-### 3. Test It
-```bash
-python3 match_updates.py
-```
+## What triggers a push
 
-## How It Works
+- **Automatically, daily:** `.github/workflows/check-next-match.yml` runs
+  at 9am UTC (10am UK time in BST) and POSTs to
+  `/internal/check-next-match` (shared-secret auth, not the admin
+  session). It computes the same "next match" fingerprint the site uses;
+  if it's different from the last time it checked, it pushes to both
+  platforms. Most days nothing has changed, so nothing gets pushed — the
+  job is a no-op far more often than not.
+- **Manually:** `/admin/matches` → **Push Pass Updates Now**, or
+  automatically whenever an admin sets a different match as "current" via
+  that same page.
 
-1. **Fetches Liverpool fixtures** from football-data.org API (Premier League only; other competitions are not in the API)
-2. **Applies manual overrides** from `match_overrides.json` – replaces API data for matching dates and adds **override-only** matches (e.g. FA Cup) so the true next match can be from any competition
-3. **Sorts by kickoff** and takes the earliest as the next match
-4. **Updates ALL passes** with that next match (same text on every pass)
-5. **Sends push notification** to all members (if enabled – currently disabled)
+## Verification status
 
-**Manual overrides:** For FA Cup, League Cup, or when the API time is wrong, see **[MATCH_OVERRIDES.md](MATCH_OVERRIDES.md)** for how to add or edit `match_overrides.json`.
-
-## Automation Options
-
-### Option 1: Daily Check (Recommended)
-Add to crontab (`crontab -e`):
-```bash
-# Check for match updates daily at 9 AM
-0 9 * * * cd /Users/colbyblack/DigID && python3 match_updates.py
-```
-
-### Option 2: Manual Updates
-Run when you want to update:
-```bash
-python3 match_updates.py
-```
-
-### Option 3: Before Each Match
-Run 24 hours before kickoff:
-```bash
-python3 match_updates.py
-```
-
-## Push Notifications
-
-**⚠️ NOTIFICATION FEATURE IS DISABLED - REQUIRES BOARD BUY-IN**
-
-The system can prepare push notifications but will NOT send them without approval:
-
-- **Home matches:** "🏠 Liverpool vs City at Anfield - Sunday, Oct 15 at 3:00 PM"
-- **Away matches:** "✈️ Liverpool vs City - Sunday, Oct 15 at 3:00 PM"
-
-**Current status:** Only updates pass fields, no notifications sent.
-
-## Pass Fields Updated
-
-- **Field:** `metaData.nextMatch` (e.g. "Brighton | 2/14 3 PM", "Man U | 10/19 11:30 AM")
-- **Scope:** All passes are updated to the same next-match text each time you run the update (web or CLI).
+This has real, tracked gaps — see the "Google Wallet — match-week
+auto-update" and "Apple Wallet — APNs push delivery" rows in
+[QA_VERIFICATION_PLAN.md](QA_VERIFICATION_PLAN.md). Short version: the
+API calls themselves are verified against the real Apple/Google servers,
+but nobody's yet watched a real installed pass on a real phone visibly
+update from an automatic push — that needs a real device and hasn't
+happened yet.
 
 ## Troubleshooting
 
-### No matches found?
-- Check your API key is correct
-- Verify Liverpool FC team ID (64) is correct
-- Check if there are upcoming fixtures
-
-### Pass updates failing?
-- Verify PassKit API credentials
-- Check pass field names match your template
-- Ensure you have permission to update passes
-
-### API rate limits?
-- Free tier allows 10 requests per minute
-- Paid tier allows 100 requests per minute
-
-## Match Overrides (FA Cup, wrong times, etc.)
-
-The API only returns Premier League fixtures. For FA Cup, League Cup, or to fix wrong kickoff times, use **match_overrides.json**. See **[MATCH_OVERRIDES.md](MATCH_OVERRIDES.md)** for when and how to add overrides and the current list.
-
-## Next Steps
-
-1. **Get API key** from football-data.org (or use the one in the script)
-2. **Test the system** with `python3 match_updates.py`
-3. **Add overrides** for any non-PL or wrong-time matches (see MATCH_OVERRIDES.md)
-4. **Set up automation** with cron job (optional)
-5. **Customize notification messages** as needed (optional)
+- **No matches found / next match looks wrong:** Check
+  `FOOTBALL_DATA_API_KEY` is set, then check
+  [MATCH_OVERRIDES.md](MATCH_OVERRIDES.md) — most "wrong match" issues
+  are a missing/incorrect override, not an API problem.
+- **Added an override but a pass doesn't show it:** The override itself
+  doesn't push anything — click **Push Pass Updates Now** on
+  `/admin/matches` (or wait for the daily job) after adding it.
+- **A specific installed pass never updates:** Confirms the open gap
+  above — needs the real-device verification, not a code fix we know is
+  missing today.
 
 ---
 
-**🔴⚽ Your passes will always show the next match!**
+**Passes always reflect the current next match when built or refetched;
+already-installed ones get told to refetch on the schedule above.**
