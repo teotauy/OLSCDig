@@ -189,7 +189,8 @@ def issue_wallet_token(member_id, season_id, platform='apple'):
                 token_encrypted = EXCLUDED.token_encrypted,
                 serial_number = EXCLUDED.serial_number,
                 auth_token = EXCLUDED.auth_token,
-                revoked_at = NULL
+                revoked_at = NULL,
+                created_at = now()
             """,
             (member_id, season_id, token_hash, token_encrypted, serial_number, platform, auth_token),
         )
