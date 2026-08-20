@@ -433,6 +433,26 @@ def get_apple_passes_issued_before(cutoff):
         return cur.fetchall()
 
 
+def get_members_without_wallet_pass(season_id):
+    """Members with no active wallet pass at all for the given season --
+    the "never sent a first pass" cohort, distinct from
+    get_apple_passes_issued_before's "has a pass, but it's stale" cohort."""
+    with cursor() as cur:
+        cur.execute(
+            """
+            SELECT m.id AS member_id, m.first_name, m.last_name, m.email, m.created_at
+            FROM members m
+            WHERE NOT EXISTS (
+                SELECT 1 FROM wallet_passes wp
+                WHERE wp.member_id = m.id AND wp.season_id = %s AND wp.revoked_at IS NULL
+            )
+            ORDER BY m.last_name, m.first_name
+            """,
+            (season_id,),
+        )
+        return cur.fetchall()
+
+
 def get_resend_usage_state():
     with cursor() as cur:
         cur.execute("SELECT * FROM resend_usage_state WHERE id = 1")

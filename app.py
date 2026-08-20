@@ -2272,6 +2272,78 @@ def admin_pass_remediation_resend():
     return redirect(url_for('admin_pass_remediation'))
 
 
+@app.route('/admin/issue-passes')
+def admin_issue_passes():
+    """Review-and-approve page for members who have never been sent a
+    pass at all -- distinct from pass-remediation, which is for members
+    who already have a (stale) pass. Same pattern: pick who to send to,
+    nothing fires until that button is explicitly clicked."""
+    if not require_password():
+        return redirect(url_for('login'))
+
+    season = db.get_current_season()
+    rows = db.get_members_without_wallet_pass(season['id']) if season else []
+    for r in rows:
+        r['looks_like_test'] = _looks_like_test_account(r['first_name'], r['last_name'], r['email'])
+
+    result = session.pop('issue_passes_result', None)
+    return render_template(
+        'admin_issue_passes.html',
+        rows=rows,
+        result=result,
+        wordmark_data_uri=_current_theme_wordmark_data_uri(),
+    )
+
+
+@app.route('/admin/issue-passes/export.csv')
+def admin_issue_passes_export():
+    """The same list as a plain CSV, for review outside the browser."""
+    if not require_password():
+        return redirect(url_for('login'))
+    season = db.get_current_season()
+    rows = db.get_members_without_wallet_pass(season['id']) if season else []
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["member_id", "first_name", "last_name", "email", "member_since", "looks_like_test_account"])
+    for r in rows:
+        writer.writerow([
+            r['member_id'], r['first_name'], r['last_name'], r['email'],
+            r['created_at'].strftime('%Y-%m-%d') if r['created_at'] else '',
+            _looks_like_test_account(r['first_name'], r['last_name'], r['email']),
+        ])
+    return Response(
+        buf.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=members_needing_first_pass.csv"},
+    )
+
+
+@app.route('/admin/issue-passes/send', methods=['POST'])
+def admin_issue_passes_send():
+    """Sends only to the member_ids explicitly checked on the review page.
+    Each member is its own independent attempt -- one failure doesn't
+    block the rest, and every outcome is reported back, not just a total
+    count."""
+    if not require_password():
+        return redirect(url_for('login'))
+
+    season = db.get_current_season()
+    selected_ids = {int(v) for v in request.form.getlist('member_id')}
+    candidates = {r['member_id']: r for r in db.get_members_without_wallet_pass(season['id'])} if season else {}
+
+    sent, failed = [], []
+    for member_id in selected_ids:
+        row = candidates.get(member_id)
+        if not row or not season:
+            continue
+        member = {"id": member_id, "first_name": row['first_name'], "last_name": row['last_name'], "email": row['email']}
+        ok, message = _issue_and_email_pass(member, season)
+        (sent if ok else failed).append({"name": f"{row['first_name']} {row['last_name']}", "email": row['email'], "message": message})
+
+    session['issue_passes_result'] = {"sent": sent, "failed": failed}
+    return redirect(url_for('admin_issue_passes'))
+
+
 @app.route('/admin/matches/<int:match_id>/export-checkins.csv')
 def admin_export_match_checkins(match_id):
     """CSV of everyone checked in to a specific match."""
