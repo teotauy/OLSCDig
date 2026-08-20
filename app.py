@@ -338,6 +338,28 @@ def require_password():
     return bool(session.get('authenticated'))
 
 
+def _door_pass_is_valid(pass_id):
+    """Re-checked against the DB on every request, not just once at
+    redemption time -- so revoking a door pass takes effect immediately,
+    even for someone already mid-shift with it open."""
+    row = db.get_door_pass(pass_id)
+    if not row or row['revoked_at']:
+        return False
+    if row['expires_at'] and row['expires_at'] <= datetime.now(timezone.utc):
+        return False
+    return True
+
+
+def require_scanner_access():
+    """Full admin session, OR a still-valid door pass -- the scoped,
+    revocable link volunteer door staff use to reach only the scanner,
+    never the rest of admin."""
+    if require_password():
+        return True
+    door_pass_id = session.get('door_pass_id')
+    return bool(door_pass_id and _door_pass_is_valid(door_pass_id))
+
+
 def _passkit_legacy_enabled():
     """Mothball switch for everything that still talks to PassKit's own
     API (not the PassKit *web service protocol* Apple defines for Wallet
@@ -524,7 +546,21 @@ def logout():
     """Logout and clear session."""
     session.pop('authenticated', None)
     session.pop('oauth_state', None)
+    session.pop('door_pass_id', None)
     return redirect(url_for('index'))
+
+
+@app.route('/door/<token>')
+def door_access(token):
+    """Redeem a volunteer door-staff link: scoped to the scanner only,
+    revocable/expirable independently of the real admin password. Doesn't
+    touch any existing admin session -- an admin opening this link to
+    test it stays logged in as admin too, the two are independent flags."""
+    row = db.find_door_pass_by_token(token)
+    if not row or row['revoked_at'] or (row['expires_at'] and row['expires_at'] <= datetime.now(timezone.utc)):
+        return render_template('door_invalid.html', wordmark_data_uri=_current_theme_wordmark_data_uri()), 404
+    session['door_pass_id'] = row['id']
+    return redirect(url_for('scanner'))
 
 # Notifications page removed
 
@@ -2701,9 +2737,59 @@ def mobile_pass(token):
     )
 
 
+DOOR_PASS_EXPIRY_OPTIONS = {
+    "": None,
+    "12h": timedelta(hours=12),
+    "24h": timedelta(hours=24),
+    "7d": timedelta(days=7),
+}
+
+
+@app.route('/admin/door-access', methods=['GET', 'POST'])
+def admin_door_access():
+    """Create/list/revoke scanner-only links for volunteer door staff --
+    each is independent of the real admin password and can be shut off
+    instantly without touching anything else."""
+    if not require_password():
+        return redirect(url_for('login'))
+
+    error = None
+    created_url = None
+    if request.method == 'POST':
+        label = request.form.get('label', '').strip()
+        expiry_key = request.form.get('expires', '')
+        if not label:
+            error = "Give it a label (e.g. who it's for or which match)."
+        elif expiry_key not in DOOR_PASS_EXPIRY_OPTIONS:
+            error = "Invalid expiry option."
+        else:
+            delta = DOOR_PASS_EXPIRY_OPTIONS[expiry_key]
+            expires_at = datetime.now(timezone.utc) + delta if delta else None
+            raw_token, _pass_id = db.create_door_pass(label, expires_at)
+            created_url = f"{_public_base_url()}{url_for('door_access', token=raw_token)}"
+
+    passes = db.list_door_passes()
+    return render_template(
+        'admin_door_access.html',
+        passes=passes,
+        error=error,
+        created_url=created_url,
+        now=datetime.now(timezone.utc),
+        wordmark_data_uri=_current_theme_wordmark_data_uri(),
+    )
+
+
+@app.route('/admin/door-access/<int:pass_id>/revoke', methods=['POST'])
+def admin_door_access_revoke(pass_id):
+    if not require_password():
+        return redirect(url_for('login'))
+    db.revoke_door_pass(pass_id)
+    return redirect(url_for('admin_door_access'))
+
+
 @app.route('/scanner')
 def scanner():
-    if not require_password():
+    if not require_scanner_access():
         return redirect(url_for('login'))
 
     season = db.get_current_season()
@@ -2720,6 +2806,7 @@ def scanner():
         shop_qr_data_uri=_qr_data_uri(MEMBERSHIP_SHOP_URL),
         shop_url=MEMBERSHIP_SHOP_URL,
         checked_in_count=checked_in_count,
+        door_only=not require_password(),
     )
 
 
@@ -2728,7 +2815,7 @@ def api_checkins_count():
     """Running check-in count for the current match — lets door staff watch
     for fire-marshal capacity on early-entry nights. Grows only; there's no
     "check out" in this system, checkins are a permanent per-match record."""
-    if not require_password():
+    if not require_scanner_access():
         return jsonify({"status": "error", "code": "unauthorized"}), 401
     match = db.get_current_match()
     if not match:
@@ -2738,7 +2825,7 @@ def api_checkins_count():
 
 @app.route('/api/checkins/scan', methods=['POST'])
 def api_checkins_scan():
-    if not require_password():
+    if not require_scanner_access():
         return jsonify({"status": "error", "code": "unauthorized", "message": "Login required."}), 401
 
     payload = request.get_json(silent=True) or {}
@@ -2867,7 +2954,7 @@ def api_checkins_manual():
     is by name, so there's no QR/token to look up. Same idempotency and
     response shape as /api/checkins/scan, but source='manual' so the two
     paths stay distinguishable in exports later."""
-    if not require_password():
+    if not require_scanner_access():
         return jsonify({"status": "error", "code": "unauthorized", "message": "Login required."}), 401
 
     payload = request.get_json(silent=True) or {}
@@ -2954,7 +3041,7 @@ def api_members_roster():
     search fallback. Deliberately excludes email/phone — if this ends up on
     a lost/borrowed phone, it should only ever leak names, not contact info.
     """
-    if not require_password():
+    if not require_scanner_access():
         return jsonify({"status": "error", "code": "unauthorized", "message": "Login required."}), 401
 
     season = db.get_current_season()

@@ -183,6 +183,19 @@ CREATE TABLE IF NOT EXISTS squarespace_orders_processed (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Scoped, revocable access links for volunteer door staff -- grants only
+-- /scanner and its check-in APIs, never the full admin session. Checked
+-- fresh against the DB on every request (not just once at redemption),
+-- so revoking one takes effect immediately even mid-shift.
+CREATE TABLE IF NOT EXISTS door_passes (
+    id SERIAL PRIMARY KEY,
+    token_hash TEXT NOT NULL UNIQUE,
+    label TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at TIMESTAMPTZ,
+    revoked_at TIMESTAMPTZ
+);
+
 CREATE TABLE IF NOT EXISTS checkins (
     id SERIAL PRIMARY KEY,
     member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,

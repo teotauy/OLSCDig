@@ -503,6 +503,46 @@ def find_active_wallet_pass_by_token(raw_token):
         return cur.fetchone()
 
 
+def create_door_pass(label, expires_at=None):
+    """Create a scanner-only access link for a volunteer door person.
+    Returns (raw_token, id) -- the raw token is shown once at creation
+    time and never stored; only its hash is kept, same pattern as
+    wallet_passes.token_hash."""
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    with cursor() as cur:
+        cur.execute(
+            "INSERT INTO door_passes (token_hash, label, expires_at) VALUES (%s, %s, %s) RETURNING id",
+            (token_hash, label, expires_at),
+        )
+        row = cur.fetchone()
+    return raw_token, row['id']
+
+
+def find_door_pass_by_token(raw_token):
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    with cursor() as cur:
+        cur.execute("SELECT * FROM door_passes WHERE token_hash = %s", (token_hash,))
+        return cur.fetchone()
+
+
+def get_door_pass(pass_id):
+    with cursor() as cur:
+        cur.execute("SELECT * FROM door_passes WHERE id = %s", (pass_id,))
+        return cur.fetchone()
+
+
+def list_door_passes():
+    with cursor() as cur:
+        cur.execute("SELECT * FROM door_passes ORDER BY created_at DESC")
+        return cur.fetchall()
+
+
+def revoke_door_pass(pass_id):
+    with cursor() as cur:
+        cur.execute("UPDATE door_passes SET revoked_at = now() WHERE id = %s AND revoked_at IS NULL", (pass_id,))
+
+
 if __name__ == "__main__":
     init_schema()
     season = ensure_default_season("2026/27")

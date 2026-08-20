@@ -1,10 +1,13 @@
 <div class="links">
+    {% if not door_only %}
     <a href="{{ url_for('admin_members') }}">Members</a>
     <a href="{{ url_for('admin_matches') }}">Matches</a>
     <a href="{{ url_for('admin_leaderboard') }}">Leaderboard</a>
     <a href="{{ url_for('scanner') }}">Scanner</a>
     <a href="{{ url_for('admin_issue_passes') }}">Issue First Passes</a>
     <a href="{{ url_for('admin_pass_remediation') }}">Pass Remediation</a>
+    <a href="{{ url_for('admin_door_access') }}">Door Access</a>
     <a href="{{ url_for('admin_index') }}">Admin Home</a>
+    {% endif %}
     <a href="{{ url_for('logout') }}">Logout</a>
 </div>

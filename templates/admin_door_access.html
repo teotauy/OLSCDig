@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Door Access - OLSC Brooklyn</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #e31b23 0%, #00a65a 100%);
+            background-image: url("{{ url_for('static', filename='background.png') }}"), linear-gradient(135deg, #e31b23 0%, #00a65a 100%);
+            background-size: cover, auto;
+            background-position: center, 0 0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 700px; margin: 0 auto; background: white; border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2); padding: 30px;
+        }
+        .header { text-align: center; margin-bottom: 20px; }
+        .header h1 { color: #e31b23; font-size: 24px; margin-bottom: 6px; }
+        .header p.sub { color: #666; font-size: 14px; }
+
+        .panel { border: 1px solid #e0e0e0; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+        .panel p.hint { font-size: 13px; color: #666; margin-bottom: 14px; line-height: 1.5; }
+
+        .message { padding: 14px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; }
+        .message.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .message.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; word-break: break-all; }
+        .message.success a { color: #155724; font-weight: 700; }
+
+        label { display: block; font-size: 13px; color: #555; margin-bottom: 4px; font-weight: 600; }
+        input[type="text"], select {
+            width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; margin-bottom: 14px;
+        }
+        .form-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+        .form-row > div { flex: 1; min-width: 160px; }
+
+        .btn {
+            padding: 12px 20px; background: linear-gradient(135deg, #e31b23 0%, #d81d42 100%);
+            color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer;
+        }
+
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #eee; }
+        th { color: #666; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+        .muted { color: #999; font-size: 13px; }
+        .status-active { color: #155724; font-weight: 600; }
+        .status-revoked { color: #999; }
+        .status-expired { color: #a0790a; }
+        .btn-revoke {
+            padding: 6px 12px; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;
+            border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer;
+        }
+
+        .links { text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0; }
+        .links a { color: #e31b23; text-decoration: none; font-size: 14px; margin: 0 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="{{ wordmark_data_uri }}" alt="OLSC Brooklyn — Official Supporters Club" style="max-width: 200px; height: auto; margin: 0 auto 8px; display: block;">
+            <h1>Door Access</h1>
+            <p class="sub">Scanner-only links for volunteer door staff — no admin password, no admin access, revocable anytime</p>
+        </div>
+
+        {% if error %}<div class="message error">{{ error }}</div>{% endif %}
+        {% if created_url %}
+        <div class="message success">
+            Link created — copy it now, it won't be shown again:<br>
+            <a href="{{ created_url }}">{{ created_url }}</a>
+        </div>
+        {% endif %}
+
+        <div class="panel">
+            <p class="hint">
+                Whoever opens this link goes straight to the scanner — they can scan or search the roster to
+                check people in, and nothing else. They never see members' emails/phone, matches, or any other
+                admin page. Revoke it any time and it stops working immediately, even if they're mid-shift.
+            </p>
+            <form method="POST">
+                <div class="form-row">
+                    <div>
+                        <label for="label">Label (who's this for?)</label>
+                        <input type="text" id="label" name="label" placeholder="e.g. Dave — Aug 23 door" required>
+                    </div>
+                    <div>
+                        <label for="expires">Expires</label>
+                        <select id="expires" name="expires">
+                            <option value="24h" selected>In 24 hours</option>
+                            <option value="12h">In 12 hours</option>
+                            <option value="7d">In 7 days</option>
+                            <option value="">Never (revoke manually)</option>
+                        </select>
+                    </div>
+                    <div style="flex: 0;">
+                        <button type="submit" class="btn">Create Link</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="panel">
+            <h2 style="font-size:16px; margin-bottom:12px;">Existing links</h2>
+            {% if passes %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Label</th>
+                        <th>Created</th>
+                        <th>Expires</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in passes %}
+                    <tr>
+                        <td>{{ p.label }}</td>
+                        <td class="muted">{{ p.created_at.strftime('%b %-d, %-I:%M %p') if p.created_at else '—' }}</td>
+                        <td class="muted">{{ p.expires_at.strftime('%b %-d, %-I:%M %p') if p.expires_at else 'Never' }}</td>
+                        <td>
+                            {% if p.revoked_at %}
+                                <span class="status-revoked">Revoked</span>
+                            {% elif p.expires_at and p.expires_at <= now %}
+                                <span class="status-expired">Expired</span>
+                            {% else %}
+                                <span class="status-active">Active</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if not p.revoked_at %}
+                            <form method="POST" action="{{ url_for('admin_door_access_revoke', pass_id=p.id) }}" style="display:inline;" onsubmit="return confirm('Revoke this link? {{ p.label }} will lose scanner access immediately.');">
+                                <button type="submit" class="btn-revoke">Revoke</button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="muted">No door-access links created yet.</p>
+            {% endif %}
+        </div>
+
+        {% include '_admin_footer.html' %}
+    </div>
+    {% include '_loading_overlay.html' %}
+</body>
+</html>
