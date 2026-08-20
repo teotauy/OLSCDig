@@ -86,6 +86,18 @@ def _get_stored_hash():
             pass
     return os.getenv('ADMIN_PASSWORD_HASH')
 
+def _safe_next_url(value, default):
+    """Only follow a `next` redirect target if it's a same-site relative
+    path. `next` comes straight from a query string an attacker controls
+    (a crafted login link) -- allowing an absolute or protocol-relative
+    (`//evil.com`) value here is a classic open-redirect phishing primitive
+    (send someone a real, valid login link that dumps them on a fake page
+    right after they actually authenticate)."""
+    if value and value.startswith('/') and not value.startswith('//') and '\\' not in value:
+        return value
+    return default
+
+
 def _verify_password(password):
     """Verify password against stored hash or plain ADMIN_PASSWORD."""
     if not password:
@@ -410,7 +422,7 @@ def login():
         if _verify_password(password):
             _record_login_attempt(ip, success=True)
             session['authenticated'] = True
-            next_page = request.args.get('next', url_for('add_member_page'))
+            next_page = _safe_next_url(request.args.get('next'), url_for('add_member_page'))
             return redirect(next_page)
         _record_login_attempt(ip, success=False)
         return render_template('login.html', error='Incorrect password')
@@ -492,8 +504,11 @@ def login_google_callback():
         timeout=10,
     )
     if user_resp.status_code != 200:
-        session['authenticated'] = True
-        return redirect(request.args.get('next', url_for('add_member_page')))
+        # Fail CLOSED: a failure here means we never got to check
+        # ALLOWED_GOOGLE_EMAILS, so logging the user in anyway would let
+        # anyone who completes the OAuth handshake in as admin regardless
+        # of the allowlist -- the previous behavior did exactly that.
+        return redirect(url_for('login', error='Google sign-in failed'))
     user_data = user_resp.json()
     allowed = os.getenv('ALLOWED_GOOGLE_EMAILS', '').strip()
     if allowed:
@@ -501,7 +516,7 @@ def login_google_callback():
         if email not in [e.strip().lower() for e in allowed.split(',') if e.strip()]:
             return redirect(url_for('login', error='This Google account is not allowed'))
     session['authenticated'] = True
-    next_page = request.args.get('next', url_for('add_member_page'))
+    next_page = _safe_next_url(request.args.get('next'), url_for('add_member_page'))
     return redirect(next_page)
 
 @app.route('/logout')
@@ -1694,7 +1709,7 @@ def internal_check_next_match():
     expected_secret = os.getenv('INTERNAL_TASK_SECRET', '').strip()
     if not expected_secret:
         return jsonify({"error": "INTERNAL_TASK_SECRET not configured"}), 503
-    if request.headers.get('X-Internal-Secret', '') != expected_secret:
+    if not secrets.compare_digest(request.headers.get('X-Internal-Secret', ''), expected_secret):
         return jsonify({"error": "unauthorized"}), 401
 
     current_key = _next_match_fingerprint()
@@ -1764,7 +1779,7 @@ def internal_sync_match_results():
     expected_secret = os.getenv('INTERNAL_TASK_SECRET', '').strip()
     if not expected_secret:
         return jsonify({"error": "INTERNAL_TASK_SECRET not configured"}), 503
-    if request.headers.get('X-Internal-Secret', '') != expected_secret:
+    if not secrets.compare_digest(request.headers.get('X-Internal-Secret', ''), expected_secret):
         return jsonify({"error": "unauthorized"}), 401
 
     updated = _sync_finished_match_results()
@@ -1997,7 +2012,7 @@ def squarespace_order_webhook():
     expected_secret = os.getenv('SQUARESPACE_WEBHOOK_SECRET', '').strip()
     if not expected_secret:
         return jsonify({"error": "SQUARESPACE_WEBHOOK_SECRET not configured"}), 503
-    if request.headers.get('X-Webhook-Secret', '') != expected_secret:
+    if not secrets.compare_digest(request.headers.get('X-Webhook-Secret', ''), expected_secret):
         return jsonify({"error": "unauthorized"}), 401
 
     data = request.get_json(silent=True) or {}
