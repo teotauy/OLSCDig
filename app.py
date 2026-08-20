@@ -163,14 +163,18 @@ def inject_headcount_refresh():
     return {"headcount_refresh_seconds": _headcount_refresh_seconds()}
 
 
+RESEND_USAGE_BADGE_ENDPOINTS = {'admin_members', 'admin_pass_remediation', 'admin_issue_passes'}
+
+
 @app.context_processor
 def inject_resend_usage():
-    """Last-known Resend quota state, for the small usage badge on the
-    members page — the only page that actually sends pass emails (Resend
-    Pass / Send Pass / CSV-triggered sends), so that's the only place this
-    needs to be. Scoping this avoids adding a DB query (a real ~1.3s cost
-    with no connection pooling) to every page load app-wide."""
-    if request.endpoint != 'admin_members':
+    """Last-known Resend quota state, for the small usage badge on every
+    page that can send a batch of pass emails -- so an admin can see
+    how much headroom is left *before* firing off a big batch, not just
+    find out from a wall of "quota hit" failures after the fact. Scoping
+    this avoids adding a DB query (a real ~1.3s cost with no connection
+    pooling) to every page load app-wide."""
+    if request.endpoint not in RESEND_USAGE_BADGE_ENDPOINTS:
         return {}
     try:
         return {"resend_usage": db.get_resend_usage_state()}
@@ -2202,6 +2206,31 @@ def _looks_like_test_account(first_name, last_name, email):
     return 'test' in name or 'test' in (email or '').lower()
 
 
+# Resend's default rate limit is 10 requests/second per team (per their
+# docs). A tight loop over dozens of members could burst past that even
+# though each one is legitimate -- this paces requests so a big batch
+# never trips the rate limiter and turns real sends into avoidable 429s.
+RESEND_SAFE_INTERVAL_SECONDS = 0.3
+
+
+def _bulk_issue_and_email(candidates, selected_ids, season):
+    """Shared by pass-remediation and issue-passes: sends to each selected
+    member independently -- one failure doesn't block the rest -- while
+    pacing requests to stay well under Resend's rate limit."""
+    if not season:
+        return [], []
+    sent, failed = [], []
+    ids = [mid for mid in selected_ids if mid in candidates]
+    for i, member_id in enumerate(ids):
+        row = candidates[member_id]
+        member = {"id": member_id, "first_name": row['first_name'], "last_name": row['last_name'], "email": row['email']}
+        ok, message = _issue_and_email_pass(member, season)
+        (sent if ok else failed).append({"name": f"{row['first_name']} {row['last_name']}", "email": row['email'], "message": message})
+        if i < len(ids) - 1:
+            time.sleep(RESEND_SAFE_INTERVAL_SECONDS)
+    return sent, failed
+
+
 @app.route('/admin/pass-remediation')
 def admin_pass_remediation():
     """Review-and-approve page for the webServiceURL fix: shows exactly
@@ -2259,14 +2288,7 @@ def admin_pass_remediation_resend():
     affected = {r['member_id']: r for r in db.get_apple_passes_issued_before(WEBSERVICE_URL_FIX_DEPLOYED_AT)}
     season = db.get_current_season()
 
-    sent, failed = [], []
-    for member_id in selected_ids:
-        row = affected.get(member_id)
-        if not row or not season:
-            continue
-        member = {"id": member_id, "first_name": row['first_name'], "last_name": row['last_name'], "email": row['email']}
-        ok, message = _issue_and_email_pass(member, season)
-        (sent if ok else failed).append({"name": f"{row['first_name']} {row['last_name']}", "email": row['email'], "message": message})
+    sent, failed = _bulk_issue_and_email(affected, selected_ids, season)
 
     session['pass_remediation_result'] = {"sent": sent, "failed": failed}
     return redirect(url_for('admin_pass_remediation'))
@@ -2331,14 +2353,7 @@ def admin_issue_passes_send():
     selected_ids = {int(v) for v in request.form.getlist('member_id')}
     candidates = {r['member_id']: r for r in db.get_members_without_wallet_pass(season['id'])} if season else {}
 
-    sent, failed = [], []
-    for member_id in selected_ids:
-        row = candidates.get(member_id)
-        if not row or not season:
-            continue
-        member = {"id": member_id, "first_name": row['first_name'], "last_name": row['last_name'], "email": row['email']}
-        ok, message = _issue_and_email_pass(member, season)
-        (sent if ok else failed).append({"name": f"{row['first_name']} {row['last_name']}", "email": row['email'], "message": message})
+    sent, failed = _bulk_issue_and_email(candidates, selected_ids, season)
 
     session['issue_passes_result'] = {"sent": sent, "failed": failed}
     return redirect(url_for('admin_issue_passes'))

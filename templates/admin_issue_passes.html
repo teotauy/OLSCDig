@@ -22,6 +22,12 @@
         .header { text-align: center; margin-bottom: 20px; }
         .header h1 { color: #e31b23; font-size: 24px; margin-bottom: 6px; }
         .header p.sub { color: #666; font-size: 14px; }
+        .resend-badge {
+            display: inline-block; margin-top: 8px; font-size: 12px; color: #666;
+            background: #f4f4f4; border-radius: 999px; padding: 4px 12px;
+            font-variant-numeric: tabular-nums; font-weight: 600;
+        }
+        .resend-badge.warn { background: #fff3cd; color: #7a5c00; }
 
         .panel { border: 1px solid #e0e0e0; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
         .panel p.hint { font-size: 13px; color: #666; margin-bottom: 14px; line-height: 1.5; }
@@ -58,6 +64,15 @@
             <img src="{{ wordmark_data_uri }}" alt="OLSC Brooklyn — Official Supporters Club" style="max-width: 200px; height: auto; margin: 0 auto 8px; display: block;">
             <h1>Issue First Passes</h1>
             <p class="sub">{{ rows|length }} member(s) have never been sent a Wallet pass this season</p>
+            {% if resend_usage and resend_usage.checked_at %}
+            <div>
+                <span class="resend-badge{% if resend_usage.last_status_code and resend_usage.last_status_code >= 400 %} warn{% endif %}"
+                      id="resendBadge"
+                      data-reset-at="{{ resend_usage.reset_at.isoformat() if resend_usage.reset_at else '' }}">
+                    &#128231; {{ resend_usage.daily_quota_raw or '?' }} sent today<span id="resendCountdown"></span>
+                </span>
+            </div>
+            {% endif %}
         </div>
 
         {% if result %}
@@ -144,6 +159,31 @@
             }
             return confirm(`This will send a real email to ${n} ${n === 1 ? 'person' : 'people'} right now. Continue?`);
         }
+
+        (function () {
+            const badge = document.getElementById('resendBadge');
+            const countdownEl = document.getElementById('resendCountdown');
+            if (!badge || !countdownEl) return;
+            const resetAt = badge.dataset.resetAt ? new Date(badge.dataset.resetAt) : null;
+            if (!resetAt || isNaN(resetAt.getTime())) return;
+
+            function render() {
+                const msLeft = resetAt - new Date();
+                if (msLeft <= 0) {
+                    countdownEl.textContent = ' · resets any moment';
+                    return;
+                }
+                const totalMinutes = Math.floor(msLeft / 60000);
+                const hours = Math.floor(totalMinutes / 60);
+                const minutes = totalMinutes % 60;
+                const parts = [];
+                if (hours) parts.push(`${hours}h`);
+                parts.push(`${minutes}m`);
+                countdownEl.textContent = ` · resets in ${parts.join(' ')}`;
+            }
+            render();
+            setInterval(render, 60000);
+        })();
     </script>
     {% include '_loading_overlay.html' %}
 </body>
