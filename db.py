@@ -378,6 +378,28 @@ def update_resend_usage_state(daily_quota_raw=None, monthly_quota_raw=None, rate
         )
 
 
+def get_apple_passes_issued_before(cutoff):
+    """Active Apple Wallet passes issued before `cutoff` (a timezone-aware
+    datetime) — used to find members whose installed pass still carries a
+    known-bad webServiceURL from before the Aug 20 fix, so they can be
+    reviewed and, if approved, resent."""
+    with cursor() as cur:
+        cur.execute(
+            """
+            SELECT m.id AS member_id, m.first_name, m.last_name, m.email,
+                   wp.serial_number, wp.created_at
+            FROM wallet_passes wp
+            JOIN members m ON m.id = wp.member_id
+            WHERE wp.platform = 'apple'
+              AND wp.revoked_at IS NULL
+              AND wp.created_at < %s
+            ORDER BY wp.created_at
+            """,
+            (cutoff,),
+        )
+        return cur.fetchall()
+
+
 def get_resend_usage_state():
     with cursor() as cur:
         cur.execute("SELECT * FROM resend_usage_state WHERE id = 1")

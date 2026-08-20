@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pass Remediation - OLSC Brooklyn</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #e31b23 0%, #00a65a 100%);
+            background-image: url("{{ url_for('static', filename='background.png') }}"), linear-gradient(135deg, #e31b23 0%, #00a65a 100%);
+            background-size: cover, auto;
+            background-position: center, 0 0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px; margin: 0 auto; background: white; border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2); padding: 30px;
+        }
+        .header { text-align: center; margin-bottom: 20px; }
+        .header h1 { color: #e31b23; font-size: 24px; margin-bottom: 6px; }
+        .header p.sub { color: #666; font-size: 14px; }
+
+        .panel { border: 1px solid #e0e0e0; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+        .panel p.hint { font-size: 13px; color: #666; margin-bottom: 14px; line-height: 1.5; }
+
+        .message { padding: 14px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; }
+        .message.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .message.warn { background: #fff3cd; color: #7a5c00; border: 1px solid #ffe08a; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #eee; }
+        th { color: #666; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+        tr.test-account { background: #fffbea; }
+        .test-flag { font-size: 11px; color: #a0790a; font-weight: 700; text-transform: uppercase; margin-left: 6px; }
+        .muted { color: #999; font-size: 13px; }
+
+        .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
+        .toolbar-links a { color: #e31b23; text-decoration: none; font-size: 13px; margin-right: 16px; }
+        .toolbar-links button { background: none; border: none; color: #e31b23; text-decoration: underline; font-size: 13px; cursor: pointer; padding: 0; }
+
+        .btn {
+            padding: 12px 20px; background: linear-gradient(135deg, #e31b23 0%, #d81d42 100%);
+            color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer;
+        }
+        .btn:disabled { background: #ccc; cursor: not-allowed; }
+        .selected-count { font-size: 13px; color: #666; margin-top: 10px; }
+
+        .links { text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0; }
+        .links a { color: #e31b23; text-decoration: none; font-size: 14px; margin: 0 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="{{ wordmark_data_uri }}" alt="OLSC Brooklyn — Official Supporters Club" style="max-width: 200px; height: auto; margin: 0 auto 8px; display: block;">
+            <h1>Pass Remediation</h1>
+            <p class="sub">{{ rows|length }} active pass(es) issued before the Aug 20 push-update fix</p>
+        </div>
+
+        {% if result %}
+            {% if result.sent %}
+            <div class="message success">
+                Sent to {{ result.sent|length }}: {{ result.sent|map(attribute='name')|join(', ') }}
+            </div>
+            {% endif %}
+            {% if result.failed %}
+            <div class="message warn">
+                Failed for {{ result.failed|length }}:
+                <ul style="margin:8px 0 0 20px; padding:0;">
+                    {% for f in result.failed %}
+                    <li>{{ f.name }} ({{ f.email }}) — {{ f.message }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        {% endif %}
+
+        <div class="panel">
+            <p class="hint">
+                These members have an active Apple Wallet pass issued before the webServiceURL fix (Aug 20) —
+                their pass still can't register for live push updates. Resending gives them a fresh pass with
+                the fix baked in, but <strong>only if they actually re-add it to Wallet</strong> — sending the
+                email alone doesn't touch what's already on their phone. Test/dev-looking accounts are flagged
+                and unchecked by default.
+            </p>
+            <form method="POST" action="{{ url_for('admin_pass_remediation_resend') }}" id="remediationForm" onsubmit="return confirmSend();">
+                <div class="toolbar">
+                    <div class="toolbar-links">
+                        <a href="{{ url_for('admin_pass_remediation_export') }}">Download this list as CSV</a>
+                        <button type="button" onclick="setAll(true)">Select all</button>
+                        <button type="button" onclick="setAll(false)">Select none</button>
+                    </div>
+                </div>
+                {% if rows %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Pass issued</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in rows %}
+                        <tr class="{{ 'test-account' if r.looks_like_test else '' }}">
+                            <td><input type="checkbox" name="member_id" value="{{ r.member_id }}" class="row-check" {{ '' if r.looks_like_test else 'checked' }}></td>
+                            <td>{{ r.first_name }} {{ r.last_name }}{% if r.looks_like_test %}<span class="test-flag">test?</span>{% endif %}</td>
+                            <td>{{ r.email }}</td>
+                            <td class="muted">{{ r.created_at.strftime('%b %-d, %-I:%M %p') if r.created_at else '—' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <p class="selected-count"><span id="selectedCount">0</span> selected</p>
+                <button type="submit" class="btn" style="margin-top:14px;">Resend Pass to Selected</button>
+                {% else %}
+                <p class="muted">Nobody currently needs this — every active pass was issued after the fix.</p>
+                {% endif %}
+            </form>
+        </div>
+
+        {% include '_admin_footer.html' %}
+    </div>
+    <script>
+        const checkboxes = document.querySelectorAll('.row-check');
+        const countEl = document.getElementById('selectedCount');
+        function updateCount() {
+            countEl.textContent = document.querySelectorAll('.row-check:checked').length;
+        }
+        function setAll(checked) {
+            checkboxes.forEach(cb => cb.checked = checked);
+            updateCount();
+        }
+        checkboxes.forEach(cb => cb.addEventListener('change', updateCount));
+        updateCount();
+
+        function confirmSend() {
+            const n = document.querySelectorAll('.row-check:checked').length;
+            if (n === 0) {
+                alert('Select at least one person first.');
+                return false;
+            }
+            return confirm(`This will send a real email to ${n} ${n === 1 ? 'person' : 'people'} right now. Continue?`);
+        }
+    </script>
+    {% include '_loading_overlay.html' %}
+</body>
+</html>

@@ -2139,6 +2139,88 @@ def admin_leaderboard():
     )
 
 
+# Aug 20, 2026: the exact time the webServiceURL double-/v1 fix was pushed
+# (commit 1940750). Any active Apple Wallet pass issued before this still
+# carries the broken URL baked in and needs a fresh pass to actually pick
+# up push updates. See QA_VERIFICATION_PLAN.md.
+WEBSERVICE_URL_FIX_DEPLOYED_AT = datetime(2026, 8, 20, 8, 24, 41, tzinfo=timezone.utc)
+
+
+def _looks_like_test_account(first_name, last_name, email):
+    name = f"{first_name} {last_name}".lower()
+    return 'test' in name or 'test' in (email or '').lower()
+
+
+@app.route('/admin/pass-remediation')
+def admin_pass_remediation():
+    """Review-and-approve page for the webServiceURL fix: shows exactly
+    who has an active Apple Wallet pass issued before the fix, lets an
+    admin consciously pick who to resend to, and only sends when that
+    button is explicitly clicked — no bulk action fires on its own."""
+    if not require_password():
+        return redirect(url_for('login'))
+
+    rows = db.get_apple_passes_issued_before(WEBSERVICE_URL_FIX_DEPLOYED_AT)
+    for r in rows:
+        r['looks_like_test'] = _looks_like_test_account(r['first_name'], r['last_name'], r['email'])
+
+    result = session.pop('pass_remediation_result', None)
+    return render_template(
+        'admin_pass_remediation.html',
+        rows=rows,
+        result=result,
+        wordmark_data_uri=_current_theme_wordmark_data_uri(),
+    )
+
+
+@app.route('/admin/pass-remediation/export.csv')
+def admin_pass_remediation_export():
+    """The same list as a plain CSV, for review outside the browser."""
+    if not require_password():
+        return redirect(url_for('login'))
+    rows = db.get_apple_passes_issued_before(WEBSERVICE_URL_FIX_DEPLOYED_AT)
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["member_id", "first_name", "last_name", "email", "serial_number", "pass_issued_at", "looks_like_test_account"])
+    for r in rows:
+        writer.writerow([
+            r['member_id'], r['first_name'], r['last_name'], r['email'], r['serial_number'],
+            r['created_at'].isoformat() if r['created_at'] else '',
+            _looks_like_test_account(r['first_name'], r['last_name'], r['email']),
+        ])
+    return Response(
+        buf.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=pass_remediation_list.csv"},
+    )
+
+
+@app.route('/admin/pass-remediation/resend', methods=['POST'])
+def admin_pass_remediation_resend():
+    """Resends only to the member_ids explicitly checked on the review
+    page. Each member is its own independent attempt -- one failure
+    doesn't block the rest, and every outcome is reported back, not
+    just a total count."""
+    if not require_password():
+        return redirect(url_for('login'))
+
+    selected_ids = {int(v) for v in request.form.getlist('member_id')}
+    affected = {r['member_id']: r for r in db.get_apple_passes_issued_before(WEBSERVICE_URL_FIX_DEPLOYED_AT)}
+    season = db.get_current_season()
+
+    sent, failed = [], []
+    for member_id in selected_ids:
+        row = affected.get(member_id)
+        if not row or not season:
+            continue
+        member = {"id": member_id, "first_name": row['first_name'], "last_name": row['last_name'], "email": row['email']}
+        ok, message = _issue_and_email_pass(member, season)
+        (sent if ok else failed).append({"name": f"{row['first_name']} {row['last_name']}", "email": row['email'], "message": message})
+
+    session['pass_remediation_result'] = {"sent": sent, "failed": failed}
+    return redirect(url_for('admin_pass_remediation'))
+
+
 @app.route('/admin/matches/<int:match_id>/export-checkins.csv')
 def admin_export_match_checkins(match_id):
     """CSV of everyone checked in to a specific match."""
