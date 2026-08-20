@@ -90,6 +90,14 @@ INSERT INTO pass_update_state (id, last_updated_tag)
 ALTER TABLE wallet_passes ADD COLUMN IF NOT EXISTS auth_token TEXT;
 ALTER TABLE wallet_passes ADD COLUMN IF NOT EXISTS token_encrypted TEXT;
 
+-- google_object_id/google_class_id: the Generic Object/Class id a Google
+-- Wallet save link was built with, persisted so a match-week update can
+-- PATCH that exact object later (Google's equivalent of Apple's APNs
+-- push-to-refetch) without recomputing it from a serial number that may
+-- have since rotated on a resend.
+ALTER TABLE wallet_passes ADD COLUMN IF NOT EXISTS google_object_id TEXT;
+ALTER TABLE wallet_passes ADD COLUMN IF NOT EXISTS google_class_id TEXT;
+
 CREATE TABLE IF NOT EXISTS matches (
     id SERIAL PRIMARY KEY,
     season_id INTEGER NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,

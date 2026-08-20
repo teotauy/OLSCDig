@@ -197,6 +197,38 @@ def issue_wallet_token(member_id, season_id, platform='apple'):
     return raw_token, serial_number, auth_token
 
 
+def set_google_wallet_object(member_id, season_id, object_id, class_id):
+    """Persist the Generic Object/Class id a Google Wallet save link was
+    just built with, so a later match-week update can PATCH this exact
+    object instead of recomputing it from a serial number that may have
+    since rotated (which would silently point at a different object)."""
+    with cursor() as cur:
+        cur.execute(
+            """
+            UPDATE wallet_passes
+            SET google_object_id = %s, google_class_id = %s
+            WHERE member_id = %s AND season_id = %s AND platform = 'apple'
+            """,
+            (object_id, class_id, member_id, season_id),
+        )
+
+
+def all_google_wallet_objects():
+    """Every Google Wallet object we've issued a save link for (whether or
+    not the member actually tapped 'Add' -- PATCHing an object nobody saved
+    is a harmless no-op on Google's side), for the match-week push job."""
+    with cursor() as cur:
+        cur.execute(
+            """
+            SELECT wp.member_id, wp.google_object_id, s.name AS season_name
+            FROM wallet_passes wp
+            JOIN seasons s ON s.id = wp.season_id
+            WHERE wp.google_object_id IS NOT NULL AND wp.revoked_at IS NULL
+            """
+        )
+        return cur.fetchall()
+
+
 def find_wallet_pass_by_serial(serial_number):
     """Look up an active wallet pass (plus member/season) by its
     pass.json serialNumber — used by the PassKit web service, which

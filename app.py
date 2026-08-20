@@ -38,7 +38,7 @@ from wallet_pass import (
     AppleWalletConfigError, MemberPassData, build_member_pkpass, PASS_THEMES,
     load_apple_wallet_config, send_apns_pass_update,
 )
-from google_wallet import GoogleWalletConfigError, build_google_wallet_save_url, google_wallet_configured
+from google_wallet import GoogleWalletConfigError, build_google_wallet_save_url, google_wallet_configured, patch_google_wallet_object
 import db
 # Notifications feature removed
 
@@ -1506,9 +1506,11 @@ def wallet_asset(filename):
     return send_file(path, mimetype="image/png", max_age=86400)
 
 
-def _build_google_wallet_url(member, season, raw_token, serial_number, next_match_text, is_home):
+def _build_google_wallet_link(member, season, raw_token, serial_number, next_match_text, is_home):
+    """Returns (save_url, object_id, class_id) -- object_id/class_id are
+    None on failure or when Google Wallet isn't configured."""
     if not google_wallet_configured():
-        return ""
+        return "", None, None
     try:
         return build_google_wallet_save_url(
             member_id=member["id"],
@@ -1524,7 +1526,7 @@ def _build_google_wallet_url(member, season, raw_token, serial_number, next_matc
         print(f"Google Wallet not configured: {e}")
     except Exception as e:
         print(f"Google Wallet link generation failed: {e}")
-    return ""
+    return "", None, None
 
 
 # Apple's Wallet client automatically appends /v1/devices/..., /v1/passes/...,
@@ -1581,7 +1583,11 @@ def _issue_member_pkpass(member, season):
     )
     pkpass_bytes = build_member_pkpass(pass_data)
     mobile_pass_url = f"{_public_base_url()}{url_for('mobile_pass', token=raw_token)}"
-    google_wallet_url = _build_google_wallet_url(member, season, raw_token, serial_number, next_match_text, is_home)
+    google_wallet_url, google_object_id, google_class_id = _build_google_wallet_link(
+        member, season, raw_token, serial_number, next_match_text, is_home,
+    )
+    if google_object_id:
+        db.set_google_wallet_object(member['id'], season['id'], google_object_id, google_class_id)
     return pkpass_bytes, mobile_pass_url, google_wallet_url
 
 
@@ -1605,6 +1611,49 @@ def _notify_apple_pass_updates():
         return sent, len(tokens)
     finally:
         shutil.rmtree(materialize_dir, ignore_errors=True)
+
+
+def _notify_google_pass_updates():
+    """PATCH every already-saved Google Wallet object with the current
+    next-match text / home-away theme. Unlike Apple, there's no separate
+    'registered device' step -- Google delivers the update to the member's
+    device directly once the object itself is patched. Silently no-ops if
+    Google Wallet isn't configured. Returns (patched_count, total_count)."""
+    if not google_wallet_configured():
+        return 0, 0
+    next_match_text = ""
+    is_home = True
+    try:
+        next_match = get_next_match()
+        if next_match:
+            next_match_text = next_match.get('pass_display') or ""
+            is_home = bool(next_match.get('is_home', True))
+    except Exception:
+        next_match_text = ""
+
+    objects = db.all_google_wallet_objects()
+    patched = 0
+    for obj in objects:
+        try:
+            patch_google_wallet_object(
+                obj['google_object_id'],
+                season_name=obj['season_name'],
+                next_match=next_match_text,
+                is_home=is_home,
+            )
+            patched += 1
+        except Exception as e:
+            print(f"Google Wallet patch failed for object {obj['google_object_id']}: {e}")
+    print(f"Patched {patched}/{len(objects)} Google Wallet object(s).")
+    return patched, len(objects)
+
+
+def _notify_wallet_pass_updates():
+    """Push a live update to every issued Apple + Google Wallet pass.
+    Returns (apple_pushed, apple_total, google_patched, google_total)."""
+    apple_sent, apple_total = _notify_apple_pass_updates()
+    google_sent, google_total = _notify_google_pass_updates()
+    return apple_sent, apple_total, google_sent, google_total
 
 
 def _next_match_fingerprint():
@@ -1634,7 +1683,7 @@ def internal_check_next_match():
     Compares today's computed 'next match' against the last one we saw; if
     it changed (a fixture advanced, a cup tie got confirmed, an admin
     override was added), pushes an update to every installed Apple Wallet
-    pass automatically, no admin click required."""
+    and Google Wallet pass automatically, no admin click required."""
     expected_secret = os.getenv('INTERNAL_TASK_SECRET', '').strip()
     if not expected_secret:
         return jsonify({"error": "INTERNAL_TASK_SECRET not configured"}), 503
@@ -1645,17 +1694,19 @@ def internal_check_next_match():
     last_key = db.get_last_next_match_key()
     changed = current_key != last_key
 
-    sent, total = 0, 0
+    apple_sent, apple_total, google_sent, google_total = 0, 0, 0, 0
     if changed:
         db.set_last_next_match_key(current_key)
-        sent, total = _notify_apple_pass_updates()
+        apple_sent, apple_total, google_sent, google_total = _notify_wallet_pass_updates()
 
     return jsonify({
         "changed": changed,
         "next_match_key": current_key,
         "previous_key": last_key,
-        "pushed": sent,
-        "total_devices": total,
+        "pushed": apple_sent,
+        "total_devices": apple_total,
+        "google_patched": google_sent,
+        "google_total": google_total,
     })
 
 
@@ -2314,20 +2365,24 @@ def admin_match_set_current(match_id):
         cur.execute("UPDATE matches SET is_current = FALSE WHERE is_current")
         cur.execute("UPDATE matches SET is_current = TRUE WHERE id = %s", (match_id,))
 
-    _notify_apple_pass_updates()
+    _notify_wallet_pass_updates()
     return redirect(url_for('admin_matches'))
 
 
 @app.route('/admin/passes/push-updates', methods=['POST'])
 def admin_push_pass_updates():
-    """Manually force every installed Apple Wallet pass to refresh right
-    now — the button for "the next-match text is stale, fix it before
+    """Manually force every installed Apple + Google Wallet pass to refresh
+    right now — the button for "the next-match text is stale, fix it before
     people notice," independent of any specific admin match action."""
     if not require_password():
         return redirect(url_for('login'))
 
-    sent, total = _notify_apple_pass_updates()
-    return redirect(url_for('admin_matches', pushed=sent, push_total=total))
+    apple_sent, apple_total, google_sent, google_total = _notify_wallet_pass_updates()
+    return redirect(url_for(
+        'admin_matches',
+        pushed=apple_sent, push_total=apple_total,
+        google_pushed=google_sent, google_push_total=google_total,
+    ))
 
 
 @app.route('/admin/match-overrides', methods=['GET', 'POST'])
@@ -2502,7 +2557,7 @@ def mobile_pass(token):
         next_match_text = ""
 
     theme = PASS_THEMES["home"] if is_home else PASS_THEMES["away"]
-    google_wallet_url = _build_google_wallet_url(
+    google_wallet_url, _google_object_id, _google_class_id = _build_google_wallet_link(
         {
             "id": record["member_id"],
             "first_name": record["first_name"],

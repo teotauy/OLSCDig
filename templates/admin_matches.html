@@ -67,8 +67,12 @@
         {% if error %}<div class="message error">{{ error }}</div>{% endif %}
         {% if pushed is not none %}
         <div class="message" style="background:#d1ecf1; color:#0c5460; border:1px solid #bee5eb;">
-            Pushed pass-update notifications to {{ pushed }} of {{ push_total }} registered device(s).
+            Apple Wallet: pushed to {{ pushed }} of {{ push_total }} registered device(s).
             {% if push_total == '0' %}No devices have registered for updates yet (nobody's added a pass on this build, or Apple Wallet push isn't configured).{% endif %}
+            {% if google_pushed is not none %}
+            <br>Google Wallet: updated {{ google_pushed }} of {{ google_push_total }} issued pass(es).
+            {% if google_push_total == '0' %}No Google Wallet passes issued yet, or it isn't configured.{% endif %}
+            {% endif %}
         </div>
         {% endif %}
 

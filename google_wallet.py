@@ -8,7 +8,10 @@ import re
 from urllib.parse import urlparse
 
 from google.auth import jwt
+from google.auth.transport.requests import AuthorizedSession
 from google.oauth2 import service_account
+
+WALLET_OBJECTS_API_BASE = "https://walletobjects.googleapis.com/walletobjects/v1"
 
 
 class GoogleWalletConfigError(RuntimeError):
@@ -61,32 +64,10 @@ def _origin_for(base_url):
     return parsed.netloc or parsed.path
 
 
-def build_google_wallet_save_url(
-    *,
-    member_id,
-    display_name,
-    season_name,
-    serial_number,
-    barcode_value,
-    next_match="",
-    base_url,
-    is_home=True,
-):
-    """Build a Google Wallet save URL containing a Generic Class/Object JWT."""
-    issuer_id = _env("GOOGLE_WALLET_ISSUER_ID")
-    if not issuer_id:
-        raise GoogleWalletConfigError("GOOGLE_WALLET_ISSUER_ID is not set")
-
-    credentials = _load_credentials()
-    class_suffix = _safe_suffix(_env("GOOGLE_WALLET_CLASS_SUFFIX", f"olsc_brooklyn_digital_id_{season_name}_v2"))
-    object_suffix = _safe_suffix(f"member_{member_id}_{serial_number}")
-    class_id = f"{issuer_id}.{class_suffix}"
-    object_id = f"{issuer_id}.{object_suffix}"
-    wordmark = "olsc_wordmark_white.png" if is_home else "olsc_wordmark_red.png"
-    background = "#e31b23" if is_home else "#ffffff"
-
-    generic_class = {"id": class_id}
-
+def _text_modules(season_name, next_match=""):
+    """Shared by save-link generation and the live PATCH update, so a
+    match-week refresh can never drift out of sync with what a fresh
+    save link would produce."""
     text_modules = [
         {
             "id": "season",
@@ -105,6 +86,60 @@ def build_google_wallet_save_url(
             "header": "Next match",
             "body": next_match,
         })
+    return text_modules
+
+
+def patch_google_wallet_object(object_id, *, season_name, next_match="", is_home=True):
+    """Push a live update to an already-saved Generic Object (next match /
+    home-away theme) without touching its barcode or identity — the Google
+    Wallet equivalent of Apple's "push a refresh notification" path. Google
+    delivers this to the member's device automatically; no new save link or
+    member action needed. Raises on a non-2xx response so a caller looping
+    over many members can catch-and-continue per member."""
+    credentials = _load_credentials()
+    session = AuthorizedSession(credentials)
+    body = {
+        "textModulesData": _text_modules(season_name, next_match),
+        "hexBackgroundColor": "#e31b23" if is_home else "#ffffff",
+    }
+    response = session.patch(
+        f"{WALLET_OBJECTS_API_BASE}/genericObject/{object_id}",
+        json=body,
+        timeout=15,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def build_google_wallet_save_url(
+    *,
+    member_id,
+    display_name,
+    season_name,
+    serial_number,
+    barcode_value,
+    next_match="",
+    base_url,
+    is_home=True,
+):
+    """Build a Google Wallet save URL containing a Generic Class/Object JWT.
+    Returns (save_url, object_id, class_id) -- the caller persists the ids
+    so a later match-week update can PATCH this exact object."""
+    issuer_id = _env("GOOGLE_WALLET_ISSUER_ID")
+    if not issuer_id:
+        raise GoogleWalletConfigError("GOOGLE_WALLET_ISSUER_ID is not set")
+
+    credentials = _load_credentials()
+    class_suffix = _safe_suffix(_env("GOOGLE_WALLET_CLASS_SUFFIX", f"olsc_brooklyn_digital_id_{season_name}_v2"))
+    object_suffix = _safe_suffix(f"member_{member_id}_{serial_number}")
+    class_id = f"{issuer_id}.{class_suffix}"
+    object_id = f"{issuer_id}.{object_suffix}"
+    wordmark = "olsc_wordmark_white.png" if is_home else "olsc_wordmark_red.png"
+    background = "#e31b23" if is_home else "#ffffff"
+
+    generic_class = {"id": class_id}
+
+    text_modules = _text_modules(season_name, next_match)
 
     generic_object = {
         "id": object_id,
@@ -142,4 +177,4 @@ def build_google_wallet_save_url(
     token = jwt.encode(credentials.signer, claims)
     if isinstance(token, bytes):
         token = token.decode("utf-8")
-    return f"https://pay.google.com/gp/v/save/{token}"
+    return f"https://pay.google.com/gp/v/save/{token}", object_id, class_id
