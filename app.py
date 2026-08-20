@@ -316,33 +316,6 @@ def create_member(first_name, last_name, email, phone=""):
             "email": email
         }
 
-def get_checked_in_members():
-    """Fetch all CHECKED_IN members from PassKit API."""
-    url = f"{config['API_BASE']}/members/member/list/{config['PROGRAM_ID']}"
-    
-    # POST body with filter for CHECKED_IN status
-    payload = {
-        "filters": {
-            "limit": 1000,  # Adjust if you have more members
-            "offset": 0,
-            "orderBy": "created",
-            "orderAsc": True,
-            "filterGroups": [{
-                "condition": "AND",
-                "fieldFilters": [{
-                    "filterField": "status",  # Correct field name
-                    "filterValue": "CHECKED_IN",
-                    "filterOperator": "eq"
-                }]
-            }]
-        }
-    }
-    
-    response = requests.post(url, headers=get_passkit_headers(), json=payload, timeout=30)
-    response.raise_for_status()
-    
-    return parse_ndjson(response.text)
-
 def require_password():
     """Check if user is authenticated (password or Google OAuth)."""
     return bool(session.get('authenticated'))
@@ -506,54 +479,28 @@ def logout():
 
 @app.route('/api/headcount')
 def api_headcount():
-    """API endpoint to get current headcount."""
+    """Live check-in count for the current match, from our own DB — this
+    used to call PassKit's member-list API for a 'CHECKED_IN' status that
+    doesn't exist in our system anymore, which is why it was returning a
+    500 on every single call. There's no 'checked in' toggle state here;
+    checkins are a permanent per-match record, so this counts real rows
+    for whichever match is current, same source as the scanner's badge."""
     try:
-        members = get_checked_in_members()
-        
+        match = db.get_current_match()
+        count = db.count_checkins_for_match(match['id']) if match else 0
         tz = pytz.timezone(config["TIMEZONE"])
         now = datetime.now(tz)
-        
         return jsonify({
-            "count": len(members),
+            "count": count,
             "updated_at": now.isoformat(),
             "status": "success"
         })
-    
     except Exception as e:
         return jsonify({
             "count": 0,
             "error": str(e),
             "status": "error"
         }), 500
-
-def _member_check_in_time(member):
-    """Try to get check-in timestamp from PassKit member object if available."""
-    for key in ('currentCheckInStartedAt', 'checkInTime', 'lastCheckInAt', 'checkedInAt'):
-        val = member.get(key)
-        if val:
-            try:
-                if isinstance(val, str) and 'T' in val:
-                    dt = datetime.fromisoformat(val.replace('Z', '+00:00'))
-                    tz = pytz.timezone(config.get('TIMEZONE', 'America/New_York'))
-                    return dt.astimezone(tz).strftime('%Y-%m-%d %I:%M %p')
-                return str(val)
-            except Exception:
-                return str(val)
-    return ""
-
-def _build_checkout_report(members, checked_out_at_str):
-    """Build CSV of who was checked out (name, email, check-in time if any, checked_out_at)."""
-    out = io.StringIO()
-    w = csv.writer(out)
-    w.writerow(["Name", "Email", "Checked in at", "Checked out at"])
-    for m in members:
-        person = m.get("person") or {}
-        name = person.get("displayName") or (person.get("forename", "") + " " + person.get("surname", "")).strip() or "Unknown"
-        email = person.get("emailAddress") or ""
-        check_in = _member_check_in_time(m)
-        w.writerow([name, email, check_in, checked_out_at_str])
-    return out.getvalue()
-
 
 def _email_from_address(smtp_user=None):
     return (
@@ -886,121 +833,6 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Aria
         return True
     except Exception:
         return False
-
-def _send_checkout_report_email(to_email, csv_content, filename):
-    """Email the checkout CSV to to_email using SMTP from env. Returns True if sent."""
-    subject = f"Checkout report: {filename}"
-    if _send_email_resend(
-        to_email,
-        subject,
-        text=f"Checkout report attached ({filename}).",
-        attachments=[{
-            "filename": filename,
-            "content": base64.b64encode(csv_content.encode("utf-8")).decode("ascii"),
-        }],
-    ):
-        return True
-
-    host = os.getenv("SMTP_HOST")
-    user = os.getenv("SMTP_USER")
-    password = os.getenv("SMTP_PASSWORD")
-    if not all([host, user, password]):
-        return False
-    port = int(os.getenv("SMTP_PORT", "587"))
-    from_addr = os.getenv("EMAIL_FROM", user)
-    msg = MIMEMultipart()
-    msg["Subject"] = subject
-    msg["From"] = from_addr
-    msg["To"] = to_email
-    msg.attach(MIMEText(f"Checkout report attached ({filename}).", "plain"))
-    part = MIMEBase("application", "octet-stream")
-    part.set_payload(csv_content.encode("utf-8"))
-    encoders.encode_base64(part)
-    part.add_header("Content-Disposition", "attachment", filename=filename)
-    msg.attach(part)
-    try:
-        with smtplib.SMTP(host, port) as server:
-            server.starttls()
-            server.login(user, password)
-            server.sendmail(from_addr, [to_email], msg.as_string())
-        return True
-    except Exception:
-        return False
-
-@app.route('/api/checkout', methods=['POST'])
-def api_checkout():
-    """API endpoint to checkout all CHECKED_IN members. Generates a report of who was checked out."""
-    try:
-        # Get all checked-in members
-        members = get_checked_in_members()
-        
-        if not members:
-            return jsonify({
-                "status": "success",
-                "message": "No members to checkout",
-                "checked_out": 0,
-                "report_filename": None,
-                "report_csv": None,
-            })
-        
-        tz = pytz.timezone(config.get("TIMEZONE", "America/New_York"))
-        checked_out_at = datetime.now(tz)
-        checked_out_at_str = checked_out_at.strftime("%Y-%m-%d %I:%M %p")
-        report_csv = _build_checkout_report(members, checked_out_at_str)
-        report_filename = f"checkout_{checked_out_at.strftime('%Y-%m-%d_%H-%M-%S')}.csv"
-
-        report_email_sent = False
-        to_email = os.getenv("CHECKOUT_REPORT_EMAIL", "").strip()
-        if to_email:
-            report_email_sent = _send_checkout_report_email(to_email, report_csv, report_filename)
-
-        # Optionally write to disk (e.g. for local runs)
-        try:
-            report_dir = os.path.join(os.path.dirname(__file__), "checkout_reports")
-            os.makedirs(report_dir, exist_ok=True)
-            path = os.path.join(report_dir, report_filename)
-            with open(path, "w", newline="", encoding="utf-8") as f:
-                f.write(report_csv)
-        except Exception:
-            pass
-
-        # Checkout each member using the checkOut endpoint
-        checkout_url = f"{config['API_BASE']}/members/member/checkOut"
-        success_count = 0
-        failed = []
-
-        for member in members:
-            member_id = member.get("id")
-            checkout_payload = {"memberId": member_id}
-            try:
-                checkout_response = requests.post(
-                    checkout_url,
-                    headers=get_passkit_headers(),
-                    json=checkout_payload,
-                    timeout=30
-                )
-                checkout_response.raise_for_status()
-                success_count += 1
-            except Exception as e:
-                person = member.get('person', {})
-                name = person.get('displayName', 'Unknown')
-                failed.append({"name": name, "id": member_id, "error": str(e)})
-
-        return jsonify({
-            "status": "success",
-            "checked_out": success_count,
-            "total": len(members),
-            "failed": failed,
-            "report_filename": report_filename,
-            "report_csv": report_csv,
-            "report_email_sent": report_email_sent,
-            "report_email_to": to_email if report_email_sent else None,
-        })
-    except Exception as e:
-        return jsonify({
-            "status": "error",
-            "error": str(e)
-        }), 500
 
 def _trigger_passkit_welcome_email(member):
     """Ask PassKit to resend the welcome email for this member (PUT with sendWelcomeEmail). Returns True if accepted."""
