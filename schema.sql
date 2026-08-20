@@ -165,6 +165,14 @@ CREATE TABLE IF NOT EXISTS resend_usage_state (
 );
 INSERT INTO resend_usage_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
+-- last_error_name: Resend's machine-readable error type (e.g.
+-- "rate_limit_exceeded", "daily_quota_exceeded", "monthly_quota_exceeded")
+-- from the failed response body. reset_at only ever reflects the
+-- ratelimit-reset header -- the ~1-second burst-rate window, NOT the
+-- daily/monthly quota (Resend documents no reset time for those at all) --
+-- so this is needed to tell the two failure kinds apart correctly.
+ALTER TABLE resend_usage_state ADD COLUMN IF NOT EXISTS last_error_name TEXT;
+
 -- Idempotency log for the Squarespace-order-to-member webhook (via
 -- Make.com's "Watch Orders" trigger, since Squarespace's Core plan has no
 -- native webhooks). Recording order_id here lets a retried/duplicate

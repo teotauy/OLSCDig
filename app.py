@@ -607,13 +607,15 @@ def _record_resend_usage(response, ok):
             reset_at = None
 
     error_message = None
+    error_name = None
     if not ok:
         try:
             body = response.json()
+            error_name = body.get("name")
             error_message = body.get("message") or response.text[:300]
         except Exception:
             error_message = response.text[:300]
-        print(f"Resend send failed: status={response.status_code} body={error_message}")
+        print(f"Resend send failed: status={response.status_code} name={error_name} body={error_message}")
 
     try:
         db.update_resend_usage_state(
@@ -623,6 +625,7 @@ def _record_resend_usage(response, ok):
             reset_at=reset_at,
             status_code=response.status_code,
             error_message=error_message,
+            error_name=error_name,
         )
     except Exception as e:
         # Never let usage-tracking itself break the actual send path.
@@ -1903,9 +1906,19 @@ def _issue_and_email_pass(member, season):
 
     usage = db.get_resend_usage_state()
     if usage and usage.get('last_status_code') == 429:
-        reset_at = usage.get('reset_at')
-        when = f" (resets {reset_at.strftime('%-I:%M %p %Z')})" if reset_at else ""
-        return False, f"Pass generated, but Resend's send limit is hit for now{when} — not a config problem, just wait and resend."
+        error_name = usage.get('last_error_name')
+        if error_name == 'rate_limit_exceeded':
+            # The only case where reset_at (from the ratelimit-reset header)
+            # is actually correct -- this is a ~1-second burst window, safe
+            # to retry almost immediately.
+            reset_at = usage.get('reset_at')
+            when = f" (resets {reset_at.strftime('%-I:%M:%S %p %Z')})" if reset_at else " in a few seconds"
+            return False, f"Pass generated, but hit Resend's burst rate limit{when} — safe to just retry."
+        if error_name == 'daily_quota_exceeded':
+            return False, "Pass generated, but today's Resend daily send quota is used up — Resend gives no fixed reset time for this, it won't clear until roughly 24 hours after your first send today. Come back tomorrow."
+        if error_name == 'monthly_quota_exceeded':
+            return False, "Pass generated, but this month's Resend send quota is used up — no fixed reset time from Resend for this either. Needs a plan upgrade or waiting for next month."
+        return False, "Pass generated, but Resend's send limit is hit for now — not a config problem, just wait and resend."
     return False, "Pass generated but email failed to send (check SMTP/Resend env vars)."
 
 

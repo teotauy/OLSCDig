@@ -389,11 +389,13 @@ def set_last_next_match_key(key):
 
 
 def update_resend_usage_state(daily_quota_raw=None, monthly_quota_raw=None, ratelimit_remaining=None,
-                               reset_at=None, status_code=None, error_message=None):
+                               reset_at=None, status_code=None, error_message=None, error_name=None):
     """Persist the latest known Resend quota/rate-limit info, captured from
     response headers on a real send attempt. Only overwrites fields we
     actually got a fresh value for, so a call that lacks a given header
-    doesn't blank out the last known value for it."""
+    doesn't blank out the last known value for it. last_status_code and
+    last_error_name/message are always overwritten (even to NULL/200) since
+    they describe THIS attempt specifically, not a running best-known value."""
     with cursor() as cur:
         cur.execute(
             """
@@ -404,10 +406,11 @@ def update_resend_usage_state(daily_quota_raw=None, monthly_quota_raw=None, rate
                 reset_at = COALESCE(%s, reset_at),
                 last_status_code = %s,
                 last_error_message = %s,
+                last_error_name = %s,
                 checked_at = now()
             WHERE id = 1
             """,
-            (daily_quota_raw, monthly_quota_raw, ratelimit_remaining, reset_at, status_code, error_message),
+            (daily_quota_raw, monthly_quota_raw, ratelimit_remaining, reset_at, status_code, error_message, error_name),
         )
 
 
