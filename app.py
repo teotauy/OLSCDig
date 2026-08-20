@@ -22,11 +22,12 @@ import tempfile
 import qrcode
 from pathlib import Path
 from urllib.parse import urlparse
+import email.utils
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for, send_file, Response
 from dotenv import load_dotenv
 import pytz
@@ -1727,7 +1728,15 @@ def passkit_registrations_for_device(device_library_identifier, pass_type_id):
 def passkit_get_latest_pass(pass_type_id, serial_number):
     """Apple Wallet calls this to fetch the freshly-updated pass. Rebuilds
     the exact same barcode (decrypted, not rotated) with current next-match
-    and theme data — a content refresh, not a reissue."""
+    and theme data — a content refresh, not a reissue.
+
+    Supports If-Modified-Since / 304, per Apple's documented spec for this
+    endpoint (confirmed against an independent source, not just our own
+    reading — this was a real, identified gap: the endpoint used to always
+    rebuild and return 200, never checking whether anything had actually
+    changed since the device's last fetch). Uses the same
+    pass_update_state tag that already drives the "list updatable passes"
+    endpoint, so both endpoints agree on what "changed" means."""
     if pass_type_id != os.getenv('APPLE_PASS_TYPE_ID', '').strip():
         return jsonify({"error": "unknown pass type"}), 404
     wallet_pass = db.find_wallet_pass_by_serial(serial_number)
@@ -1735,6 +1744,23 @@ def passkit_get_latest_pass(pass_type_id, serial_number):
         return jsonify({"error": "unauthorized"}), 401
     if wallet_pass['platform'] != 'apple' or not wallet_pass.get('token_encrypted'):
         return jsonify({"error": "pass not refreshable"}), 404
+
+    last_changed_tag = db.get_passes_updated_tag()
+    try:
+        last_changed_at = datetime.fromtimestamp(int(last_changed_tag), tz=timezone.utc)
+    except (ValueError, TypeError):
+        last_changed_at = datetime.now(timezone.utc)
+
+    if_modified_since = request.headers.get('If-Modified-Since')
+    if if_modified_since:
+        try:
+            client_since = email.utils.parsedate_to_datetime(if_modified_since)
+            if client_since.tzinfo is None:
+                client_since = client_since.replace(tzinfo=timezone.utc)
+            if client_since >= last_changed_at:
+                return ('', 304)
+        except (ValueError, TypeError):
+            pass  # unparseable header — fall through and just serve fresh content
 
     raw_token = db.decrypt_wallet_token(wallet_pass['token_encrypted'])
     member = {'first_name': wallet_pass['first_name'], 'last_name': wallet_pass['last_name']}
@@ -1748,7 +1774,7 @@ def passkit_get_latest_pass(pass_type_id, serial_number):
         return jsonify({"error": f"wallet not configured: {e}"}), 500
 
     resp = send_file(io.BytesIO(pkpass_bytes), mimetype="application/vnd.apple.pkpass", max_age=0)
-    resp.headers['Last-Modified'] = datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S GMT')
+    resp.headers['Last-Modified'] = email.utils.format_datetime(last_changed_at, usegmt=True)
     return resp
 
 
