@@ -321,6 +321,25 @@ def require_password():
     """Check if user is authenticated (password or Google OAuth)."""
     return bool(session.get('authenticated'))
 
+
+def _passkit_legacy_enabled():
+    """Mothball switch for everything that still talks to PassKit's own
+    API (not the PassKit *web service protocol* Apple defines for Wallet
+    push updates — that's ours, unrelated, and stays live). Code is kept
+    intact on purpose in case a real PassKit fallback is ever needed
+    again; default is hidden. Flip PASSKIT_LEGACY_ENABLED=true to revert."""
+    return os.getenv('PASSKIT_LEGACY_ENABLED', 'false').strip().lower() == 'true'
+
+
+def _passkit_legacy_gate():
+    """Call at the top of any PassKit-API-touching route. Returns a 404
+    response if mothballed, else None (so the caller proceeds normally).
+    404, not 403 -- the point is these should look like they don't exist,
+    not like a locked door."""
+    if not _passkit_legacy_enabled():
+        return jsonify({"error": "not found"}), 404
+    return None
+
 @app.route('/')
 def index():
     """Public landing page with headcount display."""
@@ -340,21 +359,33 @@ def add_member_page():
 
 @app.route('/legacy/passkit/add-member')
 def legacy_passkit_add_member_page():
-    """Fallback-only PassKit add-member page for emergency PassKit season."""
+    """Fallback-only PassKit add-member page for emergency PassKit season.
+    Mothballed — see _passkit_legacy_enabled()."""
+    gate = _passkit_legacy_gate()
+    if gate:
+        return gate
     if not require_password():
         return redirect(url_for('login'))
     return render_template('add_member.html')
 
 @app.route('/update-match')
 def update_match_page():
-    """Page for updating match info (password protected)."""
+    """Page for updating match info (password protected).
+    Mothballed — see _passkit_legacy_enabled()."""
+    gate = _passkit_legacy_gate()
+    if gate:
+        return gate
     if not require_password():
         return redirect(url_for('login'))
     return render_template('update_match.html')
 
 @app.route('/resend-welcome')
 def resend_welcome_page():
-    """Page to resend welcome email with pass link (password protected)."""
+    """Page to resend welcome email with pass link (password protected).
+    Mothballed — see _passkit_legacy_enabled()."""
+    gate = _passkit_legacy_gate()
+    if gate:
+        return gate
     if not require_password():
         return redirect(url_for('login'))
     return render_template('resend_welcome.html')
@@ -862,7 +893,11 @@ def _trigger_passkit_welcome_email(member):
 
 @app.route('/api/resend-welcome-email', methods=['POST'])
 def api_resend_welcome_email():
-    """Resend welcome email: try PassKit's built-in resend first; fall back to our SMTP email if needed."""
+    """Resend welcome email: try PassKit's built-in resend first; fall back to our SMTP email if needed.
+    Mothballed — see _passkit_legacy_enabled()."""
+    gate = _passkit_legacy_gate()
+    if gate:
+        return gate
     if not require_password():
         return jsonify({"status": "error", "error": "Authentication required"}), 401
     try:
@@ -910,7 +945,11 @@ def api_resend_welcome_email():
 
 @app.route('/api/add-member', methods=['POST'])
 def api_add_member():
-    """API endpoint to add a new member."""
+    """API endpoint to add a new member (PassKit-backed).
+    Mothballed — see _passkit_legacy_enabled()."""
+    gate = _passkit_legacy_gate()
+    if gate:
+        return gate
     if not require_password():
         return jsonify({
             "status": "error",
@@ -977,10 +1016,14 @@ def api_next_match():
 
 @app.route('/api/update-match', methods=['POST'])
 def api_update_match():
-    """API endpoint to update all passes with next match. Uses same logic as match_updates.py."""
+    """API endpoint to update all passes with next match (PassKit-backed).
+    Mothballed — see _passkit_legacy_enabled()."""
+    gate = _passkit_legacy_gate()
+    if gate:
+        return gate
     if not require_password():
         return jsonify({"status": "error", "error": "Authentication required"}), 401
-    
+
     try:
         match_data = get_next_match()
         if not match_data:
