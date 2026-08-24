@@ -1539,15 +1539,18 @@ def _safe_pkpass_filename(member):
 
 
 def _current_match_relevant_date():
-    """Return current match kickoff as an Apple Wallet relevantDate string."""
-    try:
-        match = db.get_current_match()
-        kickoff_at = match.get('kickoff_at') if match else None
-        if not kickoff_at:
-            return ""
-        return kickoff_at.astimezone(pytz.utc).isoformat().replace("+00:00", "Z")
-    except Exception:
-        return ""
+    """Deliberately always empty -- do not resurrect relevantDate.
+
+    Confirmed via real installed passes (Aug 24): since iOS 15.6.1, Apple
+    Wallet shows a pass as "Expired" the moment relevantDate is in the
+    past, full stop, regardless of the pass otherwise being completely
+    valid (https://developer.apple.com/forums/thread/713935). We only
+    refresh passes once a day, so any relevantDate tied to a kickoff time
+    would sit stale (and the pass would show Expired) for hours after
+    every single match, forever. Not worth the lock-screen-surfacing
+    convenience it would otherwise provide.
+    """
+    return ""
 
 
 @app.route('/wallet/assets/<filename>')
