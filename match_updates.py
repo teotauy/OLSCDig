@@ -34,7 +34,32 @@ def get_passkit_headers():
         "X-Project-Key": PASSKIT_CONFIG["PROJECT_KEY"]
     }
 
+_fixtures_cache = {"fetched_at": None, "matches": None}
+FIXTURES_CACHE_TTL_SECONDS = 120
+
+
 def get_liverpool_fixtures():
+    """Cached wrapper around the real fetch, keyed on a short TTL.
+
+    Every Apple Wallet device that refreshes calls this once -- a single
+    push notification can wake dozens of devices within the same few
+    seconds (confirmed for real on Aug 24: a 95-device push fanout each
+    independently called this uncached, which tripped football-data.org's
+    own rate limit and, combined with concurrent load our Flask dev
+    server couldn't absorb, took the whole app down). The answer is
+    identical for everyone within this window, so there's no reason for
+    it to hit the real API more than once per TTL."""
+    now = datetime.now(pytz.UTC)
+    cached_at = _fixtures_cache["fetched_at"]
+    if cached_at and (now - cached_at).total_seconds() < FIXTURES_CACHE_TTL_SECONDS:
+        return _fixtures_cache["matches"]
+    matches = _fetch_liverpool_fixtures_uncached()
+    _fixtures_cache["fetched_at"] = now
+    _fixtures_cache["matches"] = matches
+    return matches
+
+
+def _fetch_liverpool_fixtures_uncached():
     """
     Get Liverpool FC fixtures from football-data.org API (all competitions).
     Returns upcoming matches sorted by date; display time is in configured TIMEZONE.
