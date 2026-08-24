@@ -1553,6 +1553,19 @@ def _current_match_relevant_date():
     return ""
 
 
+def _season_expiration_date(season_name):
+    """Pass expirationDate: the season's end date, if set -- a single
+    fixed far-future date is exactly the case relevantDate's Expired bug
+    can't hit (it's never in the past for an active season's pass)."""
+    try:
+        ends_on = db.get_season_ends_on(season_name)
+        if not ends_on:
+            return ""
+        return f"{ends_on.isoformat()}T23:59:59Z"
+    except Exception:
+        return ""
+
+
 @app.route('/wallet/assets/<filename>')
 def wallet_asset(filename):
     """Public HTTPS assets for Google Wallet pass rendering."""
@@ -1632,6 +1645,7 @@ def _member_pass_data(member, serial_number, raw_token, season_name, auth_token=
         description="OLSC Brooklyn Membership",
         is_home=is_home,
         relevant_date=_current_match_relevant_date(),
+        expiration_date=_season_expiration_date(season_name),
     )
     return pass_data, next_match_text, is_home
 

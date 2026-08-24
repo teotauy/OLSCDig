@@ -46,6 +46,9 @@ class MemberPassData:
     description: str = "OLSC Brooklyn Membership"
     is_home: bool = True  # drives home (red) vs away (white/red, 2026/27 road kit) pass theme
     relevant_date: str = ""
+    expiration_date: str = ""  # season end -- unlike relevant_date, safe to set: it's a
+    # single fixed far-future date, never in the past for an active pass, so it can't
+    # trigger the relevantDate "shows as Expired" bug
     locations: tuple = (
         {
             "latitude": 40.6657,
@@ -303,6 +306,8 @@ def _build_pass_json(config, pass_data, theme):
         pass_json["locations"] = list(pass_data.locations)
     if pass_data.relevant_date:
         pass_json["relevantDate"] = pass_data.relevant_date
+    if pass_data.expiration_date:
+        pass_json["expirationDate"] = pass_data.expiration_date
     # Both fields are required together for Apple to treat this pass as
     # eligible for push updates — Wallet registers the device for updates
     # only when it sees a webServiceURL, and authenticationToken is what

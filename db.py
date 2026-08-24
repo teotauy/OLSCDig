@@ -76,8 +76,15 @@ def ensure_default_season(name, starts_on=None, ends_on=None):
 
 def get_current_season():
     with cursor() as cur:
-        cur.execute("SELECT id, name FROM seasons WHERE is_current")
+        cur.execute("SELECT id, name, ends_on FROM seasons WHERE is_current")
         return cur.fetchone()
+
+
+def get_season_ends_on(season_name):
+    with cursor() as cur:
+        cur.execute("SELECT ends_on FROM seasons WHERE name = %s", (season_name,))
+        row = cur.fetchone()
+        return row['ends_on'] if row else None
 
 
 def get_current_match():
