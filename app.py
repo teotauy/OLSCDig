@@ -2526,6 +2526,13 @@ def admin_export_members():
 
 @app.route('/admin/matches/<int:match_id>/set-current', methods=['POST'])
 def admin_match_set_current(match_id):
+    """Purely a scanner/headcount admin action -- which match check-ins
+    count against. Does NOT push a wallet update: pass content comes from
+    get_next_match() (live, auto-computed), not from is_current, ever
+    since relevantDate stopped depending on it. Pushing here too would
+    make this a second, redundant full push on top of whatever the daily
+    cron already fired for the same underlying change -- confirmed
+    happening in practice on Aug 25."""
     if not require_password():
         return redirect(url_for('login'))
 
@@ -2533,7 +2540,6 @@ def admin_match_set_current(match_id):
         cur.execute("UPDATE matches SET is_current = FALSE WHERE is_current")
         cur.execute("UPDATE matches SET is_current = TRUE WHERE id = %s", (match_id,))
 
-    _notify_wallet_pass_updates()
     return redirect(url_for('admin_matches'))
 
 
