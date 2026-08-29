@@ -30,15 +30,19 @@
 - **Password + optional Google OAuth login**, forgot-password flow, rate limiting.
 - **Resend email sending** — with real usage tracking (daily/monthly quota, rate-limit vs. quota-exceeded correctly distinguished as of Aug 20) and a visible usage badge on every page that can send in bulk.
 - **PassKit vendor routes mothballed**, not deleted — gated behind `PASSKIT_LEGACY_ENABLED` (default off), kept only as an emergency fallback. See `_passkit_legacy_gate()` in `app.py`.
+- **Volunteer door access** (`/admin/door-access`) — scoped, revocable, expiring links that grant scanner-only access, no admin password needed or exposed.
+- **Real production WSGI server** (gunicorn) instead of Flask's dev server — found and fixed after a real push-notification burst crashed the app under the old setup (Aug 24).
+- **Security hardening** (Aug 25) — fixed an open redirect, a Google OAuth flow that failed open on error, timing-unsafe secret comparisons, and a hardcoded `FLASK_SECRET_KEY` fallback that was actually in use in production.
 
 ## Known gaps (tracked, not hidden)
 
 Full detail and status in [QA_VERIFICATION_PLAN.md](QA_VERIFICATION_PLAN.md). Headline items:
 
-- **Real-device confirmation** that an automatic Apple push, and an automatic Google Wallet PATCH, actually land on a phone and visibly update — the API calls themselves are verified against the real Apple/Google servers, but nobody's watched it happen on a real installed pass yet.
+- **~38 members still on a pre-fix, stale pass** — Pass Remediation is built and verified, but sending is a deliberate hold, not an oversight. Their pass can never auto-update (device registration is broken for them specifically) regardless of any other fix; the barcode itself still scans fine at the door in the meantime.
+- **Venue location for lock-screen alerts** — coordinates were found wrong (~220m off) via a real matchday test and corrected, but the fix itself hasn't been re-tested in person yet, and the phone's own Location Services settings are a separate unverified variable.
 - **Squarespace → Make.com → our webhook**, end to end with a real order — built and unit-tested against hand-built payloads, not yet run against an actual Squarespace purchase.
-- **Leaderboard result sync** (`get_finished_liverpool_matches()`) — built against football-data.org's documented schema, unverified against a real finished match until one's actually been played (first one: Aug 23).
 - **The 3 mothballed legacy PassKit pages** (`/legacy/passkit/add-member`, `/update-match`, `/resend-welcome`) — pages load, their form submissions against the real PassKit API were never tested. Decision pending: worth testing, or just retire since they're unlinked and superseded.
+- **`matches.is_current` has no automation** — someone has to manually create next week's match row and flip which one's current; nothing does this on its own yet.
 
 ## Planned / backlog
 

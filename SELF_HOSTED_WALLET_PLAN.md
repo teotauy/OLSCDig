@@ -14,7 +14,38 @@ Replace the expensive PassKit dependency with a system we own:
 
 PassKit becomes unnecessary once Wallet generation, pass links, updates, and check-ins are handled here.
 
-## Status (last consolidated Aug 20 — see gate table for latest per-item dates)
+## Status (last consolidated Aug 25 — see gate table for latest per-item dates)
+
+**Aug 24-29 update:** the first real match (Newcastle, Aug 23, ended in a
+draw — auto-synced correctly) surfaced a run of real, previously-hidden
+bugs, all found and fixed the same way as Aug 20's: verified against
+real devices/logs, not assumptions. In order: a full code-level security
+review found and fixed an open redirect, a Google OAuth flow that failed
+*open* (granted admin access if the userinfo call errored, skipping the
+email allowlist), and two timing-unsafe secret comparisons — also
+surfaced that `FLASK_SECRET_KEY` was unset in Render this whole time
+(hardcoded fallback in use), fixed by setting a real value after
+migrating the 138 existing encrypted tokens to it first so nothing broke.
+Built revocable, scanner-only door-access links for volunteer staff
+(previously they'd have needed the full admin password). Then, testing
+the owner's own installed pass turned up a real Apple Wallet bug:
+`relevantDate` makes a pass show as "Expired" the instant it's in the
+past, and ours was tied to a manually-managed field nobody updates —
+removed entirely, added a real season-long `expirationDate` instead.
+Triggering the resulting push to confirm the fix woke ~95 devices at
+once and **crashed the app for real** — Flask's dev server couldn't
+absorb the burst, compounded by every device independently (uncached)
+hitting football-data.org and tripping its rate limit. Fixed both
+(gunicorn, 120s fixtures cache) and re-verified by triggering the exact
+same scenario again — 96/96 pushed, app stayed up. Also found and fixed:
+a second, redundant push firing on every "set current match" action
+(leftover coupling from before the relevantDate fix), and the venue's
+GPS coordinates being off by ~220m (real matchday test: zero lock-screen
+alerts) — corrected via real geocoding, not yet re-tested in person.
+One deliberate non-action: the ~38 members with pre-fix stale passes
+have still not been sent Pass Remediation — see
+[QA_VERIFICATION_PLAN.md](QA_VERIFICATION_PLAN.md) for why and what's
+next.
 
 **Aug 20 update:** a real production bug shipped and got caught the hard
 way — the Apple Wallet `webServiceURL` had a doubled `/v1` segment,
