@@ -51,8 +51,12 @@ class MemberPassData:
     # trigger the relevantDate "shows as Expired" bug
     locations: tuple = (
         {
-            "latitude": 40.6657,
-            "longitude": -73.9877,
+            # 481 5th Ave, Brooklyn, NY 11215 (the actual venue) -- the
+            # previous value here was ~220m off with no documented source,
+            # confirmed too far for the lock-screen alert to ever fire on
+            # a real device (Aug 25 matchday test, zero pop-ups).
+            "latitude": 40.6676747,
+            "longitude": -73.9872480,
             "relevantText": "Up the Reds.",
         },
     )
