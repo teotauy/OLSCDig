@@ -15,6 +15,7 @@ import os
 import secrets
 import time
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 import psycopg2
@@ -309,6 +310,52 @@ def all_pass_device_push_tokens():
             """
         )
         return [r['push_token'] for r in cur.fetchall()]
+
+
+def push_tokens_not_fetched_since(tag):
+    """Devices that have not successfully pulled a pass since `tag`
+    (the unix-timestamp lastUpdated we last advertised). Used to retry
+    a fan-out when APNs accepted the POST but Wallet never came back —
+    the fingerprint gate alone would otherwise never push again."""
+    try:
+        tag_at = datetime.fromtimestamp(int(tag), tz=timezone.utc)
+    except (ValueError, TypeError):
+        return all_pass_device_push_tokens()
+    with cursor() as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT pd.push_token
+            FROM pass_devices pd
+            JOIN wallet_passes wp ON wp.id = pd.wallet_pass_id
+            WHERE wp.revoked_at IS NULL
+              AND (pd.last_fetched_at IS NULL OR pd.last_fetched_at < %s)
+            """,
+            (tag_at,),
+        )
+        return [r['push_token'] for r in cur.fetchall()]
+
+
+def mark_pass_fetched(serial_number):
+    """Record that Wallet actually downloaded this serial (200 or a
+    genuine 304). Retry logic keys off this, not on APNs 200."""
+    with cursor() as cur:
+        cur.execute(
+            """
+            UPDATE pass_devices pd
+            SET last_fetched_at = now()
+            FROM wallet_passes wp
+            WHERE pd.wallet_pass_id = wp.id
+              AND wp.serial_number = %s
+              AND wp.revoked_at IS NULL
+            """,
+            (serial_number,),
+        )
+
+
+def delete_pass_devices_by_push_token(push_token):
+    """Apple: delete the device if APNs says the push token is invalid."""
+    with cursor() as cur:
+        cur.execute("DELETE FROM pass_devices WHERE push_token = %s", (push_token,))
 
 
 def list_match_overrides():

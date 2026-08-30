@@ -78,7 +78,11 @@ def _fetch_liverpool_fixtures_uncached():
         # All scheduled matches (no competition filter) - get enough to include FA Cup, PL, etc.
         url = f"https://api.football-data.org/v4/teams/{team_id}/matches"
         params = {
-            "status": "SCHEDULED",
+            # Include live/in-play so match-day passes keep showing THAT
+            # match (and its home/away theme) until the calendar day is
+            # over. status=SCHEDULED alone drops the fixture at kickoff,
+            # so the daily job would push next week's opponent mid-event.
+            "status": "SCHEDULED,TIMED,IN_PLAY,PAUSED",
             "limit": 25
         }
         
@@ -94,6 +98,9 @@ def _fetch_liverpool_fixtures_uncached():
         for match in fixtures[:1]:  # Print first match for debugging
             print(f"   Raw UTC time: {match.get('utcDate')}")
         
+        display_timezone = pytz.timezone(PASSKIT_CONFIG["TIMEZONE"])
+        today_local = datetime.now(display_timezone).date()
+
         # Fetch every active override once, up front — not per fixture. Each
         # DB round-trip here costs ~1.3s (no connection pooling), so doing
         # this inside the loop below turned a fast local lookup into a
@@ -101,7 +108,7 @@ def _fetch_liverpool_fixtures_uncached():
         # overrides moved off the JSON file and onto the DB.
         overrides_by_date = {
             o["match_date"].strftime("%Y-%m-%d"): o
-            for o in db.get_active_upcoming_match_overrides(datetime.now(pytz.UTC).date())
+            for o in db.get_active_upcoming_match_overrides(today_local)
         }
 
         # Process fixtures
@@ -110,9 +117,12 @@ def _fetch_liverpool_fixtures_uncached():
             home_team = match["homeTeam"]["name"]
             away_team = match["awayTeam"]["name"]
             match_date = datetime.fromisoformat(match["utcDate"].replace("Z", "+00:00"))
+            local_time = match_date.astimezone(display_timezone)
+            if local_time.date() < today_local:
+                continue
 
             # Check for manual override BEFORE processing
-            date_key = match_date.strftime("%Y-%m-%d")
+            date_key = local_time.strftime("%Y-%m-%d")
             override_row = overrides_by_date.get(date_key)
             override = None
             if override_row:
@@ -135,29 +145,31 @@ def _fetch_liverpool_fixtures_uncached():
                 venue = match.get("venue", "Away")
                 is_home = False
             
-            # If override exists, use it
+            # If override exists, use it (including its is_home — that's
+            # what drives the pass color scheme).
             if override:
-                # Parse override date to get full date string
-                current_year = match_date.year
-                override_date = datetime.strptime(f"{override['date']} {current_year}", "%m/%d %Y")
-                full_date = override_date.strftime("%A, %B %d")
+                full_date = local_time.strftime("%A, %B %d")
+                if override.get("date"):
+                    try:
+                        override_date = datetime.strptime(
+                            f"{override['date']} {match_date.year}", "%m/%d %Y"
+                        )
+                        full_date = override_date.strftime("%A, %B %d")
+                    except ValueError:
+                        pass
                 sort_key = match_date.strftime("%Y-%m-%dT%H:%M:%S")
                 upcoming_matches.append({
                     "opponent": override["opponent"],
-                    "date": override["date"],
+                    "date": override["date"] or local_time.strftime("%-m/%-d"),
                     "time": override["time"],
-                    "venue": venue,
-                    "is_home": is_home,
+                    "venue": override.get("venue") or venue,
+                    "is_home": bool(override.get("is_home", is_home)),
                     "full_date": full_date,
                     "kickoff": override["time"],
                     "pass_display": override["pass_display"],
                     "sort_key": sort_key,
                 })
                 continue
-            
-            # All displayed times in configured timezone (e.g. America/New_York)
-            display_timezone = pytz.timezone(PASSKIT_CONFIG["TIMEZONE"])
-            local_time = match_date.astimezone(display_timezone)
             
             if match == fixtures[0]:
                 print(f"   Display time ({PASSKIT_CONFIG['TIMEZONE']}): {local_time.strftime('%Y-%m-%d %H:%M %Z')}")
@@ -202,13 +214,13 @@ def _fetch_liverpool_fixtures_uncached():
             })
         
         # Add override-only matches (e.g. FA Cup not in API) and sort by date
-        display_tz = pytz.timezone(PASSKIT_CONFIG["TIMEZONE"])
         api_dates = {m["sort_key"][:10] for m in upcoming_matches}
-        now_utc = datetime.now(pytz.UTC)
         try:
-            for override in db.get_active_upcoming_match_overrides(now_utc.date()):
+            for override in db.get_active_upcoming_match_overrides(today_local):
                 date_key = override["match_date"].strftime("%Y-%m-%d")
                 if date_key in api_dates:
+                    continue
+                if override["match_date"] < today_local:
                     continue
                 time_str = (override.get("display_time") or "12:00 PM").strip()
                 try:
@@ -218,10 +230,8 @@ def _fetch_liverpool_fixtures_uncached():
                         t = datetime.strptime(time_str, "%I:%M%p").time()
                     except ValueError:
                         t = datetime.strptime("12:00", "%H:%M").time()
-                dt_local = display_tz.localize(datetime.combine(override["match_date"], t))
+                dt_local = display_timezone.localize(datetime.combine(override["match_date"], t))
                 sort_key_utc = dt_local.astimezone(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%S")
-                if sort_key_utc < now_utc.strftime("%Y-%m-%dT%H:%M:%S"):
-                    continue
                 full_date = override["match_date"].strftime("%A, %B %d")
                 display_date = override.get("display_date") or override["match_date"].strftime("%-m/%-d")
                 pass_display = override.get("pass_display") or format_match_display(override["opponent"], display_date, time_str)
@@ -352,17 +362,16 @@ def _get_forced_next_match_from_overrides():
         return None
 
 def get_next_match():
-    """Get the next upcoming match."""
-    # First, see if any upcoming manual overrides exist; if so, treat the
-    # earliest one as the authoritative "next match" (e.g. FA Cup ties).
-    forced = _get_forced_next_match_from_overrides()
-    if forced:
-        return forced
-
+    """Get the next upcoming match (or today's, until the calendar day
+    in the display timezone is over). Merged API + override list is the
+    source of truth; a forced override is only the fallback if the API
+    returns nothing, so a far-future cup override can't skip this week's
+    Premier League fixture.
+    """
     fixtures = get_liverpool_fixtures()
     if fixtures:
-        return fixtures[0]  # Next match (already processed with override check)
-    return None
+        return fixtures[0]
+    return _get_forced_next_match_from_overrides()
 
 def update_pass_fields(match_data):
     """Update PassKit pass fields with match information."""

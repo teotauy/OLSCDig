@@ -400,34 +400,86 @@ def _extract_apns_cert_and_key(config):
     return temp_dir, cert_pem, key_pem
 
 
-def send_apns_pass_update(config, push_token):
-    """Tell one device (by APNs push token) that an installed pass has an
-    update waiting. This is a silent push with an empty payload — it
-    doesn't display anything, it just makes Wallet call back into our
-    web service to check what changed and re-fetch the pass.
+# Apple's "Handling notification responses from APNs": these mean the
+# token is gone and we must delete the device registration. Anything else
+# (timeouts, 5xx) is a transient miss — leave the row so a later retry
+# can still reach the phone.
+_APNS_INVALID_TOKEN_REASONS = {
+    "BadDeviceToken",
+    "Unregistered",
+    "ExpiredToken",
+    "DeviceTokenNotForTopic",
+}
 
-    Returns True on success. Logs and returns False on any failure
-    (unreachable APNs, bad/expired push token, misconfigured cert) rather
-    than raising, since one bad device token shouldn't stop the rest of
-    the fan-out.
+
+def _apns_token_is_invalid(status_code, body_text):
+    if status_code == 410:
+        return True
+    if status_code != 400:
+        return False
+    try:
+        reason = json.loads(body_text or "{}").get("reason", "")
+    except (ValueError, TypeError):
+        reason = ""
+    return reason in _APNS_INVALID_TOKEN_REASONS
+
+
+def send_apns_pass_updates(config, push_tokens):
+    """Fan out a Wallet pass-update push to every registered device.
+
+    Apple's current APNs docs require `apns-push-type` (missing header
+    can be delayed or dropped even when the POST returns 200) and, for a
+    silent wake-up, `apns-priority: 5` (omitting it defaults to 10, which
+    is a mismatch for an empty payload). Wallet's own spec still wants an
+    empty JSON dictionary as the body, the Pass Type ID as the topic, and
+    the same cert that signed the pass — those three are unchanged.
+
+    Reuses one HTTP/2 connection and one cert extract for the whole
+    fan-out (Apple: reuse the connection). Returns
+    (sent_count, invalid_tokens) so the caller can delete dead tokens.
     """
     import httpx
 
+    if not push_tokens:
+        return 0, []
+
     temp_dir, cert_pem, key_pem = _extract_apns_cert_and_key(config)
+    sent = 0
+    invalid = []
+    headers = {
+        "apns-topic": config.pass_type_id,
+        "apns-push-type": "background",
+        "apns-priority": "5",
+    }
     try:
-        url = f"https://api.push.apple.com/3/device/{push_token}"
-        headers = {"apns-topic": config.pass_type_id}
         with httpx.Client(http2=True, cert=(str(cert_pem), str(key_pem)), timeout=10.0) as client:
-            resp = client.post(url, headers=headers, json={})
-        if resp.status_code == 200:
-            return True
-        print(f"APNs push to {push_token[:12]}... failed ({resp.status_code}): {resp.text}")
-        return False
-    except Exception as e:
-        print(f"APNs push to {push_token[:12]}... errored: {e}")
-        return False
+            for push_token in push_tokens:
+                try:
+                    resp = client.post(
+                        f"https://api.push.apple.com/3/device/{push_token}",
+                        headers=headers,
+                        json={},
+                    )
+                except Exception as e:
+                    print(f"APNs push to {push_token[:12]}... errored: {e}")
+                    continue
+                if resp.status_code == 200:
+                    sent += 1
+                    continue
+                print(f"APNs push to {push_token[:12]}... failed ({resp.status_code}): {resp.text}")
+                if _apns_token_is_invalid(resp.status_code, resp.text):
+                    invalid.append(push_token)
+        return sent, invalid
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def send_apns_pass_update(config, push_token):
+    """Tell one device that an installed pass has an update waiting.
+    Returns True on success. Prefer send_apns_pass_updates for fan-out.
+    """
+    sent, _invalid = send_apns_pass_updates(config, [push_token])
+    return sent == 1
 
 
 def _zip_pass(pass_dir):

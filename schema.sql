@@ -147,6 +147,11 @@ CREATE TABLE IF NOT EXISTS match_overrides (
 -- admin to notice and click "Push Pass Updates Now".
 ALTER TABLE pass_update_state ADD COLUMN IF NOT EXISTS last_next_match_key TEXT;
 
+-- When Wallet actually GETs a pass (not just when APNs returns 200). The
+-- daily job retries devices that never came back after a content bump —
+-- otherwise a dropped silent push is recorded as "done" forever.
+ALTER TABLE pass_devices ADD COLUMN IF NOT EXISTS last_fetched_at TIMESTAMPTZ;
+
 -- Last-known Resend quota/rate-limit state, captured from response headers
 -- on every real send attempt (Resend has no separate "check my usage"
 -- endpoint) -- powers a small admin-visible usage indicator and lets a

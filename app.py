@@ -36,7 +36,7 @@ from team_abbreviations import format_match_display, abbreviate_team_name
 from match_updates import get_next_match, get_finished_liverpool_matches
 from wallet_pass import (
     AppleWalletConfigError, MemberPassData, build_member_pkpass, PASS_THEMES,
-    load_apple_wallet_config, send_apns_pass_update,
+    load_apple_wallet_config, send_apns_pass_updates,
 )
 from google_wallet import GoogleWalletConfigError, build_google_wallet_save_url, google_wallet_configured, patch_google_wallet_object
 import db
@@ -1666,11 +1666,16 @@ def _issue_member_pkpass(member, season):
     return pkpass_bytes, mobile_pass_url, google_wallet_url
 
 
-def _notify_apple_pass_updates():
-    """Bump the shared pass-content tag and push every registered Apple
-    Wallet device so it re-fetches (next match / theme changed). Silently
-    no-ops if Apple Wallet isn't configured — this should never block an
-    admin action like adding a match. Returns (pushed_count, total_count).
+def _notify_apple_pass_updates(push_tokens=None):
+    """Bump the shared pass-content tag and push registered Apple Wallet
+    devices so they re-fetch (next match / theme changed). Silently no-ops
+    if Apple Wallet isn't configured. Returns (pushed_count, total_count).
+
+    `push_tokens` limits the fan-out (retry of devices that never came
+    back after the last bump). The tag is still bumped so Apple's
+    `passesUpdatedSince` comparison sees a newer lastUpdated — otherwise a
+    device that already stored the old tag would get 204 and never
+    re-download.
     """
     db.bump_passes_updated_tag()
     materialize_dir = Path(tempfile.mkdtemp(prefix="olsc-push-certs-"))
@@ -1680,8 +1685,12 @@ def _notify_apple_pass_updates():
         except AppleWalletConfigError as e:
             print(f"Skipping APNs push, Apple Wallet not configured: {e}")
             return 0, 0
-        tokens = db.all_pass_device_push_tokens()
-        sent = sum(1 for t in tokens if send_apns_pass_update(config, t))
+        tokens = list(push_tokens) if push_tokens is not None else db.all_pass_device_push_tokens()
+        sent, invalid = send_apns_pass_updates(config, tokens)
+        for dead_token in invalid:
+            db.delete_pass_devices_by_push_token(dead_token)
+        if invalid:
+            print(f"Removed {len(invalid)} invalid APNs device token(s).")
         print(f"Pushed pass-update notification to {sent}/{len(tokens)} device(s).")
         return sent, len(tokens)
     finally:
@@ -1708,6 +1717,10 @@ def _notify_google_pass_updates():
 
     objects = db.all_google_wallet_objects()
     patched = 0
+    try:
+        base_url = _public_base_url()
+    except RuntimeError:
+        base_url = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
     for obj in objects:
         try:
             patch_google_wallet_object(
@@ -1715,6 +1728,7 @@ def _notify_google_pass_updates():
                 season_name=obj['season_name'],
                 next_match=next_match_text,
                 is_home=is_home,
+                base_url=base_url,
             )
             patched += 1
         except Exception as e:
@@ -1770,12 +1784,24 @@ def internal_check_next_match():
     changed = current_key != last_key
 
     apple_sent, apple_total, google_sent, google_total = 0, 0, 0, 0
+    reason = "unchanged"
     if changed:
-        db.set_last_next_match_key(current_key)
+        # Notify first; only stamp the fingerprint if the fan-out ran.
+        # Recording "done" before the push is what left phones on last
+        # week's match after APNs 200s that Wallet never acted on.
         apple_sent, apple_total, google_sent, google_total = _notify_wallet_pass_updates()
+        db.set_last_next_match_key(current_key)
+        reason = "changed"
+    else:
+        stale = db.push_tokens_not_fetched_since(db.get_passes_updated_tag())
+        if stale:
+            apple_sent, apple_total = _notify_apple_pass_updates(push_tokens=stale)
+            google_sent, google_total = _notify_google_pass_updates()
+            reason = "retry_unfetched"
 
     return jsonify({
         "changed": changed,
+        "reason": reason,
         "next_match_key": current_key,
         "previous_key": last_key,
         "pushed": apple_sent,
@@ -1845,6 +1871,26 @@ def _passkit_auth_ok(wallet_pass):
     return bool(expected) and auth_header == f"ApplePass {expected}"
 
 
+def _pass_client_already_has_version(if_modified_since, last_changed_at):
+    """304 only when Wallet is asking about THIS exact version.
+
+    Apple's spec is standard If-Modified-Since, but treating
+    `client_since >= last_changed_at` as "not modified" 304s a device
+    that sends "now" (the fetch time) rather than the Last-Modified we
+    previously sent — which is how a successful APNs fan-out still
+    leaves phones on last week's match and last week's colors.
+    Equality (within 2s) means "you already have this tag"; any other
+    date means send the pass.
+    """
+    try:
+        client_since = email.utils.parsedate_to_datetime(if_modified_since)
+        if client_since.tzinfo is None:
+            client_since = client_since.replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return False
+    return abs((client_since - last_changed_at).total_seconds()) <= 2
+
+
 @app.route(f'{PASSKIT_WEBSERVICE_PREFIX}/devices/<device_library_identifier>/registrations/<pass_type_id>/<serial_number>', methods=['POST'])
 def passkit_register_device(device_library_identifier, pass_type_id, serial_number):
     """Apple Wallet calls this right after a member adds the pass, to
@@ -1899,13 +1945,13 @@ def passkit_get_latest_pass(pass_type_id, serial_number):
     the exact same barcode (decrypted, not rotated) with current next-match
     and theme data — a content refresh, not a reissue.
 
-    Supports If-Modified-Since / 304, per Apple's documented spec for this
-    endpoint (confirmed against an independent source, not just our own
-    reading — this was a real, identified gap: the endpoint used to always
-    rebuild and return 200, never checking whether anything had actually
-    changed since the device's last fetch). Uses the same
-    pass_update_state tag that already drives the "list updatable passes"
-    endpoint, so both endpoints agree on what "changed" means."""
+    Supports If-Modified-Since / 304, but only when the client's date
+    matches the Last-Modified we sent for the current content tag.
+    A looser `>=` comparison 304s devices that send "now" instead of
+    our previous Last-Modified, which is how a successful push still
+    left phones on last week's match. Uses the same pass_update_state
+    tag that drives the "list updatable passes" endpoint.
+    """
     if pass_type_id != os.getenv('APPLE_PASS_TYPE_ID', '').strip():
         return jsonify({"error": "unknown pass type"}), 404
     wallet_pass = db.find_wallet_pass_by_serial(serial_number)
@@ -1921,15 +1967,9 @@ def passkit_get_latest_pass(pass_type_id, serial_number):
         last_changed_at = datetime.now(timezone.utc)
 
     if_modified_since = request.headers.get('If-Modified-Since')
-    if if_modified_since:
-        try:
-            client_since = email.utils.parsedate_to_datetime(if_modified_since)
-            if client_since.tzinfo is None:
-                client_since = client_since.replace(tzinfo=timezone.utc)
-            if client_since >= last_changed_at:
-                return ('', 304)
-        except (ValueError, TypeError):
-            pass  # unparseable header — fall through and just serve fresh content
+    if if_modified_since and _pass_client_already_has_version(if_modified_since, last_changed_at):
+        db.mark_pass_fetched(serial_number)
+        return ('', 304)
 
     raw_token = db.decrypt_wallet_token(wallet_pass['token_encrypted'])
     member = {'first_name': wallet_pass['first_name'], 'last_name': wallet_pass['last_name']}
@@ -1944,6 +1984,7 @@ def passkit_get_latest_pass(pass_type_id, serial_number):
 
     resp = send_file(io.BytesIO(pkpass_bytes), mimetype="application/vnd.apple.pkpass", max_age=0)
     resp.headers['Last-Modified'] = email.utils.format_datetime(last_changed_at, usegmt=True)
+    db.mark_pass_fetched(serial_number)
     return resp
 
 

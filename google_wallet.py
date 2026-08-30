@@ -89,19 +89,34 @@ def _text_modules(season_name, next_match=""):
     return text_modules
 
 
-def patch_google_wallet_object(object_id, *, season_name, next_match="", is_home=True):
+def patch_google_wallet_object(object_id, *, season_name, next_match="", is_home=True, base_url=""):
     """Push a live update to an already-saved Generic Object (next match /
     home-away theme) without touching its barcode or identity — the Google
     Wallet equivalent of Apple's "push a refresh notification" path. Google
     delivers this to the member's device automatically; no new save link or
     member action needed. Raises on a non-2xx response so a caller looping
-    over many members can catch-and-continue per member."""
+    over many members can catch-and-continue per member.
+
+    Logo is patched alongside hexBackgroundColor: Google's Generic Object
+    stores them independently, so a color-only PATCH leaves the previous
+    match's wordmark on the new background (white-on-white for an away
+    theme).
+    """
     credentials = _load_credentials()
     session = AuthorizedSession(credentials)
+    wordmark = "olsc_wordmark_white.png" if is_home else "olsc_wordmark_red.png"
+    background = "#e31b23" if is_home else "#ffffff"
     body = {
         "textModulesData": _text_modules(season_name, next_match),
-        "hexBackgroundColor": "#e31b23" if is_home else "#ffffff",
+        "hexBackgroundColor": background,
     }
+    if base_url:
+        body["logo"] = {
+            "sourceUri": {
+                "uri": f"{base_url.rstrip('/')}/wallet/assets/{wordmark}",
+            },
+            "contentDescription": _localized("OLSC Brooklyn Official Supporters Club"),
+        }
     response = session.patch(
         f"{WALLET_OBJECTS_API_BASE}/genericObject/{object_id}",
         json=body,

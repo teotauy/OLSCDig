@@ -35,19 +35,19 @@ it and re-adding if needed later.
 
 ## How the app uses overrides
 
-`get_next_match()` (in `match_updates.py`) checks for a forced override
-first (`_get_forced_next_match_from_overrides()` in the same file), and
-uses the earliest one if it's actually upcoming. Otherwise it falls back
-to the earliest `SCHEDULED` fixture from football-data.org. This is the
-same function driving passes, the mobile pass page, and the daily
-auto-update job — one source of truth, so there's no way for the site and
-the passes to disagree about what "next match" is.
+`get_next_match()` (in `match_updates.py`) merges DB overrides into the
+football-data.org fixture list by date, then takes the earliest match
+whose local calendar date is today or later. This is the same function
+driving passes, the mobile pass page, and the daily auto-update job —
+one source of truth, so there's no way for the site and the passes to
+disagree about what "next match" is.
 
 - **Match not in the API at all** (FA Cup, friendly, etc.): add an
   override for that date. It becomes "next match" once it's the earliest
   upcoming date, override or API fixture.
 - **API has the date but the time/display is wrong**: add an override for
-  that *same* date — yours takes priority over the API's for that date.
+  that *same* date — yours takes priority over the API's for that date,
+  including `is_home` (which drives the pass color scheme).
 
 ## After adding or fixing an override
 
