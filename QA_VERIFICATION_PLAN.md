@@ -92,12 +92,13 @@ deliberate decision — see Outstanding below.
 
 ## Immediate next actions, in order
 
-1. **Monday (Sept 1) afternoon: check the owner's own pass updates to the
-   next fixture (post-Forest) with zero manual intervention.** The real,
-   clean end-to-end test of the whole automatic weekly cycle on a pass
-   that's finally in a fully-correct state (right content, right
-   location, no stale credentials). Decides whether to trust the cycle
-   unattended going forward.
+1. **Re-run the "does the automatic cycle work unattended" test — reset
+   again as of Aug 30.** This test has now been accidentally invalidated
+   twice by the same root cause: see
+   [ISSUE_PASS_VERIFICATION_MUTATES_REAL_DATA.md](ISSUE_PASS_VERIFICATION_MUTATES_REAL_DATA.md).
+   Fix that first (or at minimum, don't touch member id 8's pass again
+   for any reason), then check whether it picks up the next fixture
+   change on its own with zero manual intervention.
 2. **Run Pass Remediation for the remaining 38** — deliberately not done
    yet. Tool's built and verified; this is a "when," not a "how," decision
    at this point.
