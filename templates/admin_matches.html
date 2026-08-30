@@ -116,7 +116,7 @@
             <h2>Schedule
                 <span style="float:right;">
                     <a class="edit-link" href="{{ url_for('admin_match_overrides') }}" style="margin-right: 12px;">Fix "Next Match" &rarr;</a>
-                    <form method="POST" action="{{ url_for('admin_push_pass_updates') }}" style="display:inline;" onsubmit="return confirm('Push a pass-update notification to every installed Apple Wallet pass now?');">
+                    <form method="POST" action="{{ url_for('admin_push_pass_updates') }}" style="display:inline;" onsubmit="return confirm('Update every installed Apple and Google Wallet pass to the current next match now?');">
                         <button type="submit" class="btn small">Push Pass Updates Now</button>
                     </form>
                 </span>
