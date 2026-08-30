@@ -36,7 +36,7 @@ services:
     # is a plain in-memory dict: separate worker *processes* wouldn't
     # share it, quietly halving (or worse) its effectiveness. Threads
     # share memory, so the rate limiter stays fully intact.
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 30
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 180
     envVars:
       - key: PROGRAM_ID
         sync: false

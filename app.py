@@ -19,6 +19,7 @@ import secrets
 import base64
 import shutil
 import tempfile
+import threading
 import qrcode
 from pathlib import Path
 from urllib.parse import urlparse
@@ -2280,6 +2281,9 @@ def admin_matches():
 
     pushed = request.args.get('pushed')
     push_total = request.args.get('push_total')
+    google_pushed = request.args.get('google_pushed')
+    google_push_total = request.args.get('google_push_total')
+    push_started = request.args.get('push_started')
 
     return render_template(
         'admin_matches.html',
@@ -2289,6 +2293,9 @@ def admin_matches():
         wordmark_data_uri=_current_theme_wordmark_data_uri(),
         pushed=pushed,
         push_total=push_total,
+        google_pushed=google_pushed,
+        google_push_total=google_push_total,
+        push_started=push_started,
     )
 
 
@@ -2587,17 +2594,16 @@ def admin_match_set_current(match_id):
 @app.route('/admin/passes/push-updates', methods=['POST'])
 def admin_push_pass_updates():
     """Manually force every installed Apple + Google Wallet pass to refresh
-    right now — the button for "the next-match text is stale, fix it before
-    people notice," independent of any specific admin match action."""
+    right now. The fan-out takes longer than gunicorn's request timeout
+    (and Render's proxy), so we start it in a background thread and
+    return the admin page immediately — waiting in this request is what
+    produced the 502 after clicking the button.
+    """
     if not require_password():
         return redirect(url_for('login'))
 
-    apple_sent, apple_total, google_sent, google_total = _notify_wallet_pass_updates()
-    return redirect(url_for(
-        'admin_matches',
-        pushed=apple_sent, push_total=apple_total,
-        google_pushed=google_sent, google_push_total=google_total,
-    ))
+    threading.Thread(target=_notify_wallet_pass_updates, daemon=True).start()
+    return redirect(url_for('admin_matches', push_started=1))
 
 
 @app.route('/admin/match-overrides', methods=['GET', 'POST'])
