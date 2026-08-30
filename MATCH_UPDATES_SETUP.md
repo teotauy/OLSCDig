@@ -14,10 +14,12 @@ already sitting in someone's Apple or Google Wallet.
 
 1. **`get_next_match()`** (in `match_updates.py`) is the single source of
    truth. It takes the earliest fixture whose **local calendar date is
-   today or later**, from football-data.org statuses `SCHEDULED`,
-   `TIMED`, `IN_PLAY`, and `PAUSED` (not `SCHEDULED` alone — that drops
-   the fixture at kickoff, so a 9am-UTC job would push next week's
-   opponent and next week's colors mid-match-day). DB-backed
+   today or later**, from football-data.org `status=SCHEDULED` (that
+   filter is what actually returns upcoming games, even though they
+   come back labeled `TIMED`) plus a separate `LIVE` call so match-day
+   still shows today's opponent. Do not comma-combine statuses with a
+   small `limit` — that returns the *last* 25 of the season, which is
+   how passes briefly showed Spurs on 12/19. DB-backed
    [match overrides](MATCH_OVERRIDES.md) overlay the same list by date;
    a far-future cup override cannot skip an earlier Premier League game.
 2. **Every pass build already reflects this live** — `_member_pass_data()`

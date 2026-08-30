@@ -59,6 +59,20 @@ def get_liverpool_fixtures():
     return matches
 
 
+def _team_matches(headers, team_id, status, limit=50):
+    """One football-data.org team-matches call. Returns [] on any error
+    so a secondary LIVE fetch can't wipe the main SCHEDULED list."""
+    url = f"https://api.football-data.org/v4/teams/{team_id}/matches"
+    params = {"status": status, "limit": limit}
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=30)
+        response.raise_for_status()
+        return list(response.json().get("matches") or [])
+    except Exception as e:
+        print(f"Warning: football-data.org status={status} failed: {e}")
+        return []
+
+
 def _fetch_liverpool_fixtures_uncached():
     """
     Get Liverpool FC fixtures from football-data.org API (all competitions).
@@ -75,27 +89,22 @@ def _fetch_liverpool_fixtures_uncached():
     team_id = 64  # Liverpool FC
     
     try:
-        # All scheduled matches (no competition filter) - get enough to include FA Cup, PL, etc.
-        url = f"https://api.football-data.org/v4/teams/{team_id}/matches"
-        params = {
-            # Include live/in-play so match-day passes keep showing THAT
-            # match (and its home/away theme) until the calendar day is
-            # over. status=SCHEDULED alone drops the fixture at kickoff,
-            # so the daily job would push next week's opponent mid-event.
-            "status": "SCHEDULED,TIMED,IN_PLAY,PAUSED",
-            "limit": 25
-        }
-        
-        response = requests.get(url, headers=headers, params=params, timeout=30)
-        response.raise_for_status()
-        
-        data = response.json()
-        # Sort by kickoff so the chronologically next match is first (e.g. FA Cup before later PL)
-        fixtures = sorted(data.get("matches", []), key=lambda m: m["utcDate"])
-        
-        # Debug: Print raw UTC times
+        # status=SCHEDULED is the query that actually returns upcoming
+        # fixtures (they come back labeled TIMED). Confirmed Aug 30
+        # against the live API: comma-separated statuses with limit 25
+        # does NOT mean "next 25" — it returns the last 25 of the
+        # season, so the "next match" jumped to Spurs on 12/19.
+        # IN_PLAY/PAUSED (LIVE) is a separate call so match-day passes
+        # still show today's game until the calendar day is over.
+        scheduled = _team_matches(headers, team_id, "SCHEDULED", limit=50)
+        live = _team_matches(headers, team_id, "LIVE", limit=10)
+        by_id = {}
+        for match in scheduled + live:
+            by_id[match["id"]] = match
+        fixtures = sorted(by_id.values(), key=lambda m: m["utcDate"])
+
         print(f"📡 Fetched {len(fixtures)} fixtures from football-data.org")
-        for match in fixtures[:1]:  # Print first match for debugging
+        for match in fixtures[:1]:
             print(f"   Raw UTC time: {match.get('utcDate')}")
         
         display_timezone = pytz.timezone(PASSKIT_CONFIG["TIMEZONE"])
