@@ -5,6 +5,7 @@
 <style>
     .loading-overlay {
         display: none;
+        pointer-events: none;
         position: fixed;
         inset: 0;
         z-index: 9999;
@@ -16,7 +17,7 @@
         text-align: center;
         padding: 24px;
     }
-    .loading-overlay.active { display: flex; }
+    .loading-overlay.active { display: flex; pointer-events: auto; }
     .loading-spinner {
         font-size: 72px;
         line-height: 1;

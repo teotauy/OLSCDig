@@ -13,9 +13,6 @@
             background-size: cover, auto;
             background-position: center, 0 0;
             min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
             padding: 20px;
         }
         .container {
@@ -25,6 +22,7 @@
             padding: 30px;
             max-width: 500px;
             width: 100%;
+            margin: 0 auto;
         }
         .header { text-align: center; margin-bottom: 20px; }
         .header p { color: #666; font-size: 14px; }
@@ -34,11 +32,10 @@
             gap: 10px;
         }
         .hub a {
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: block;
+            box-sizing: border-box;
             min-height: 64px;
-            padding: 16px 10px;
+            padding: 20px 10px;
             background: #f4f4f4;
             color: #1a1a1a;
             text-decoration: none;
@@ -46,8 +43,10 @@
             font-weight: 800;
             border-radius: 14px;
             text-align: center;
-            line-height: 1.15;
-            -webkit-tap-highlight-color: transparent;
+            line-height: 1.2;
+            cursor: pointer;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: rgba(227, 27, 35, 0.18);
         }
         .hub a.do { background: #e31b23; color: #fff; }
         .hub-tools {
@@ -57,11 +56,10 @@
             margin-top: 10px;
         }
         .hub-tools a {
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: block;
+            box-sizing: border-box;
             min-height: 48px;
-            padding: 12px 8px;
+            padding: 14px 8px;
             background: #fafafa;
             color: #333;
             text-decoration: none;
@@ -69,6 +67,8 @@
             font-weight: 700;
             border-radius: 12px;
             text-align: center;
+            cursor: pointer;
+            touch-action: manipulation;
         }
         @media (max-width: 719px) {
             .hub-tools { margin-bottom: 8px; }
@@ -100,8 +100,8 @@
             <a href="{{ url_for('index') }}">How full</a>
             <a href="{{ url_for('logout') }}">Log out</a>
         </div>
-        {% include '_admin_footer.html' %}
     </div>
+    {% include '_admin_footer.html' %}
     {% include '_loading_overlay.html' %}
 </body>
 </html>
