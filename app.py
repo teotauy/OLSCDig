@@ -386,7 +386,9 @@ def index():
 
 @app.route('/admin')
 def admin_index():
-    """Admin page with headcount display and checkout button."""
+    """Admin hub. Capacity/headcount lives on the public `/` page."""
+    if not require_password():
+        return redirect(url_for('login', next=url_for('admin_index')))
     return render_template('index.html', wordmark_data_uri=_current_theme_wordmark_data_uri())
 
 @app.route('/add-member')

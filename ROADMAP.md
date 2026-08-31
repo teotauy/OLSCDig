@@ -12,7 +12,7 @@
 - **Apple Wallet passes** — signed `.pkpass`, live next-match data, home/away theming.
 - **Google Wallet passes** — Generic Object save links, same live data.
 - **QR check-in scanner** (`/scanner`) — writes to our own `checkins` table.
-- **Live headcount** — `/admin`, `/api/headcount`.
+- **Live headcount** — public `/` (how full / early-entry capacity). Scanner shows the count at the door. `/api/headcount`.
 - **Attendance leaderboard** — `/admin/leaderboard`.
 
 ### Match-day updates

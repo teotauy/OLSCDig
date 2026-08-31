@@ -161,7 +161,7 @@
         <div class="success">Password reset. Log in with your new password.</div>
         {% endif %}
 
-        <form method="POST" action="{{ url_for('login') }}">
+        <form method="POST" action="{{ url_for('login', next=request.args.get('next', '')) }}">
             <div class="form-group">
                 <label for="username">Username</label>
                 <input type="text" id="username" name="username" required autofocus>
@@ -183,7 +183,7 @@
         <div class="back-link">
             <a href="{{ url_for('forgot_password') }}">Forgot password?</a>
             <span style="color: #999;"> · </span>
-            <a href="/">← Back to Headcount</a>
+            <a href="{{ url_for('index') }}">How full</a>
         </div>
     </div>
     {% include '_loading_overlay.html' %}

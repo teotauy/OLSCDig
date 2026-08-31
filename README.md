@@ -39,7 +39,7 @@ All under `/admin/*`, password-protected (`require_password()`):
 
 | Page | What it's for |
 | --- | --- |
-| `/admin` | Live headcount for door staff. |
+| `/admin` | Action hub (scan, people, door night, wallets). |
 | `/admin/members` | Roster: search, edit, CSV import/export, download/resend an individual pass. |
 | `/admin/matches` | Viewing-night schedule for the scanner ("Set current"). **Push Pass Updates Now** refreshes Apple + Google to football-data.org's next match — not this table. |
 | `/admin/match-overrides` | Fix a match football-data.org gets wrong or misses (cup ties, corrected kickoff times) — DB-backed, no code deploy needed. |
@@ -47,6 +47,12 @@ All under `/admin/*`, password-protected (`require_password()`):
 | `/admin/issue-passes` | Bulk-send a first pass to every member who's never gotten one — checkbox review, CSV export, nothing sends until you click. |
 | `/admin/pass-remediation` | Bulk-resend to members whose existing pass predates a fix and needs replacing — same review-before-send pattern. |
 | `/scanner` | QR check-in at the door. |
+
+Public / rare:
+
+| Page | What it's for |
+| --- | --- |
+| `/` | How full — live check-in count for early-entry capacity (tablet on the wall). Scanner already shows the count at the door. |
 
 Member-facing:
 

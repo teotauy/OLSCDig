@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>OLSC Brooklyn - Live Headcount</title>
+    <title>How full - OLSC Brooklyn</title>
     <style>
         * {
             margin: 0;
@@ -161,9 +161,15 @@
         }
 
         .admin-link a {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 44px;
+            padding: 10px 16px;
             color: #e31b23;
             text-decoration: none;
-            font-size: 12px;
+            font-size: 15px;
+            font-weight: 700;
         }
 
         .admin-link a:hover {
@@ -189,7 +195,7 @@
     <div class="container">
         <div class="header">
             <h1>⚽ OLSC Brooklyn</h1>
-            <p>Live Headcount</p>
+            <p>How full</p>
         </div>
 
         <div class="headcount" id="headcount">
@@ -210,7 +216,7 @@
         </div>
 
         <div class="admin-link">
-            <a href="/admin">Admin Panel</a>
+            <a href="{{ url_for('admin_index') }}">Home</a>
         </div>
     </div>
 
