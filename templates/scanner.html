@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner - OLSC Brooklyn</title>
+    <title>Scan in - OLSC Brooklyn</title>
     <script src="https://unpkg.com/html5-qrcode" defer></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -174,13 +174,13 @@
 <body>
     <div class="container">
         <div class="header {{ 'theme-home' if is_home else 'theme-away' }}">
-            <div class="role">Door Scanner</div>
+            <div class="role">Scan in</div>
             <img class="wordmark" src="{{ wordmark_data_uri }}" alt="OLSC Brooklyn — Official Supporters Club">
             <div class="match">
                 {% if match %}
                     {{ match.label }}{% if match.kickoff %} · {{ match.kickoff }}{% endif %}
                 {% else %}
-                    No current match set
+                    No door night set
                 {% endif %}
             </div>
             {% if match %}
@@ -191,16 +191,16 @@
         <div id="result" class="result idle">
             <div class="ball">⚽</div>
             <h2>Ready</h2>
-            <div class="detail">Scan a pass QR code.</div>
+            <div class="detail">Scan a pass.</div>
             {% if not match %}
-                <div class="detail" style="margin-top:8px; font-weight:700;">Set a current match before the door opens.</div>
+                <div class="detail" style="margin-top:8px; font-weight:700;">Set tonight first.</div>
             {% endif %}
         </div>
 
         <div class="section">
             <div class="mode-toggle">
-                <button id="modeCameraBtn" type="button" class="mode-btn active">Camera</button>
-                <button id="modeSearchBtn" type="button" class="mode-btn">Search</button>
+                <button id="modeCameraBtn" type="button" class="mode-btn active">Scan</button>
+                <button id="modeSearchBtn" type="button" class="mode-btn">Find</button>
             </div>
 
             <div id="cameraMode">
@@ -208,13 +208,13 @@
                     <div id="reader"></div>
                 </div>
                 <div class="controls">
-                    <button id="startBtn" type="button">Start Camera</button>
+                    <button id="startBtn" type="button">Open camera</button>
                     <button id="stopBtn" type="button" class="secondary" disabled>Stop</button>
                 </div>
             </div>
 
             <div id="searchMode" style="display:none;">
-                <input id="rosterSearch" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Type at least 3 letters of a name...">
+                <input id="rosterSearch" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Name — 3+ letters">
                 <div id="rosterResults" class="roster-results"></div>
             </div>
         </div>
@@ -530,6 +530,9 @@
         modeCameraBtn.addEventListener('click', () => setMode('camera'));
         modeSearchBtn.addEventListener('click', () => setMode('search'));
         rosterSearch.addEventListener('input', () => renderRosterResults(rosterSearch.value.trim()));
+        if (new URLSearchParams(window.location.search).get('mode') === 'search') {
+            setMode('search');
+        }
     </script>
     {% include '_loading_overlay.html' %}
 </body>

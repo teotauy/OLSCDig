@@ -30,8 +30,9 @@
         }
         input:focus { outline: none; border-color: #e31b23; }
         .btn {
-            padding: 10px 18px; background: linear-gradient(135deg, #e31b23 0%, #d81d42 100%);
-            color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
+            padding: 14px 18px; background: linear-gradient(135deg, #e31b23 0%, #d81d42 100%);
+            color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer;
+            min-height: 48px; width: 100%;
         }
         .links { text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0; }
         .links a { color: #e31b23; text-decoration: none; font-size: 14px; }
@@ -41,7 +42,7 @@
     <div class="container">
         <div class="header">
             <p class="brand">OLSC Brooklyn</p>
-            <h1>Edit Member</h1>
+            <h1>Edit</h1>
         </div>
 
         {% if error %}<div class="message error">{{ error }}</div>{% endif %}
@@ -63,12 +64,10 @@
                 <label for="phone">Phone</label>
                 <input type="tel" id="phone" name="phone" value="{{ member.phone or '' }}">
             </div>
-            <button type="submit" class="btn">Save Changes</button>
+            <button type="submit" class="btn">Save</button>
         </form>
 
-        <div class="links">
-            <a href="{{ url_for('admin_members') }}">← Back to Members</a>
-        </div>
+        {% include '_admin_footer.html' %}
     </div>
     {% include '_loading_overlay.html' %}
 </body>

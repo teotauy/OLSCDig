@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Next Match Overrides - OLSC Brooklyn</title>
+    <title>Fix next match - OLSC Brooklyn</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -41,7 +41,7 @@
             padding: 10px 18px; background: linear-gradient(135deg, #e31b23 0%, #d81d42 100%);
             color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
         }
-        .btn.small { padding: 6px 12px; font-size: 12px; }
+        .btn.small { padding: 10px 14px; font-size: 14px; min-height: 44px; }
         .btn.danger { background: #721c24; }
 
         table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -58,14 +58,14 @@
     <div class="container">
         <div class="header">
             <img src="{{ wordmark_data_uri }}" alt="OLSC Brooklyn — Official Supporters Club" style="max-width: 200px; height: auto; margin: 0 auto 8px; display: block;">
-            <h1>Next Match Overrides</h1>
-            <p class="sub">{{ overrides|length }} override(s)</p>
+            <h1>Fix next match</h1>
+            <p class="sub">Cup ties and wrong kickoff times. Not tonight’s door.</p>
         </div>
 
         {% if error %}<div class="message error">{{ error }}</div>{% endif %}
 
         <div class="panel">
-            <h2>Add or fix an override</h2>
+            <h2>Add or fix</h2>
             <p class="hint">
                 Use this when the automatic fixture feed is missing a match (FA Cup, League Cup, friendlies —
                 the feed only covers league fixtures) or has a kickoff time wrong. Entering a date that already
@@ -112,7 +112,7 @@
                         <input type="text" id="note" name="note" placeholder="e.g. FA Cup - not in API">
                     </div>
                 </div>
-                <button type="submit" class="btn">Save Override</button>
+                <button type="submit" class="btn">Save fix</button>
             </form>
         </div>
 

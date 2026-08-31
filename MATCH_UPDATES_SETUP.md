@@ -1,8 +1,9 @@
 # Liverpool FC Match Updates
 
-> Rewritten Aug 20, 2026; updated Aug 30, 2026 after a real cron cycle
-> that APNs-accepted 99 pushes and then never retried, leaving phones on
-> last week's match and last week's colors.
+> Rewritten Aug 20, 2026; rewritten again Aug 30–31 after a real
+> Forest → Ipswich cycle: APNs 200s that never retried, a football-data.org
+> query that briefly painted every new pass with Spurs on 12/19, and a
+> manual push that then *did* land on real phones.
 
 ## What this does
 
@@ -14,79 +15,109 @@ already sitting in someone's Apple or Google Wallet.
 
 1. **`get_next_match()`** (in `match_updates.py`) is the single source of
    truth. It takes the earliest fixture whose **local calendar date is
-   today or later**, from football-data.org `status=SCHEDULED` (that
-   filter is what actually returns upcoming games, even though they
+   today or later**. football-data.org is queried with `status=SCHEDULED`
+   (that filter is what actually returns upcoming games, even though they
    come back labeled `TIMED`) plus a separate `LIVE` call so match-day
-   still shows today's opponent. Do not comma-combine statuses with a
-   small `limit` — that returns the *last* 25 of the season, which is
-   how passes briefly showed Spurs on 12/19. DB-backed
+   still shows today's opponent. **Do not comma-combine statuses with a
+   small `limit`.** Confirmed against the live API Aug 30: that returns
+   the *last* 25 of the season, which is how passes briefly showed Spurs
+   on 12/19 instead of Ipswich on 9/4. DB-backed
    [match overrides](MATCH_OVERRIDES.md) overlay the same list by date;
    a far-future cup override cannot skip an earlier Premier League game.
 2. **Every pass build already reflects this live** — `_member_pass_data()`
    in `app.py` calls `get_next_match()` fresh each time a pass is issued,
    resent, or refetched, so a brand-new pass is never stale. Home/away
    theme (red vs white) comes from the same `is_home` flag as the text.
-3. **Already-installed passes need to be told to update.** That's the
-   part that used to require a script:
+3. **Already-installed passes need to be told to update:**
    - **Apple Wallet:** `_notify_apple_pass_updates()` bumps a shared
-     "content changed" tag and sends an APNs push to every device that's
-     registered for updates (via Apple's PassKit web-service protocol —
-     see the `/passkit/v1/*` routes in `app.py`). The push is an empty
-     JSON body with `apns-topic` = Pass Type ID, `apns-push-type:
-     background`, and `apns-priority: 5` — Apple's current APNs docs say
-     a missing push-type can be delayed or dropped even when the POST
-     returns 200, and omitting priority defaults to 10, which is a
-     mismatch for a silent Wallet wake-up. The device then fetches the
-     freshly-built pass itself; no full pass content is pushed directly.
+     "content changed" tag and sends an APNs push to every registered
+     device (see `/passkit/v1/*` in `app.py`). Payload is an empty JSON
+     object; headers are `apns-topic` = Pass Type ID, `apns-push-type:
+     background`, `apns-priority: 5` (Apple's current APNs docs: a
+     missing push-type can be dropped even on HTTP 200; omitting
+     priority defaults to 10, wrong for a silent Wallet wake-up). The
+     phone then fetches the rebuilt pass. Invalid APNs tokens are
+     deleted from `pass_devices` — that is **not** deleting the pass
+     from Wallet.
    - **Google Wallet:** `_notify_google_pass_updates()` PATCHes every
-     already-saved Generic Object (`textModulesData`, `hexBackgroundColor`,
-     **and** `logo`) via Google's Wallet Objects API. Color without logo
-     leaves the previous match's wordmark on the new background.
+     issued Generic Object (`textModulesData`, `hexBackgroundColor`,
+     **and** `logo`). Color without logo leaves the previous match's
+     wordmark on the new background.
    - Both run together via `_notify_wallet_pass_updates()`.
+
+The `/admin/matches` table is **not** this feed. That page is viewing
+nights for the scanner (`matches.is_current`). Ipswich can be next on
+the pass without a row on that table. **Push Pass Updates Now** uses
+`get_next_match()`, not "Set current."
 
 ## What triggers a push
 
-- **Automatically, daily:** `.github/workflows/check-next-match.yml` runs
-  at 9am UTC (10am UK time in BST) and POSTs to
-  `/internal/check-next-match` (shared-secret auth, not the admin
-  session). It computes the same "next match" fingerprint the site uses.
-  If that fingerprint **changed**, it pushes Apple + Google. If it
-  **didn't** change but some registered Apple devices never actually
-  GETed a pass since the last content tag, it retries those devices
+- **Automatically, daily:** `.github/workflows/check-next-match.yml` at
+  9am UTC POSTs `/internal/check-next-match`. If the next-match
+  fingerprint **changed**, it pushes Apple + Google. If it didn't, but
+  some registered Apple devices never GETed a pass since the last
+  content tag (`pass_devices.last_fetched_at`), it retries those
   (and re-PATCHes Google). APNs 200 is not treated as "the phone has
-  the new pass." Most days both gates are quiet, so the job is a no-op.
-- **Manually:** `/admin/matches` → **Push Pass Updates Now**. Setting a
-  match as "current" on that page does **not** push — that's scanner/
-  headcount only.
+  the new pass."
+- **Manually:** `/admin/matches` → **Push Pass Updates Now**. That
+  request returns immediately and runs the fan-out in a background
+  thread — waiting in the HTTP request was 502ing at gunicorn's old
+  30s timeout. Confirm text says Apple **and** Google (the button
+  always did both). Setting a match as "current" does **not** push.
 
-## Verification status
+## What we can (and cannot) see
 
-See [QA_VERIFICATION_PLAN.md](QA_VERIFICATION_PLAN.md). The API calls
-themselves are verified against the real Apple/Google servers. The
-Aug 29 cron did detect Forest → Ipswich and reported 99/99 Apple
-pushes; today's (Aug 30) run then no-op'd because the fingerprint was
-already saved. That "push once, never retry" loop is what the fetch
-tracking above is for.
+Counts as of Aug 31, from production:
+
+| Signal | Meaning |
+| --- | --- |
+| Row in `pass_devices` | Phone registered for Apple Wallet updates (85 passes / 100 devices). |
+| `last_fetched_at` set | That phone actually downloaded a refresh. All 100 registered devices have. |
+| Issued before Aug 20 08:24 UTC | Pre-`webServiceURL` fix — **38** cannot register; push will never reach them. Barcode still scans. |
+| Issued Aug 20–24 | Can register, but those files still had `relevantDate` — may sit in Wallet's Expired pile even if content updates. |
+| Issued after Aug 24 | No `relevantDate`; should stay in the active stack. |
+| `google_object_id` set | We generated a Google save link (~135). **Not** "they saved it." |
+| Google PATCH 200 vs 404 | Only real "saved to Google Wallet" signal, and we don't persist it. Last counted ~15 saves. |
+| `platform` column | Always `apple`. We cannot tell Android from iPhone. |
+
+Apple does **not** tell us "this pass shows Expired" or give a complete
+uninstall list. Unregister only fires if a *working* pass was added and
+then deleted. The 38 never registered, so deleting that pass is invisible.
+
+## Verification status (Aug 31)
+
+See [QA_VERIFICATION_PLAN.md](QA_VERIFICATION_PLAN.md). Short version:
+
+- **Manual push works** on post-fix Apple passes: Will Foote (issued
+  Saturday) and a freshly issued pass showed Ipswich after **Push Pass
+  Updates Now**. 100/100 registered devices had `last_fetched_at`.
+- **Daily cron unattended** after the next fixture change is still the
+  remaining watch — Forest→Ipswich was detected Aug 29, then no-op'd
+  Aug 30 because the fingerprint was already saved (the retry gap).
+- **Already-Expired / pre-fix** passes still need a resend, not another
+  push. Delete-and-reinstall is the only reliable way off Expired.
 
 ## Troubleshooting
 
-- **No matches found / next match looks wrong:** Check
-  `FOOTBALL_DATA_API_KEY` is set, then check
-  [MATCH_OVERRIDES.md](MATCH_OVERRIDES.md) — most "wrong match" issues
-  are a missing/incorrect override, not an API problem.
-- **Added an override but a pass doesn't show it:** The override itself
-  doesn't push anything — click **Push Pass Updates Now** on
-  `/admin/matches` (or wait for the daily job) after adding it.
-- **Cron JSON says `changed: false` / `reason: unchanged`:** the
-  fingerprint already matches; if phones are still stale, look for
-  `reason: retry_unfetched` on the next run, or click **Push Pass Updates
-  Now**.
-- **A specific installed pass never updates:** 38 members still have
-  pre-`webServiceURL` passes that cannot register for push at all — they
-  need a resend from `/admin/pass-remediation`, not another cron.
+- **Pass shows Spurs 12/19 (or some other late-season game):** that was
+  the comma-status + `limit: 25` bug. Fixed Aug 30. If you still see it
+  on a pass issued during that window, push again (or resend).
+- **No matches found / next match looks wrong:** `FOOTBALL_DATA_API_KEY`,
+  then [MATCH_OVERRIDES.md](MATCH_OVERRIDES.md).
+- **Added an override but a pass doesn't show it:** click **Push Pass
+  Updates Now** (or wait for the daily job). The override alone doesn't
+  push.
+- **Cron JSON `changed: false` / `reason: unchanged`:** fingerprint
+  already matches. Look for `reason: retry_unfetched`, or push manually.
+- **Clicked push, got 502:** usually a Render deploy, or the old 30s
+  worker timeout (fixed). Wait until Matches loads, click again — you
+  should get "Update started…" without waiting for every phone.
+- **A specific pass never updates:** if it's one of the 38 pre-fix,
+  resend (in person or `/admin/pass-remediation`). Push cannot fix those.
 
 ---
 
-**Passes always reflect the current next match when built or refetched;
-already-installed ones get told to refetch on the schedule above, and
-the job retries devices that never came back.**
+**New passes reflect the current next match when built. Installed
+post-fix Apple passes update on manual push (confirmed). The daily job
+retries phones that never came back. Pre-fix / already-Expired passes
+need a new file, not another cron.**

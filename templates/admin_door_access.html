@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Door Access - OLSC Brooklyn</title>
+    <title>Door link - OLSC Brooklyn</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -63,8 +63,8 @@
     <div class="container">
         <div class="header">
             <img src="{{ wordmark_data_uri }}" alt="OLSC Brooklyn — Official Supporters Club" style="max-width: 200px; height: auto; margin: 0 auto 8px; display: block;">
-            <h1>Door Access</h1>
-            <p class="sub">Scanner-only links for volunteer door staff — no admin password, no admin access, revocable anytime</p>
+            <h1>Door link</h1>
+            <p class="sub">Scanner only. No admin. Revoke any time.</p>
         </div>
 
         {% if error %}<div class="message error">{{ error }}</div>{% endif %}
@@ -97,7 +97,7 @@
                         </select>
                     </div>
                     <div style="flex: 0;">
-                        <button type="submit" class="btn">Create Link</button>
+                        <button type="submit" class="btn">Make door link</button>
                     </div>
                 </div>
             </form>

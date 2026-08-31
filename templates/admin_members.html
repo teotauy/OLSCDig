@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Members - OLSC Brooklyn</title>
+    <title>People - OLSC Brooklyn</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -49,9 +49,10 @@
             color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
             cursor: pointer;
         }
-        .btn.secondary { background: #00a65a; }
+        .btn.small { padding: 10px 14px; font-size: 14px; min-height: 44px; }
 
         table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #eee; }
         th { color: #666; font-weight: 600; font-size: 12px; text-transform: uppercase; }
         th.sortable { cursor: pointer; user-select: none; }
@@ -86,7 +87,7 @@
     <div class="container">
         <div class="header">
             <img src="{{ wordmark_data_uri }}" alt="OLSC Brooklyn — Official Supporters Club" style="max-width: 200px; height: auto; margin: 0 auto 8px; display: block;">
-            <h1>👥 Members</h1>
+            <h1>People</h1>
             <p class="season">Season: {{ season.name if season else 'No current season set' }} &middot; {{ members|length }} member(s)</p>
         </div>
 
@@ -116,8 +117,8 @@
         </div>
         {% endif %}
 
-        <div class="panel">
-            <h2>Add a member</h2>
+        <div class="panel" id="add">
+            <h2>Add someone</h2>
             <form method="POST">
                 <div class="row">
                     <div class="field">
@@ -139,7 +140,7 @@
                         <input type="tel" id="phone" name="phone">
                     </div>
                 </div>
-                <button type="submit" class="btn">Add Member</button>
+                <button type="submit" class="btn">Add someone</button>
             </form>
         </div>
 
@@ -166,7 +167,7 @@
         </div>
 
         <div class="panel">
-            <h2>Roster <a class="edit-link" style="font-size:13px; font-weight:normal;" href="{{ url_for('admin_export_members') }}">Export CSV</a>
+            <h2>Roster <a class="edit-link" style="font-size:13px; font-weight:normal;" href="{{ url_for('admin_export_members') }}">Get CSV</a>
                 {% if resend_usage and resend_usage.checked_at %}
                 <span class="resend-badge{% if resend_usage.last_error_name in ('daily_quota_exceeded', 'monthly_quota_exceeded') %} warn{% endif %}"
                       id="resendBadge">
@@ -180,11 +181,12 @@
             {% if members %}
             <div class="roster-toolbar">
                 <div class="field">
-                    <label for="memberSearch">Search roster</label>
-                    <input type="search" id="memberSearch" placeholder="Search name, email, or phone">
+                    <label for="memberSearch">Find</label>
+                    <input type="search" id="memberSearch" placeholder="Name, email, or phone">
                 </div>
                 <div class="roster-count"><span id="visibleCount">{{ members|length }}</span> shown</div>
             </div>
+            <div class="table-wrap">
             <table id="membersTable">
                 <thead>
                     <tr>
@@ -210,18 +212,19 @@
                         <td><a class="edit-link" href="{{ url_for('admin_member_edit', member_id=m.id) }}">Edit</a></td>
                         <td>
                             <form method="POST" action="{{ url_for('admin_member_download_pass', member_id=m.id) }}" style="display:inline;" onsubmit="return confirm('Download a new pass for {{ m.email }}? This invalidates their current pass.');">
-                                <button type="submit" class="btn small" style="padding:6px 10px; font-size:12px;">Download Pass</button>
+                                <button type="submit" class="btn small">Save pass</button>
                             </form>
                         </td>
                         <td>
                             <form method="POST" action="{{ url_for('admin_member_resend_pass', member_id=m.id) }}" style="display:inline;" onsubmit="return confirm('{{ 'Resend' if m.has_active_pass else 'Send' }} pass to {{ m.email }}{% if m.has_active_pass %}? This invalidates their current pass.{% else %}?{% endif %}');">
-                                <button type="submit" class="btn small" style="padding:6px 10px; font-size:12px;">{{ 'Resend Pass' if m.has_active_pass else 'Send Pass' }}</button>
+                                <button type="submit" class="btn small">Email pass</button>
                             </form>
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
+            </div>
             {% else %}
             <p class="muted">No members in the current season yet.</p>
             {% endif %}

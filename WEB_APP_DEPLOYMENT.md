@@ -4,7 +4,7 @@
 > list below previously described the PassKit-vendor version of this app
 > (PassKit as required config, "Add Member"/"Update Match"/"Checkout
 > Everyone" as the core loop). That system is retired. This describes the
-> current DB-backed app.
+> current DB-backed app. Gunicorn timeout / admin-push note added Aug 30.
 
 ## What this deploys
 
@@ -134,6 +134,20 @@ matters more than the free tier's 750 hrs/month.
 in `app.py`; sends are deliberately paced to stay under Resend's rate
 limit, and per-member pass-building work adds up on top of that for a
 big batch. Not a hang.
+
+**Push Pass Updates Now 502s:** Two common causes. (1) A deploy is in
+progress — wait until `/admin/matches` loads, then click again. (2) The
+old gunicorn `--timeout 30` killed the request while it waited for every
+Apple + Google update. The button now returns immediately and runs the
+fan-out in a background thread. `render.yaml` start command is
+`gunicorn ... --timeout 180`. If 502s persist after Matches has loaded,
+check the live service's **start command** in the Render dashboard — it
+can still be 30s if the service isn't using the Blueprint file.
+
+**Next match is a late-season game (Spurs 12/19 or similar):** not a
+deploy problem. See [MATCH_UPDATES_SETUP.md](MATCH_UPDATES_SETUP.md) —
+football-data.org `limit: 25` with comma-combined statuses returns the
+*end* of the season. Fixed Aug 30.
 
 ## Local dev
 

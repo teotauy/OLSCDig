@@ -42,6 +42,9 @@ driving passes, the mobile pass page, and the daily auto-update job —
 one source of truth, so there's no way for the site and the passes to
 disagree about what "next match" is.
 
+A far-future cup override cannot skip an earlier Premier League game.
+`is_home` on the override is what the pass uses for red vs white.
+
 - **Match not in the API at all** (FA Cup, friendly, etc.): add an
   override for that date. It becomes "next match" once it's the earliest
   upcoming date, override or API fixture.
@@ -49,12 +52,19 @@ disagree about what "next match" is.
   that *same* date — yours takes priority over the API's for that date,
   including `is_home` (which drives the pass color scheme).
 
+**If the pass shows a late-season opponent (e.g. Spurs 12/19) and you
+did not add an override:** check `match_overrides` first, then read
+[MATCH_UPDATES_SETUP.md](MATCH_UPDATES_SETUP.md). On Aug 30 that happened
+with an **empty** overrides table — football-data.org pagination, not
+this page.
+
 ## After adding or fixing an override
 
 If it changes what "next match" currently is, click **Push Pass Updates
 Now** on `/admin/matches` (or just wait for the next daily auto-check) so
 already-installed passes actually pick it up — adding the override alone
-doesn't push anything to devices by itself.
+doesn't push anything to devices by itself. The button returns immediately
+("Update started…") and fans out Apple + Google in the background.
 
 ## Team names on the pass
 

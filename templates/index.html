@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>OLSC Brooklyn - Headcount</title>
+    <title>Home - OLSC Brooklyn</title>
     <style>
         * {
             margin: 0;
@@ -192,19 +192,53 @@
             margin: 0 8px;
         }
 
-        .nav-footer {
-            text-align: center;
-            margin-top: 12px;
+        .hub {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 8px;
         }
-
-        .nav-footer a {
-            color: #999;
+        .hub a {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 64px;
+            padding: 16px 10px;
+            background: #f4f4f4;
+            color: #1a1a1a;
             text-decoration: none;
-            font-size: 12px;
+            font-size: 16px;
+            font-weight: 800;
+            border-radius: 14px;
+            text-align: center;
+            line-height: 1.15;
+            -webkit-tap-highlight-color: transparent;
         }
-
-        .nav-footer a:hover {
-            text-decoration: underline;
+        .hub a.do { background: #e31b23; color: #fff; }
+        .hub-tools {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .hub-tools a {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 48px;
+            padding: 12px 8px;
+            background: #fafafa;
+            color: #333;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 700;
+            border-radius: 12px;
+            text-align: center;
+        }
+        .hub-tools a.quiet { background: transparent; color: #888; font-weight: 600; }
+        @media (max-width: 719px) {
+            .hub, .hub-tools { padding-bottom: 4px; }
+            .hub-tools { margin-bottom: 8px; }
         }
 
         @media (max-width: 480px) {
@@ -226,11 +260,11 @@
     <div class="container">
         <div class="header">
             <img src="{{ wordmark_data_uri }}" alt="OLSC Brooklyn — Official Supporters Club" style="max-width: 200px; height: auto; margin: 0 auto 10px;">
-            <p>Admin Panel</p>
+            <p>Home</p>
         </div>
 
         <div class="headcount" id="headcount">
-            <div class="headcount-label">Checked In (Current Match)</div>
+            <div class="headcount-label">Checked in</div>
             <div class="headcount-number" id="count">--</div>
             <div class="headcount-updated" id="updated">Loading...</div>
         </div>
@@ -248,10 +282,22 @@
             <span id="countdown">{{ headcount_refresh_seconds }}</span>s until next refresh
         </div>
 
-        {% include '_admin_footer.html' %}
-        <div class="nav-footer">
-            <a href="/">← Public View</a>
+        <div class="hub">
+            <a class="do" href="{{ url_for('scanner') }}">Scan in</a>
+            <a href="{{ url_for('scanner', mode='search') }}">Find someone</a>
+            <a href="{{ url_for('admin_members') }}#add">Add someone</a>
+            <a href="{{ url_for('admin_leaderboard') }}">Scores</a>
         </div>
+        <div class="hub-tools">
+            <a href="{{ url_for('admin_members') }}">People</a>
+            <a href="{{ url_for('admin_matches') }}">Door night</a>
+            <a href="{{ url_for('admin_issue_passes') }}">Send first pass</a>
+            <a href="{{ url_for('admin_pass_remediation') }}">Fix old pass</a>
+            <a href="{{ url_for('admin_door_access') }}">Door link</a>
+            <a href="{{ url_for('index') }}">Public count</a>
+            <a href="{{ url_for('logout') }}">Log out</a>
+        </div>
+        {% include '_admin_footer.html' %}
     </div>
 
     <script>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Matches - OLSC Brooklyn</title>
+    <title>Door night - OLSC Brooklyn</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -41,7 +41,9 @@
             padding: 10px 18px; background: linear-gradient(135deg, #e31b23 0%, #d81d42 100%);
             color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
         }
-        .btn.small { padding: 6px 12px; font-size: 12px; }
+        .btn.small { padding: 10px 14px; font-size: 14px; min-height: 44px; }
+        .schedule-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
+        .schedule-actions .edit-link { padding: 10px 4px; min-height: 44px; display: inline-flex; align-items: center; font-weight: 700; }
         .btn.current { background: #00a65a; cursor: default; }
 
         table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -60,8 +62,8 @@
     <div class="container">
         <div class="header">
             <img src="{{ wordmark_data_uri }}" alt="OLSC Brooklyn — Official Supporters Club" style="max-width: 200px; height: auto; margin: 0 auto 8px; display: block;">
-            <h1>🗓️ Matches</h1>
-            <p class="season">Season: {{ season.name if season else 'No current season set' }} &middot; {{ matches|length }} match(es)</p>
+            <h1>Door night</h1>
+            <p class="season">Who the door is checking in for. Not the Wallet next match.</p>
         </div>
 
         {% if error %}<div class="message error">{{ error }}</div>{% endif %}
@@ -82,7 +84,7 @@
         {% endif %}
 
         <div class="panel">
-            <h2>Add a match</h2>
+            <h2>Add a door night</h2>
             <form method="POST">
                 <div class="row">
                     <div class="field">
@@ -113,19 +115,18 @@
                         <input type="text" id="venue" name="venue" placeholder="OLSC Brooklyn bar">
                     </div>
                 </div>
-                <button type="submit" class="btn">Add Match</button>
+                <button type="submit" class="btn">Add door night</button>
             </form>
         </div>
 
         <div class="panel">
-            <h2>Schedule
-                <span style="float:right;">
-                    <a class="edit-link" href="{{ url_for('admin_match_overrides') }}" style="margin-right: 12px;">Fix "Next Match" &rarr;</a>
-                    <form method="POST" action="{{ url_for('admin_push_pass_updates') }}" style="display:inline;" onsubmit="return confirm('Update every installed Apple and Google Wallet pass to the current next match now?');">
-                        <button type="submit" class="btn small">Push Pass Updates Now</button>
-                    </form>
-                </span>
-            </h2>
+            <h2>Door nights</h2>
+            <div class="schedule-actions">
+                <a class="edit-link" href="{{ url_for('admin_match_overrides') }}">Fix next match</a>
+                <form method="POST" action="{{ url_for('admin_push_pass_updates') }}" onsubmit="return confirm('Update every installed Apple and Google Wallet pass to the current next match now?');">
+                    <button type="submit" class="btn small">Update wallets</button>
+                </form>
+            </div>
             {% if matches %}
             <table>
                 <thead>
@@ -145,14 +146,14 @@
                         <td>{{ m.kickoff_at.strftime('%a %b %-d, %-I:%M %p') if m.kickoff_at else '—' }}</td>
                         <td>
                             {% if m.is_current %}
-                                <span class="badge">Current</span>
+                                <span class="badge">This door</span>
                             {% else %}
                                 <form method="POST" action="{{ url_for('admin_match_set_current', match_id=m.id) }}" style="display:inline;">
-                                    <button type="submit" class="btn small">Set current</button>
+                                    <button type="submit" class="btn small">This door</button>
                                 </form>
                             {% endif %}
                         </td>
-                        <td><a class="edit-link" href="{{ url_for('admin_export_match_checkins', match_id=m.id) }}">Export CSV</a></td>
+                        <td><a class="edit-link" href="{{ url_for('admin_export_match_checkins', match_id=m.id) }}">Get CSV</a></td>
                     </tr>
                     {% endfor %}
                 </tbody>

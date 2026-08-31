@@ -1,13 +1,102 @@
-<div class="links">
-    {% if not door_only %}
-    <a href="{{ url_for('admin_members') }}">Members</a>
-    <a href="{{ url_for('admin_matches') }}">Matches</a>
-    <a href="{{ url_for('admin_leaderboard') }}">Leaderboard</a>
-    <a href="{{ url_for('scanner') }}">Scanner</a>
-    <a href="{{ url_for('admin_issue_passes') }}">Issue First Passes</a>
-    <a href="{{ url_for('admin_pass_remediation') }}">Pass Remediation</a>
-    <a href="{{ url_for('admin_door_access') }}">Door Access</a>
-    <a href="{{ url_for('admin_index') }}">Admin Home</a>
+<style>
+    .admin-nav-spacer { height: 0; }
+    .admin-nav {
+        margin-top: 20px;
+        padding-top: 16px;
+        border-top: 1px solid #e0e0e0;
+    }
+    .admin-nav-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+    .admin-nav a {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 48px;
+        padding: 12px 8px;
+        background: #f4f4f4;
+        color: #1a1a1a;
+        text-decoration: none;
+        font-size: 15px;
+        font-weight: 700;
+        border-radius: 12px;
+        text-align: center;
+        line-height: 1.15;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .admin-nav a.do { background: #e31b23; color: #fff; }
+    .admin-nav a.on { box-shadow: inset 0 0 0 2px #e31b23; }
+    .admin-nav a.do.on { box-shadow: inset 0 0 0 2px #7a0d18; }
+    .admin-nav-tools {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 8px;
+    }
+    .admin-nav-tools a { font-weight: 600; background: #fafafa; color: #444; }
+    .admin-nav-logout {
+        margin-top: 8px;
+    }
+    .admin-nav-logout a {
+        background: transparent;
+        color: #888;
+        font-weight: 600;
+        min-height: 44px;
+    }
+    @media (min-width: 720px) {
+        .admin-nav-grid,
+        .admin-nav-tools { grid-template-columns: repeat(4, 1fr); }
+    }
+    @media (max-width: 719px) {
+        .admin-nav-spacer { height: 96px; }
+        .admin-nav {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 80;
+            margin: 0;
+            padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
+            border-top: 1px solid #ececec;
+            background: #fff;
+            box-shadow: 0 -8px 28px rgba(0,0,0,0.12);
+        }
+        .admin-nav-grid { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+        .admin-nav-grid a { min-height: 52px; font-size: 13px; padding: 8px 4px; }
+        .admin-nav-grid.door { grid-template-columns: repeat(3, 1fr); }
+        .admin-nav-tools,
+        .admin-nav-logout { display: none; }
+    }
+</style>
+{% set ep = request.endpoint %}
+{% set find_mode = request.args.get('mode') == 'search' %}
+<div class="admin-nav-spacer"></div>
+<nav class="admin-nav" aria-label="Admin">
+    <div class="admin-nav-grid{% if door_only %} door{% endif %}">
+        {% if door_only %}
+        <a class="do{% if ep == 'scanner' and not find_mode %} on{% endif %}" href="{{ url_for('scanner') }}">Scan in</a>
+        <a class="{% if ep == 'scanner' and find_mode %} on{% endif %}" href="{{ url_for('scanner', mode='search') }}">Find someone</a>
+        <a href="{{ url_for('logout') }}">Log out</a>
+        {% else %}
+        <a class="do{% if ep == 'scanner' and not find_mode %} on{% endif %}" href="{{ url_for('scanner') }}">Scan in</a>
+        <a class="{% if ep == 'scanner' and find_mode %} on{% endif %}" href="{{ url_for('scanner', mode='search') }}">Find someone</a>
+        <a class="{% if ep == 'admin_members' %} on{% endif %}" href="{{ url_for('admin_members') }}">People</a>
+        <a class="{% if ep == 'admin_index' %} on{% endif %}" href="{{ url_for('admin_index') }}">Home</a>
+        {% endif %}
+    </div>
+    {% if not door_only and ep != 'admin_index' %}
+    <div class="admin-nav-tools">
+        <a class="{% if ep == 'admin_members' %} on{% endif %}" href="{{ url_for('admin_members') }}#add">Add someone</a>
+        <a class="{% if ep == 'admin_matches' %} on{% endif %}" href="{{ url_for('admin_matches') }}">Door night</a>
+        <a class="{% if ep == 'admin_leaderboard' %} on{% endif %}" href="{{ url_for('admin_leaderboard') }}">Scores</a>
+        <a class="{% if ep == 'admin_issue_passes' %} on{% endif %}" href="{{ url_for('admin_issue_passes') }}">Send first pass</a>
+        <a class="{% if ep == 'admin_pass_remediation' %} on{% endif %}" href="{{ url_for('admin_pass_remediation') }}">Fix old pass</a>
+        <a class="{% if ep == 'admin_door_access' %} on{% endif %}" href="{{ url_for('admin_door_access') }}">Door link</a>
+    </div>
+    <div class="admin-nav-logout">
+        <a href="{{ url_for('logout') }}">Log out</a>
+    </div>
     {% endif %}
-    <a href="{{ url_for('logout') }}">Logout</a>
-</div>
+</nav>

@@ -1,7 +1,7 @@
 # OLSC Brooklyn — Digital ID (Wallet & Check-In System)
 
 > **Status:** Live in production for the 2026/27 season.
-> **Last updated:** Aug 20, 2026.
+> **Last updated:** Aug 31, 2026.
 
 Self-hosted membership system for OLSC Brooklyn (Liverpool FC supporters
 club, Brooklyn NY). Members live in our own Supabase Postgres DB, not a
@@ -41,7 +41,7 @@ All under `/admin/*`, password-protected (`require_password()`):
 | --- | --- |
 | `/admin` | Live headcount for door staff. |
 | `/admin/members` | Roster: search, edit, CSV import/export, download/resend an individual pass. |
-| `/admin/matches` | Match schedule, set the "current" match, manually push a pass update to everyone. |
+| `/admin/matches` | Viewing-night schedule for the scanner ("Set current"). **Push Pass Updates Now** refreshes Apple + Google to football-data.org's next match — not this table. |
 | `/admin/match-overrides` | Fix a match football-data.org gets wrong or misses (cup ties, corrected kickoff times) — DB-backed, no code deploy needed. |
 | `/admin/leaderboard` | Attendance leaderboard for the season. |
 | `/admin/issue-passes` | Bulk-send a first pass to every member who's never gotten one — checkbox review, CSV export, nothing sends until you click. |
@@ -75,10 +75,19 @@ pushes Wallet updates automatically.
 
 ## Current known gaps
 
-Tracked honestly, not swept under the rug — see
-[QA_VERIFICATION_PLAN.md](QA_VERIFICATION_PLAN.md) for the full list and
-status of every external integration (Apple, Google, Resend,
-Squarespace/Make, football-data.org, Render).
+Tracked honestly — full list in
+[QA_VERIFICATION_PLAN.md](QA_VERIFICATION_PLAN.md). Headlines as of
+Aug 31:
+
+- **Manual Wallet push works** for post-Aug-20 Apple passes (real
+  phones, Ipswich). **85** registered / **100** devices, all fetched.
+- **~38 pre-fix passes** still cannot auto-update; barcode still scans.
+  Resend is a when, not a how (in-person / Discord, not a blast).
+- **Daily cron unattended** after the next fixture hasn't been watched
+  yet; Forest→Ipswich was detected then not retried until fetch tracking
+  shipped.
+- We **cannot** see Expired-in-Wallet, a full uninstall list, or
+  Android vs iPhone (`platform` is always `apple`).
 
 ## Docs map
 
@@ -91,6 +100,9 @@ Squarespace/Make, football-data.org, Render).
 - **[MATCH_OVERRIDES.md](MATCH_OVERRIDES.md)** — how to fix a wrong/missing match.
 - **[MATCH_UPDATES_SETUP.md](MATCH_UPDATES_SETUP.md)** — how the automatic
   match-day pass updates work.
+- **[ISSUE_PASS_VERIFICATION_MUTATES_REAL_DATA.md](ISSUE_PASS_VERIFICATION_MUTATES_REAL_DATA.md)**
+  — don't inspect `pass.json` by reissuing a real member (rotates their
+  serial). Still true after the Aug 30–31 work.
 - **[ROADMAP.md](ROADMAP.md)** — shipped vs. planned.
 - Everything else at the repo root describing PassKit is archived
   history — each has a banner at the top saying so.

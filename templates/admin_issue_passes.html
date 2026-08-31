@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Issue First Passes - OLSC Brooklyn</title>
+    <title>Send first pass - OLSC Brooklyn</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -62,7 +62,7 @@
     <div class="container">
         <div class="header">
             <img src="{{ wordmark_data_uri }}" alt="OLSC Brooklyn — Official Supporters Club" style="max-width: 200px; height: auto; margin: 0 auto 8px; display: block;">
-            <h1>Issue First Passes</h1>
+            <h1>Send first pass</h1>
             <p class="sub">{{ rows|length }} member(s) have never been sent a Wallet pass this season</p>
             {% if resend_usage and resend_usage.checked_at %}
             <div>
@@ -131,7 +131,7 @@
                     </tbody>
                 </table>
                 <p class="selected-count"><span id="selectedCount">0</span> selected</p>
-                <button type="submit" class="btn" style="margin-top:14px;">Send Pass to Selected</button>
+                <button type="submit" class="btn" style="margin-top:14px;">Email these passes</button>
                 {% else %}
                 <p class="muted">Nobody currently needs this — every member already has a pass for this season.</p>
                 {% endif %}

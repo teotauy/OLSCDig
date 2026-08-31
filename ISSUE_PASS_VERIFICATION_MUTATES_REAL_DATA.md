@@ -95,3 +95,13 @@ signup) — never from an ad-hoc verification script.
    `issue_wallet_token` are correct as-is for their real purpose; this
    is purely about giving verification a non-mutating path so it can't
    be pointed at the wrong thing again.
+
+## Still true as of Aug 31
+
+The Forest → Ipswich / Spurs 12/19 work was verified with production SQL
+counts (`pass_devices.last_fetched_at`, issued-before timestamps) and
+real-phone confirmation — **not** `_issue_member_pkpass` on a real
+member. Do not "just rebuild" member id 8 (or anyone else) to inspect
+`pass.json`. Preview helper above is still unbuilt; until it exists,
+inspect a dummy serial or unzip a locally built preview, never rotate a
+live token to look at a field.
