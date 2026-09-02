@@ -93,7 +93,12 @@
 
         {% if error %}<div class="message error">{{ error }}</div>{% endif %}
         {% if added %}<div class="message success">Added {{ added }}.</div>{% endif %}
-        {% if info %}<div class="message info">{{ info }}</div>{% endif %}
+        {% if info %}
+        <div class="message info">
+            {{ info }}
+            {% if imported %}<a href="{{ url_for('admin_issue_passes') }}">Send first pass</a> to email them.{% endif %}
+        </div>
+        {% endif %}
 
         {% if possible_typos %}
         <div class="message" style="background:#fff3cd; color:#7a5c00; border:1px solid #ffe08a;">
@@ -147,11 +152,11 @@
         <div class="panel">
             <h2>Import from CSV</h2>
             <p class="muted" style="margin-bottom: 10px;">
-                Accepts a simple CSV with <code>first_name, last_name, email, phone</code> columns,
-                a raw PassKit export (uses <code>person.displayName</code>, <code>person.emailAddress</code>, <code>person.mobileNumber</code>),
-                or a Squarespace order export (uses <code>Product Form: Name</code>, <code>Product Form: Email</code>).
-                Existing emails are attached to the current season rather than duplicated — someone who bought two
-                memberships in one file won't be added twice.
+                Adds people to the roster. <strong>Does not email a pass</strong> —
+                after import, use <a href="{{ url_for('admin_issue_passes') }}">Send first pass</a>.
+                Accepts <code>first_name, last_name, email, phone</code>,
+                a PassKit export, or a Squarespace order export.
+                Existing emails are attached to this season rather than duplicated.
             </p>
             <form method="POST" action="{{ url_for('admin_members_import') }}" enctype="multipart/form-data" id="importForm">
                 <input type="file" name="file" accept=".csv" required>

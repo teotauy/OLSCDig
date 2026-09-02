@@ -14,7 +14,7 @@ Replace the expensive PassKit dependency with a system we own:
 
 PassKit becomes unnecessary once Wallet generation, pass links, updates, and check-ins are handled here.
 
-## Status (last consolidated Aug 31 — see gate table for latest per-item dates)
+## Status (last consolidated Sep 2 — wallet counts still Aug 31; see gate table for per-item dates)
 
 **Aug 30–31 update:** Forest → Ipswich was the first real next-match
 cycle after the Aug 24–29 protocol work. GitHub Actions ran: Aug 29
@@ -166,9 +166,11 @@ closed for Apple Aug 31.)
    (`/legacy/passkit/add-member`, `/update-match`, `/resend-welcome`) —
    worth testing their real form submissions against the live PassKit
    API, or just retire them since they're unlinked and fully superseded.
-7. **Mobile admin hub** — dead-simple, large-button mobile page (Scan
-   People In / Look Someone Up / Add a Member / View Leaderboard). Button
-   set agreed, not yet built.
+
+**Shipped (Aug 31–Sep 2), not upcoming:** mobile admin hub at `/admin`
+(sticky Scan in / Find someone / People / Home; capacity is public
+**How full**). CSV import still does not email — **Send first pass**
+is the follow-up; on-screen copy now says so.
 
 `INTERNAL_TASK_SECRET` is confirmed matching (Aug 29 cron returned
 `changed: true`, not 401). Leaderboard auto-sync was confirmed Aug 25

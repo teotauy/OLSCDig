@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Door night - OLSC Brooklyn</title>
+    <title>Matches - OLSC Brooklyn</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -62,8 +62,8 @@
     <div class="container">
         <div class="header">
             <img src="{{ wordmark_data_uri }}" alt="OLSC Brooklyn — Official Supporters Club" style="max-width: 200px; height: auto; margin: 0 auto 8px; display: block;">
-            <h1>Door night</h1>
-            <p class="season">Who the door is checking in for. Not the Wallet next match.</p>
+            <h1>Matches</h1>
+            <p class="season">Who the scanner is checking in for. Not the Wallet next match.</p>
         </div>
 
         {% if error %}<div class="message error">{{ error }}</div>{% endif %}
@@ -84,7 +84,7 @@
         {% endif %}
 
         <div class="panel">
-            <h2>Add a door night</h2>
+            <h2>Add a match</h2>
             <form method="POST">
                 <div class="row">
                     <div class="field">
@@ -115,12 +115,12 @@
                         <input type="text" id="venue" name="venue" placeholder="OLSC Brooklyn bar">
                     </div>
                 </div>
-                <button type="submit" class="btn">Add door night</button>
+                <button type="submit" class="btn">Add match</button>
             </form>
         </div>
 
         <div class="panel">
-            <h2>Door nights</h2>
+            <h2>Schedule</h2>
             <div class="schedule-actions">
                 <a class="edit-link" href="{{ url_for('admin_match_overrides') }}">Fix next match</a>
                 <form method="POST" action="{{ url_for('admin_push_pass_updates') }}" onsubmit="return confirm('Update every installed Apple and Google Wallet pass to the current next match now?');">
@@ -146,10 +146,10 @@
                         <td>{{ m.kickoff_at.strftime('%a %b %-d, %-I:%M %p') if m.kickoff_at else '—' }}</td>
                         <td>
                             {% if m.is_current %}
-                                <span class="badge">This door</span>
+                                <span class="badge">Current</span>
                             {% else %}
                                 <form method="POST" action="{{ url_for('admin_match_set_current', match_id=m.id) }}" style="display:inline;">
-                                    <button type="submit" class="btn small">This door</button>
+                                    <button type="submit" class="btn small">Use this</button>
                                 </form>
                             {% endif %}
                         </td>

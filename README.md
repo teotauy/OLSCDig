@@ -1,7 +1,7 @@
 # OLSC Brooklyn — Digital ID (Wallet & Check-In System)
 
 > **Status:** Live in production for the 2026/27 season.
-> **Last updated:** Aug 31, 2026.
+> **Last updated:** Sep 2, 2026.
 
 Self-hosted membership system for OLSC Brooklyn (Liverpool FC supporters
 club, Brooklyn NY). Members live in our own Supabase Postgres DB, not a
@@ -26,9 +26,11 @@ in **[SELF_HOSTED_WALLET_PLAN.md](SELF_HOSTED_WALLET_PLAN.md)**.
   same live match-day updates via a direct PATCH to the saved object.
 - **Check-in** — a QR scanner page for door staff; check-ins write to our
   own `checkins` table, tied to whichever match is marked "current."
-- **Admin tools** — member roster/import/export, match schedule +
-  overrides, leaderboard, bulk pass-sending tools (see below), all
-  password-protected.
+- **Admin tools** — phone-first hub at `/admin` (login required):
+  roster/import/export, match schedule + overrides, leaderboard, bulk
+  pass-sending. CSV import adds people to the roster only — it does
+  **not** email a pass (use **Send first pass**). Adding one person
+  does email.
 - **Squarespace signup** — new memberships create a member and email a
   pass automatically via a webhook (Make.com bridges Squarespace, which
   has no native webhooks on our plan).
@@ -39,13 +41,14 @@ All under `/admin/*`, password-protected (`require_password()`):
 
 | Page | What it's for |
 | --- | --- |
-| `/admin` | Action hub (scan, people, door night, wallets). |
-| `/admin/members` | Roster: search, edit, CSV import/export, download/resend an individual pass. |
+| `/admin` | Home hub (login required). Phone: Scan in / Find someone / Add someone / Scores, plus People, Matches, Send first pass, Fix old pass, Share scanner. Sticky bar: Scan in \| Find someone \| People \| Home. |
+| `/admin/members` | People — roster, search, edit, CSV import/export, download/resend one pass. CSV does **not** email. |
 | `/admin/matches` | Viewing-night schedule for the scanner ("Set current"). **Push Pass Updates Now** refreshes Apple + Google to football-data.org's next match — not this table. |
 | `/admin/match-overrides` | Fix a match football-data.org gets wrong or misses (cup ties, corrected kickoff times) — DB-backed, no code deploy needed. |
-| `/admin/leaderboard` | Attendance leaderboard for the season. |
-| `/admin/issue-passes` | Bulk-send a first pass to every member who's never gotten one — checkbox review, CSV export, nothing sends until you click. |
-| `/admin/pass-remediation` | Bulk-resend to members whose existing pass predates a fix and needs replacing — same review-before-send pattern. |
+| `/admin/leaderboard` | Scores — attendance leaderboard for the season. |
+| `/admin/issue-passes` | Send first pass — bulk-email everyone on the roster with no pass this season (usual after a CSV). Checkbox review; nothing sends until you click. |
+| `/admin/pass-remediation` | Fix old pass — bulk-resend to members whose pass predates a fix. Same review-before-send pattern. |
+| `/admin/door-access` | Share scanner — scoped, expiring volunteer links (scanner only, no admin password). |
 | `/scanner` | QR check-in at the door. |
 
 Public / rare:
@@ -83,7 +86,7 @@ pushes Wallet updates automatically.
 
 Tracked honestly — full list in
 [QA_VERIFICATION_PLAN.md](QA_VERIFICATION_PLAN.md). Headlines as of
-Aug 31:
+Sep 2 (wallet snapshot still Aug 31; Ipswich is Sep 4):
 
 - **Manual Wallet push works** for post-Aug-20 Apple passes (real
   phones, Ipswich). **85** registered / **100** devices, all fetched.

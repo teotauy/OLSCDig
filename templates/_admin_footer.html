@@ -89,11 +89,11 @@
     {% if not door_only and ep != 'admin_index' %}
     <div class="admin-nav-tools">
         <a class="{% if ep == 'admin_members' %} on{% endif %}" href="{{ url_for('admin_members') }}#add">Add someone</a>
-        <a class="{% if ep == 'admin_matches' %} on{% endif %}" href="{{ url_for('admin_matches') }}">Door night</a>
+        <a class="{% if ep == 'admin_matches' %} on{% endif %}" href="{{ url_for('admin_matches') }}">Matches</a>
         <a class="{% if ep == 'admin_leaderboard' %} on{% endif %}" href="{{ url_for('admin_leaderboard') }}">Scores</a>
         <a class="{% if ep == 'admin_issue_passes' %} on{% endif %}" href="{{ url_for('admin_issue_passes') }}">Send first pass</a>
         <a class="{% if ep == 'admin_pass_remediation' %} on{% endif %}" href="{{ url_for('admin_pass_remediation') }}">Fix old pass</a>
-        <a class="{% if ep == 'admin_door_access' %} on{% endif %}" href="{{ url_for('admin_door_access') }}">Door link</a>
+        <a class="{% if ep == 'admin_door_access' %} on{% endif %}" href="{{ url_for('admin_door_access') }}">Share scanner</a>
     </div>
     <div class="admin-nav-logout">
         <a href="{{ url_for('logout') }}">Log out</a>

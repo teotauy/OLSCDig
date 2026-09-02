@@ -2,8 +2,8 @@
 
 > Rewritten Aug 20, 2026. The previous version of this doc described the
 > PassKit-vendor system (bulk checkout, PassKit as source of truth) — all
-> replaced. This reflects what's actually shipped today. Match-update
-> mechanics last verified Aug 31 — see [MATCH_UPDATES_SETUP.md](MATCH_UPDATES_SETUP.md).
+> replaced. Admin surface last updated Sep 2. Match-update mechanics last
+> verified Aug 31 — see [MATCH_UPDATES_SETUP.md](MATCH_UPDATES_SETUP.md).
 
 ## Done (shipped)
 
@@ -20,9 +20,9 @@
 - **DB-backed match overrides** (`/admin/match-overrides`) for cup ties / wrong API times — no code deploy needed, replaced the old `match_overrides.json` file.
 
 ### Member management
-- **CSV import** (`/admin/members`) — batched, idempotent, typo-domain detection.
+- **CSV import** (`/admin/members`) — batched, idempotent, typo-domain detection. Puts people on the roster only; does **not** email a pass.
 - **Squarespace → auto member + pass** — webhook via Make.com (Squarespace's plan has no native webhooks).
-- **Bulk first-time pass issuance** (`/admin/issue-passes`) — checkbox review, CSV export, nothing sends until explicitly clicked.
+- **Bulk first-time pass issuance** (`/admin/issue-passes`, **Send first pass**) — the follow-up after CSV. Checkbox review, nothing sends until explicitly clicked.
 - **Bulk pass remediation** (`/admin/pass-remediation`) — same pattern, for resending to members whose pass predates a fix.
 - **Self-service pass recovery** (`/recover-pass`) — resend by email, no admin needed.
 - **Mobile web pass fallback** (`/pass/<token>`) — for anyone without Apple/Google Wallet.
@@ -31,7 +31,8 @@
 - **Password + optional Google OAuth login**, forgot-password flow, rate limiting.
 - **Resend email sending** — with real usage tracking (daily/monthly quota, rate-limit vs. quota-exceeded correctly distinguished as of Aug 20) and a visible usage badge on every page that can send in bulk.
 - **PassKit vendor routes mothballed**, not deleted — gated behind `PASSKIT_LEGACY_ENABLED` (default off), kept only as an emergency fallback. See `_passkit_legacy_gate()` in `app.py`.
-- **Volunteer door access** (`/admin/door-access`) — scoped, revocable, expiring links that grant scanner-only access, no admin password needed or exposed.
+- **Volunteer scanner links** (`/admin/door-access`, **Share scanner**) — scoped, revocable, expiring links that grant scanner-only access, no admin password needed or exposed.
+- **Mobile admin hub** (`/admin`, Aug 31–Sep 2) — large-button phone Home, sticky Scan in / Find someone / People / Home bar (nav lives outside the card so taps hit the links, not the overflow). Capacity/headcount is public `/` (**How full**), not on Home.
 - **Protocol tests** (`tests/test_pass_update_protocol.py`) — 304 equality, fetch tracking, APNs headers.
 - **Security hardening** (Aug 25) — fixed an open redirect, a Google OAuth flow that failed open on error, timing-unsafe secret comparisons, and a hardcoded `FLASK_SECRET_KEY` fallback that was actually in use in production.
 
@@ -47,9 +48,6 @@ Full detail and status in [QA_VERIFICATION_PLAN.md](QA_VERIFICATION_PLAN.md). He
 - **`matches.is_current` has no automation** — someone has to manually create next week's *viewing-night* row and flip which one's current for the scanner. That table is not the pass "next match" feed.
 
 ## Planned / backlog
-
-### Next up
-- **Mobile admin hub** — a dead-simple, large-button mobile page: Scan People In / Look Someone Up / Add a Member / View Leaderboard. Button set agreed, not yet built.
 
 ### Nice to have
 - **Season reports** — attendance summaries, "your season," Liverpool's record when you attended.

@@ -63,7 +63,7 @@
         <div class="header">
             <img src="{{ wordmark_data_uri }}" alt="OLSC Brooklyn — Official Supporters Club" style="max-width: 200px; height: auto; margin: 0 auto 8px; display: block;">
             <h1>Send first pass</h1>
-            <p class="sub">{{ rows|length }} member(s) have never been sent a Wallet pass this season</p>
+            <p class="sub">{{ rows|length }} on the roster with no pass this season</p>
             {% if resend_usage and resend_usage.checked_at %}
             <div>
                 <span class="resend-badge{% if resend_usage.last_error_name in ('daily_quota_exceeded', 'monthly_quota_exceeded') %} warn{% endif %}"
@@ -97,9 +97,9 @@
 
         <div class="panel">
             <p class="hint">
-                These members are loaded in the system but have never been issued a Wallet pass for the
-                current season — no email, no pass. Test/dev-looking accounts are flagged and unchecked
-                by default.
+                Adding one person emails a pass. CSV import does not — it only puts them
+                on the roster, so they show up here. Test/dev-looking accounts are
+                unchecked by default.
             </p>
             <form method="POST" action="{{ url_for('admin_issue_passes_send') }}" id="issueForm" onsubmit="return confirmSend();">
                 <div class="toolbar">

@@ -16,7 +16,8 @@ exact failure mode that caused this.
 
 This doc tracks every external integration point, its real verification
 status, and what's still needed to close each gap. Updated as items get
-closed, not left to rot. **Last snapshot: Aug 31, 2026.**
+closed, not left to rot. **Last snapshot: Sep 2, 2026** (wallet/push
+counts still Aug 31; admin hub shipped Aug 31–Sep 2).
 
 Status key: ✅ verified against real external behavior · ⚠️ built correctly
 per spec but never exercised against the real system · ❌ known gap or
@@ -58,7 +59,7 @@ as the thing that broke.
 | --- | --- | --- | --- |
 | `get_finished_liverpool_matches()` (leaderboard results sync) | ✅ (confirmed Aug 25) | **Real match, real result**: Newcastle (Aug 23) was automatically synced with the correct real score (a draw) by the very next day's cron run — confirmed directly against the `matches` table, not just assumed. | None — closed. |
 | Squarespace → Make.com → `/api/squarespace/order` | ❌ | Our endpoint tested with hand-built payloads matching Squarespace's *documented* field names. The Make.com scenario itself doesn't exist yet — never received a real payload from a real order. | Once the Make scenario is built: run one real test order through it before trusting it unattended. |
-| CSV import | ✅ | Real production run: 126 real members imported successfully (confirmed via your own screenshot). Synthetic edge cases (bad rows, duplicate emails, Squarespace-style headers, crash-mid-import) also tested. | Lower risk — reasonably well covered already. |
+| CSV import | ✅ | Real production run: 126 real members imported successfully (confirmed via your own screenshot). Synthetic edge cases (bad rows, duplicate emails, Squarespace-style headers, crash-mid-import) also tested. **Does not email a pass** — by design; **Send first pass** is the follow-up. Copy on import + issue-passes was updated Sep 2 so that isn't a mystery. | None for the import path. |
 
 ## Tier 3 — worth checking, lower urgency
 
@@ -121,9 +122,9 @@ deliberate decision — see Outstanding below.
 5. **Squarespace → Make.com, one real order** — endpoint's tested against
    hand-built payloads; the Make scenario and a real purchase through it
    are still unconfirmed.
-6. **The mobile admin hub page** (huge-button scan/lookup/add-member
-   page) — proposed, approved in concept, never built. Lowest urgency of
-   the open items; purely a convenience feature.
+
+Admin convenience (shipped Sep 2, not an open item): `/admin` is a
+phone hub with a sticky bar; CSV import still does not email.
 
 ## Aug 30–31 — what the Forest → Ipswich cycle actually proved
 
