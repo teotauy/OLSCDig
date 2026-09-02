@@ -820,6 +820,7 @@ def _send_pkpass_email(to_email, first_name, pkpass_bytes, mobile_pass_url=None,
         short_season = f"{year_part[-2:]}/{rest}"
     preview_text = f"{short_season} Season Digital ID".strip() if short_season else "Your Digital ID"
     wordmark_uri = _asset_data_uri(PASS_THEMES["home"]["wordmark_path"])
+    recover_pass_url = f"{_public_base_url()}{url_for('recover_pass')}"
     google_wallet_link_html = (
         f'<p class="step-alt">or <a href="{google_wallet_url}">add it straight to Google Wallet</a></p>'
         if google_wallet_url else ""
@@ -854,6 +855,7 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Aria
 .step-alt {{ font-size: 12.5px; margin: 10px 0 0; }}
 .step-alt a {{ color: #888; text-decoration: underline; }}
 .fine-print {{ font-size: 12px; color: #999; text-align: center; margin-top: 20px; }}
+.fine-print a {{ color: #888; text-decoration: underline; }}
 .footer {{ background: #f8f9fa; padding: 16px; text-align: center; font-size: 12px; color: #888; }}
 /* Explicit dark-mode overrides — without these, mail clients that auto-invert
    do so per-client and inconsistently; #111 text and #999/#888 captions are
@@ -866,6 +868,7 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Aria
   .step-text strong {{ color: #f2f2f2; }}
   .step-alt a {{ color: #aaaaaa; }}
   .fine-print {{ color: #a0a0a0; }}
+  .fine-print a {{ color: #aaaaaa; }}
   .footer {{ background: #161616; color: #a0a0a0; }}
 }}
 </style></head>
@@ -881,6 +884,7 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Aria
 </div>
 {android_step_html}
 <p class="fine-print">Already had a pass? This one replaces it — the old one stops working next time it's scanned.</p>
+<p class="fine-print">Lose this email, get a new phone, or need this again later? <a href="{recover_pass_url}">Get your pass anytime</a> — just enter this email address.</p>
 <p>You'll Never Walk Alone!<br>— OLSC Brooklyn</p>
 </div>
 <div class="footer">This email was sent to {to_email}.</div>
@@ -1445,7 +1449,8 @@ def admin_members():
     skipped = request.args.get('skipped')
     info = None
     if imported is not None:
-        info = f"Imported {imported} member(s)." + (f" Skipped {skipped}." if skipped and skipped != '0' else "")
+        extra = f" Skipped {skipped}." if skipped and skipped != '0' else ""
+        info = f"Imported {imported} member(s).{extra} CSV does not email a pass."
 
     # Popped (not just read) so these only show once, right after the
     # import that produced them — not on every later visit to this page.
@@ -1489,6 +1494,7 @@ def admin_members():
         error=error,
         added=added,
         info=info,
+        imported=imported,
         already_existed=already_existed,
         possible_typos=possible_typos,
         wordmark_data_uri=_current_theme_wordmark_data_uri(),
