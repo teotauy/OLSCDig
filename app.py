@@ -1582,6 +1582,12 @@ def wallet_asset(filename):
         "olsc_wordmark_red.png": PASS_THEMES["away"]["wordmark_path"],
         "olsc_wordmark_white.png": PASS_THEMES["home"]["wordmark_path"],
         "olsc_crest_red.png": PASS_THEMES["home"]["crest_path"],
+        # Square, padded crest for Google Wallet's circular logo crop (2026
+        # redesign) -- the wordmark files above are wide text banners, not
+        # square, and would get badly cropped by Google's new circular
+        # frame. See ISSUE... no code issue, just a real asset swap.
+        "olsc_google_logo_red.png": PASS_THEMES["away"]["google_logo_path"],
+        "olsc_google_logo_white.png": PASS_THEMES["home"]["google_logo_path"],
     }
     path = allowed.get(filename)
     if not path:

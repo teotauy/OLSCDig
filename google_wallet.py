@@ -104,7 +104,10 @@ def patch_google_wallet_object(object_id, *, season_name, next_match="", is_home
     """
     credentials = _load_credentials()
     session = AuthorizedSession(credentials)
-    wordmark = "olsc_wordmark_white.png" if is_home else "olsc_wordmark_red.png"
+    # Square, padded crest -- not the wordmark. Google's 2026 redesign crops
+    # the logo into a circle; a wide text wordmark gets badly clipped by
+    # that, a centered crest with real margin survives it.
+    google_logo = "olsc_google_logo_white.png" if is_home else "olsc_google_logo_red.png"
     background = "#e31b23" if is_home else "#ffffff"
     body = {
         "textModulesData": _text_modules(season_name, next_match),
@@ -113,7 +116,7 @@ def patch_google_wallet_object(object_id, *, season_name, next_match="", is_home
     if base_url:
         body["logo"] = {
             "sourceUri": {
-                "uri": f"{base_url.rstrip('/')}/wallet/assets/{wordmark}",
+                "uri": f"{base_url.rstrip('/')}/wallet/assets/{google_logo}",
             },
             "contentDescription": _localized("OLSC Brooklyn Official Supporters Club"),
         }
@@ -149,7 +152,10 @@ def build_google_wallet_save_url(
     object_suffix = _safe_suffix(f"member_{member_id}_{serial_number}")
     class_id = f"{issuer_id}.{class_suffix}"
     object_id = f"{issuer_id}.{object_suffix}"
-    wordmark = "olsc_wordmark_white.png" if is_home else "olsc_wordmark_red.png"
+    # Square, padded crest -- not the wordmark. Google's 2026 redesign crops
+    # the logo into a circle; a wide text wordmark gets badly clipped by
+    # that, a centered crest with real margin survives it.
+    google_logo = "olsc_google_logo_white.png" if is_home else "olsc_google_logo_red.png"
     background = "#e31b23" if is_home else "#ffffff"
 
     generic_class = {"id": class_id}
@@ -172,7 +178,7 @@ def build_google_wallet_save_url(
         "textModulesData": text_modules,
         "logo": {
             "sourceUri": {
-                "uri": f"{base_url}/wallet/assets/{wordmark}",
+                "uri": f"{base_url}/wallet/assets/{google_logo}",
             },
             "contentDescription": _localized("OLSC Brooklyn Official Supporters Club"),
         },

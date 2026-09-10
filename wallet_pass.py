@@ -166,6 +166,7 @@ PASS_THEMES = {
         "icon_border": None,
         "crest_path": ASSETS_DIR / "olsc_crest_white.png",
         "wordmark_path": ASSETS_DIR / "olsc_wordmark_white.png",
+        "google_logo_path": ASSETS_DIR / "olsc_google_logo_white.png",
     },
     "away": {
         "background": "rgb(255,255,255)",
@@ -178,6 +179,7 @@ PASS_THEMES = {
         "icon_border": (227, 27, 35, 255),
         "crest_path": ASSETS_DIR / "olsc_crest_red.png",
         "wordmark_path": ASSETS_DIR / "olsc_wordmark_red.png",
+        "google_logo_path": ASSETS_DIR / "olsc_google_logo_red.png",
     },
 }
 
