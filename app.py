@@ -1303,6 +1303,33 @@ def _split_name(display_name):
     return parts[0], parts[1] if len(parts) > 1 else ""
 
 
+def _normalize_kickoff_time(raw):
+    """Free-text kickoff time (whatever an admin types into a match
+    override) -> the same style auto-fetched fixtures already use: no
+    minutes for an exact hour, 'AM'/'PM' with no periods -- '3:00 P.M.'
+    becomes '3 PM', '3:30pm' becomes '3:30 PM'. Accepts 12-hour with or
+    without minutes/periods/spaces, or 24-hour. Returns the input
+    unchanged if it can't be parsed, rather than guessing wrong."""
+    raw = (raw or "").strip()
+    if not raw:
+        return raw
+    cleaned = raw.upper().replace(".", "").replace(" ", "")
+    dt = None
+    for fmt in ("%I:%M%p", "%I%p", "%H:%M"):
+        try:
+            dt = datetime.strptime(cleaned, fmt)
+            break
+        except ValueError:
+            continue
+    if dt is None:
+        return raw
+    hour12 = dt.hour % 12 or 12
+    am_pm = "AM" if dt.hour < 12 else "PM"
+    if dt.minute == 0:
+        return f"{hour12} {am_pm}"
+    return f"{hour12}:{dt.minute:02d} {am_pm}"
+
+
 def _localize_kickoff(value):
     """value: 'YYYY-MM-DDTHH:MM' from a datetime-local input, in app TIMEZONE."""
     tz = pytz.timezone(os.getenv('TIMEZONE', 'America/New_York'))
@@ -2642,7 +2669,7 @@ def admin_match_overrides():
     if request.method == 'POST':
         date_raw = request.form.get('match_date', '').strip()
         opponent = request.form.get('opponent', '').strip()
-        display_time = request.form.get('display_time', '').strip()
+        display_time = _normalize_kickoff_time(request.form.get('display_time', ''))
         is_home = request.form.get('is_home') == 'home'
         venue = request.form.get('venue', '').strip()
         pass_display = request.form.get('pass_display', '').strip()
