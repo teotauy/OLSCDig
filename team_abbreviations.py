@@ -59,6 +59,21 @@ TEAM_ABBREVIATIONS = {
     "Galatasaray SK": "Galatasaray",
     "Galatasaray": "Galatasaray",
 
+    # 2026/27 Champions League league-phase opponents (checked against the
+    # real fixture list, not guessed) -- "Racing Club de Lens" was hitting
+    # the bad 14-char truncation ("Racing Club de"); the others fit under
+    # 14 chars so weren't truncating, but carried club-suffix noise
+    # ("CF"/"SK"/"KV") worth stripping for a cleaner pass.
+    "LASK Linz": "LASK",
+    "Villarreal CF": "Villarreal",
+    "Fenerbahçe SK": "Fenerbahçe",
+    "Club Brugge KV": "Club Brugge",
+    "Racing Club de Lens": "Lens",
+
+    # Also real, also on the current fixture list -- checked the same way.
+    "Coventry City FC": "Coventry City",
+    "Hull City AFC": "Hull City",
+
     # Add more as needed
 }
 
