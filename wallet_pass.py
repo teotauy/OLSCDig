@@ -43,6 +43,9 @@ class MemberPassData:
     auth_token: str = ""
     web_service_url: str = ""
     next_match: str = ""
+    next_match_short: str = ""  # opponent only, for the header field -- see
+    # _build_pass_json below for why the full "Team | Date Time" string
+    # can't live there
     description: str = "OLSC Brooklyn Membership"
     is_home: bool = True  # drives home (red) vs away (white/red, 2026/27 road kit) pass theme
     relevant_date: str = ""
@@ -271,6 +274,11 @@ def _build_pass_json(config, pass_data, theme):
     secondary_fields = [
         {"key": "season", "label": "SEASON", "value": pass_data.season},
     ]
+    # Full "Team | Date Time" detail lives here, not in the header -- see
+    # below for why. secondaryFields only shows once the pass is expanded,
+    # but it has real width, unlike the header's tight corner.
+    if pass_data.next_match:
+        secondary_fields.append({"key": "kickoff", "label": "KICKOFF", "value": pass_data.next_match})
 
     # headerFields render in the top-right of the pass, next to the logo —
     # the one part of a Wallet pass that's still visible when it's
@@ -278,9 +286,15 @@ def _build_pass_json(config, pass_data, theme):
     # match is exactly the thing worth being able to see at a glance
     # without tapping in, so it lives here instead of (or in addition to
     # duplicating in) secondaryFields, which only shows once expanded.
+    #
+    # Real device confirmed (Sept 17): the full "Team | Date Time" string
+    # (e.g. "Bournemouth | 9/20 9 AM") overflows the header's narrow width
+    # and truncates to "BOURNEMOUTH |…" -- illegible. Header now gets just
+    # the short opponent name; the full date/time detail moved to
+    # secondaryFields above, which has the room for it.
     header_fields = []
-    if pass_data.next_match:
-        header_fields.append({"key": "nextMatch", "label": "NEXT MATCH", "value": pass_data.next_match})
+    if pass_data.next_match_short:
+        header_fields.append({"key": "nextMatch", "label": "NEXT MATCH", "value": pass_data.next_match_short})
 
     pass_json = {
         "formatVersion": 1,

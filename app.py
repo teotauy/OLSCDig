@@ -1639,14 +1639,22 @@ def _member_pass_data(member, serial_number, raw_token, season_name, auth_token=
     next-match/theme data. Shared by initial issue and by the PassKit web
     service refresh path, so the two can never drift out of sync."""
     next_match_text = ""
+    next_match_short = ""
     is_home = True
     try:
         next_match = get_next_match()
         if next_match:
             next_match_text = next_match.get('pass_display') or ""
+            # pass_display is always "Short Team | Date Time" (both the
+            # auto-generated and the manual-override paths follow this),
+            # so splitting it is reliable -- safer than re-deriving an
+            # abbreviation from the raw opponent name, which has its own
+            # "FC" suffix-matching fragility for override-entered names.
+            next_match_short, _, _ = next_match_text.partition(' | ')
             is_home = bool(next_match.get('is_home', True))
     except Exception:
         next_match_text = ""
+        next_match_short = ""
 
     pass_data = MemberPassData(
         display_name=f"{member['first_name']} {member['last_name']}".strip(),
@@ -1657,6 +1665,7 @@ def _member_pass_data(member, serial_number, raw_token, season_name, auth_token=
         auth_token=auth_token,
         web_service_url=_passkit_web_service_url() if auth_token else "",
         next_match=next_match_text,
+        next_match_short=next_match_short,
         description="OLSC Brooklyn Membership",
         is_home=is_home,
         relevant_date=_current_match_relevant_date(),
