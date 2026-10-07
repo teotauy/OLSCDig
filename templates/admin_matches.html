@@ -67,6 +67,20 @@
         </div>
 
         {% if error %}<div class="message error">{{ error }}</div>{% endif %}
+        {% if doors_error %}<div class="message error">{{ doors_error }}</div>{% endif %}
+        <div class="panel">
+            <h2>Doors note on the pass</h2>
+            <p class="season">Next match on passes: <strong>{{ next_match_label or 'none found' }}</strong>. Leave blank when there is no member admission. It clears itself after this match.</p>
+            <form method="POST" action="{{ url_for('admin_set_doors_note') }}" onsubmit="return confirm('Save this and update every installed wallet pass now?');">
+                <div class="row">
+                    <div class="field">
+                        <label for="doors_note">Doors note</label>
+                        <input type="text" id="doors_note" name="doors_note" maxlength="80" value="{{ doors_note }}" placeholder="Open at 10 for members">
+                    </div>
+                </div>
+                <button type="submit" class="btn">Save and update wallets</button>
+            </form>
+        </div>
         {% if push_started %}
         <div class="message" style="background:#d1ecf1; color:#0c5460; border:1px solid #bee5eb;">
             Update started for Apple and Google Wallet. Give it a minute or two, then open a pass — this page does not wait for every phone.

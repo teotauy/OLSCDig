@@ -43,6 +43,7 @@ class MemberPassData:
     auth_token: str = ""
     web_service_url: str = ""
     next_match: str = ""
+    doors_note: str = ""  # optional "Doors" line; blank unless an admin set one for this match
     next_match_short: str = ""  # opponent only, for the header field -- see
     # _build_pass_json below for why the full "Team | Date Time" string
     # can't live there
@@ -274,11 +275,8 @@ def _build_pass_json(config, pass_data, theme):
     secondary_fields = [
         {"key": "season", "label": "SEASON", "value": pass_data.season},
     ]
-    # Full "Team | Date Time" detail lives here, not in the header -- see
-    # below for why. secondaryFields only shows once the pass is expanded,
-    # but it has real width, unlike the header's tight corner.
-    if pass_data.next_match:
-        secondary_fields.append({"key": "kickoff", "label": "KICKOFF", "value": pass_data.next_match})
+    if pass_data.doors_note:
+        secondary_fields.append({"key": "doors", "label": "DOORS", "value": pass_data.doors_note})
 
     # headerFields render in the top-right of the pass, next to the logo —
     # the one part of a Wallet pass that's still visible when it's
@@ -289,12 +287,16 @@ def _build_pass_json(config, pass_data, theme):
     #
     # Real device confirmed (Sept 17): the full "Team | Date Time" string
     # (e.g. "Bournemouth | 9/20 9 AM") overflows the header's narrow width
-    # and truncates to "BOURNEMOUTH |…" -- illegible. Header now gets just
-    # the short opponent name; the full date/time detail moved to
-    # secondaryFields above, which has the room for it.
+    # and truncates to "BOURNEMOUTH |…" -- illegible. Header value is just
+    # the short opponent name.
     header_fields = []
     if pass_data.next_match_short:
-        header_fields.append({"key": "nextMatch", "label": "NEXT MATCH", "value": pass_data.next_match_short})
+        # The label renders in a much smaller font than the value, so the
+        # date/time rides there to stay visible when collapsed without
+        # overflowing the way putting it in the value did.
+        _, _, when = pass_data.next_match.partition(" | ")
+        label = f"NEXT \u00b7 {when}" if when else "NEXT MATCH"
+        header_fields.append({"key": "nextMatch", "label": label, "value": pass_data.next_match_short})
 
     pass_json = {
         "formatVersion": 1,

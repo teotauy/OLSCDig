@@ -147,6 +147,14 @@ CREATE TABLE IF NOT EXISTS match_overrides (
 -- admin to notice and click "Push Pass Updates Now".
 ALTER TABLE pass_update_state ADD COLUMN IF NOT EXISTS last_next_match_key TEXT;
 
+-- Optional one-line "Doors" note on the pass (e.g. "Doors open at 10 for
+-- members"). Blank by default, because member-only admission isn't every
+-- match and is usually confirmed only days before. Tied to the match it
+-- was written for (doors_note_match_key), so it disappears on its own
+-- once that match passes instead of going stale on the next one.
+ALTER TABLE pass_update_state ADD COLUMN IF NOT EXISTS doors_note TEXT;
+ALTER TABLE pass_update_state ADD COLUMN IF NOT EXISTS doors_note_match_key TEXT;
+
 -- When Wallet actually GETs a pass (not just when APNs returns 200). The
 -- daily job retries devices that never came back after a content bump —
 -- otherwise a dropped silent push is recorded as "done" forever.

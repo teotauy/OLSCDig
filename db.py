@@ -532,6 +532,29 @@ def bump_passes_updated_tag():
     return new_tag
 
 
+def get_doors_note():
+    """(note, match_key) for the optional pass "Doors" line. Blank if unset
+    or if the column hasn't been migrated yet -- the pass must keep
+    building either way."""
+    try:
+        with cursor() as cur:
+            cur.execute("SELECT doors_note, doors_note_match_key FROM pass_update_state WHERE id = 1")
+            row = cur.fetchone()
+        if row:
+            return (row['doors_note'] or ''), (row['doors_note_match_key'] or '')
+    except Exception:
+        pass
+    return '', ''
+
+
+def set_doors_note(note, match_key):
+    with cursor() as cur:
+        cur.execute(
+            "UPDATE pass_update_state SET doors_note = %s, doors_note_match_key = %s WHERE id = 1",
+            (note or None, match_key or None),
+        )
+
+
 def find_active_wallet_pass_by_token(raw_token):
     """Look up the member+season behind a raw wallet token.
 

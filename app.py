@@ -790,7 +790,7 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Aria
         return False
 
 
-def _send_pkpass_email(to_email, first_name, pkpass_bytes, mobile_pass_url=None, google_wallet_url=None):
+def _send_pkpass_email(to_email, first_name, pkpass_bytes, mobile_pass_url=None, google_wallet_url=None, remediation=False):
     """Email a signed .pkpass attachment to a member. Returns True if sent.
 
     Rebuilt (Aug 16) around one goal: people skim emails and miss things,
@@ -811,6 +811,20 @@ def _send_pkpass_email(to_email, first_name, pkpass_bytes, mobile_pass_url=None,
     season = db.get_current_season()
     season_name = season['name'] if season else ""
     subject = f"Your {season_name} Digital ID".strip() if season_name else "Your Digital ID"
+    remediation_intro_html = ""
+    if remediation:
+        # "2026/27" -> "2026-2027" for the one-off fix email's headline.
+        long_season = season_name
+        if season_name and "/" in season_name:
+            start_year, end_short = season_name.split("/", 1)
+            if start_year.isdigit() and end_short.isdigit():
+                long_season = f"{start_year}\u2013{start_year[:len(start_year) - len(end_short)]}{end_short}"
+        subject = f"Your updated {long_season} Digital ID".replace("  ", " ") if long_season else "Your updated Digital ID"
+        remediation_intro_html = (
+            '<p>This is Colby from OLSC Brooklyn. The first batch of Digital IDs went out with one setting wrong, '
+            'which kept them from updating on their own. That\u2019s on us, and I\u2019m sorry for the hassle.</p>'
+            '<p>This new one fixes it. Add it to your wallet the same way as before, and from here on it will keep itself up to date.</p>'
+        )
     # "2026/27" -> "26/27": short form for the preview text, derived rather
     # than hardcoded so it doesn't go stale next season the way the old
     # fixed subject line did.
@@ -819,6 +833,8 @@ def _send_pkpass_email(to_email, first_name, pkpass_bytes, mobile_pass_url=None,
         year_part, rest = season_name.split("/", 1)
         short_season = f"{year_part[-2:]}/{rest}"
     preview_text = f"{short_season} Season Digital ID".strip() if short_season else "Your Digital ID"
+    if remediation:
+        preview_text = "The first batch had one setting wrong. This one fixes it."
     wordmark_uri = _asset_data_uri(PASS_THEMES["home"]["wordmark_path"])
     recover_pass_url = f"{_public_base_url()}{url_for('recover_pass')}"
     google_wallet_link_html = (
@@ -878,12 +894,13 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Aria
 <div class="header"><img src="{wordmark_uri}" alt="OLSC Brooklyn — Official Supporters Club"></div>
 <div class="content">
 <p>Hi {name},</p>
+{remediation_intro_html}
 <div class="step">
 <div class="step-label">📱&nbsp; IF YOU HAVE AN IPHONE</div>
 <p class="step-text">Open the attachment on this email, then tap <strong>Add to Apple Wallet</strong>.</p>
 </div>
 {android_step_html}
-<p class="fine-print">Already had a pass? This one replaces it — the old one stops working next time it's scanned.</p>
+<p class="fine-print">Already had a pass? This one replaces it. Your old one stopped working the moment this email was sent, so delete it from your wallet and use this one.</p>
 <p class="fine-print">Lose this email, get a new phone, or need this again later? <a href="{recover_pass_url}">Get your pass anytime</a> — just enter this email address.</p>
 <p>You'll Never Walk Alone!<br>— OLSC Brooklyn</p>
 </div>
@@ -1661,16 +1678,34 @@ def _passkit_web_service_url():
     return f"{_public_base_url()}{PASSKIT_WEBSERVICE_BASE}"
 
 
+def _doors_note_match_key(next_match):
+    """Identifies which match a doors note was written for."""
+    if not next_match:
+        return ""
+    return f"{next_match.get('opponent', '')}|{next_match.get('full_date', '')}"
+
+
+def _current_doors_note(next_match):
+    """The doors note, but only while the match it was written for is still
+    the next match -- afterward it silently drops back to blank."""
+    note, key = db.get_doors_note()
+    if note and key and key == _doors_note_match_key(next_match):
+        return note
+    return ""
+
+
 def _member_pass_data(member, serial_number, raw_token, season_name, auth_token=""):
     """Build the MemberPassData for a given member/pass, pulling live
     next-match/theme data. Shared by initial issue and by the PassKit web
     service refresh path, so the two can never drift out of sync."""
     next_match_text = ""
     next_match_short = ""
+    doors_note = ""
     is_home = True
     try:
         next_match = get_next_match()
         if next_match:
+            doors_note = _current_doors_note(next_match)
             next_match_text = next_match.get('pass_display') or ""
             # pass_display is always "Short Team | Date Time" (both the
             # auto-generated and the manual-override paths follow this),
@@ -1693,6 +1728,7 @@ def _member_pass_data(member, serial_number, raw_token, season_name, auth_token=
         web_service_url=_passkit_web_service_url() if auth_token else "",
         next_match=next_match_text,
         next_match_short=next_match_short,
+        doors_note=doors_note,
         description="OLSC Brooklyn Membership",
         is_home=is_home,
         relevant_date=_current_match_relevant_date(),
@@ -2049,7 +2085,7 @@ def passkit_device_log():
     return ('', 200)
 
 
-def _issue_and_email_pass(member, season):
+def _issue_and_email_pass(member, season, remediation=False):
     """Issue a wallet token, build a signed pass, and email it to a member."""
     try:
         pkpass_bytes, mobile_pass_url, google_wallet_url = _issue_member_pkpass(member, season)
@@ -2058,7 +2094,7 @@ def _issue_and_email_pass(member, season):
     except Exception as e:
         return False, f"Could not build pass: {e}"
 
-    if _send_pkpass_email(member['email'], member['first_name'], pkpass_bytes, mobile_pass_url=mobile_pass_url, google_wallet_url=google_wallet_url):
+    if _send_pkpass_email(member['email'], member['first_name'], pkpass_bytes, mobile_pass_url=mobile_pass_url, google_wallet_url=google_wallet_url, remediation=remediation):
         return True, None
 
     if os.getenv('EMAIL_SENDING_ENABLED', 'true').strip().lower() == 'false':
@@ -2335,8 +2371,17 @@ def admin_matches():
     google_push_total = request.args.get('google_push_total')
     push_started = request.args.get('push_started')
 
+    try:
+        upcoming = get_next_match()
+    except Exception:
+        upcoming = None
+    doors_note = _current_doors_note(upcoming) if upcoming else ""
+
     return render_template(
         'admin_matches.html',
+        next_match_label=(upcoming or {}).get('pass_display', ''),
+        doors_note=doors_note,
+        doors_error=request.args.get('doors_error'),
         season=season,
         matches=matches,
         error=error,
@@ -2392,7 +2437,7 @@ def _looks_like_test_account(first_name, last_name, email):
 RESEND_SAFE_INTERVAL_SECONDS = 0.3
 
 
-def _bulk_issue_and_email(candidates, selected_ids, season):
+def _bulk_issue_and_email(candidates, selected_ids, season, remediation=False):
     """Shared by pass-remediation and issue-passes: sends to each selected
     member independently -- one failure doesn't block the rest -- while
     pacing requests to stay well under Resend's rate limit."""
@@ -2403,7 +2448,7 @@ def _bulk_issue_and_email(candidates, selected_ids, season):
     for i, member_id in enumerate(ids):
         row = candidates[member_id]
         member = {"id": member_id, "first_name": row['first_name'], "last_name": row['last_name'], "email": row['email']}
-        ok, message = _issue_and_email_pass(member, season)
+        ok, message = _issue_and_email_pass(member, season, remediation=remediation)
         (sent if ok else failed).append({"name": f"{row['first_name']} {row['last_name']}", "email": row['email'], "message": message})
         if i < len(ids) - 1:
             time.sleep(RESEND_SAFE_INTERVAL_SECONDS)
@@ -2467,7 +2512,7 @@ def admin_pass_remediation_resend():
     affected = {r['member_id']: r for r in db.get_apple_passes_issued_before(WEBSERVICE_URL_FIX_DEPLOYED_AT)}
     season = db.get_current_season()
 
-    sent, failed = _bulk_issue_and_email(affected, selected_ids, season)
+    sent, failed = _bulk_issue_and_email(affected, selected_ids, season, remediation=True)
 
     session['pass_remediation_result'] = {"sent": sent, "failed": failed}
     return redirect(url_for('admin_pass_remediation'))
@@ -2651,6 +2696,29 @@ def admin_push_pass_updates():
     """
     if not require_password():
         return redirect(url_for('login'))
+
+    threading.Thread(target=_notify_wallet_pass_updates, daemon=True).start()
+    return redirect(url_for('admin_matches', push_started=1))
+
+
+@app.route('/admin/doors-note', methods=['POST'])
+def admin_set_doors_note():
+    """Set (or clear, by leaving it blank) the "Doors" line for the current
+    next match, then push it to installed wallets in the background."""
+    if not require_password():
+        return redirect(url_for('login'))
+
+    note = (request.form.get('doors_note') or '').strip()[:80]
+    try:
+        next_match = get_next_match()
+    except Exception:
+        next_match = None
+    if not next_match:
+        return redirect(url_for('admin_matches', doors_error="No upcoming match found to attach a doors note to."))
+    try:
+        db.set_doors_note(note, _doors_note_match_key(next_match) if note else "")
+    except Exception as e:
+        return redirect(url_for('admin_matches', doors_error=f"Could not save doors note (has schema.sql been applied?): {e}"))
 
     threading.Thread(target=_notify_wallet_pass_updates, daemon=True).start()
     return redirect(url_for('admin_matches', push_started=1))
