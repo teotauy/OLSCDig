@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
     <title>Dashboard · OLSC Brooklyn</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -60,8 +61,8 @@
 
         .tabs {
             display: flex; gap: 10px; overflow-x: auto; padding: 4px 2px 14px; margin-bottom: 8px;
-            scrollbar-width: none; -webkit-overflow-scrolling: touch; position: sticky; top: 0; z-index: 5;
-            background: rgba(7, 8, 11, 0.3); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 18px;
+            scrollbar-width: none; -webkit-overflow-scrolling: touch;
+            
         }
         .tabs::-webkit-scrollbar { display: none; }
         .tab {
@@ -201,12 +202,6 @@
             <h1>Season Dashboard</h1>
             <div class="sub" id="sub">Loading…</div>
         </div>
-        <nav>
-            <a href="{{ url_for('admin_index') }}">Home</a>
-            <a href="{{ url_for('admin_members') }}">People</a>
-            <a href="{{ url_for('admin_matches') }}">Matches</a>
-            <a href="{{ url_for('admin_leaderboard') }}">Scores</a>
-        </nav>
     </header>
 
     <div class="tabs" id="tabs"></div>
@@ -217,7 +212,8 @@
 
 <script>
 (function () {
-    const DATA_URL = "{{ url_for('admin_dashboard_data') }}";
+    const DATA_URL = "{{ data_url }}";
+    const IS_ADMIN = {{ 'true' if admin else 'false' }};
     const $ = (s, el) => (el || document).querySelector(s);
     let D = null;
     let current = 'season';
@@ -264,6 +260,13 @@
         const ids = new Set(D.played.map(m => m.id));
         D.visibleCheckins = D.checkins.filter(c => ids.has(c[0]));
         D.hiddenCount = D.allPlayed.length - D.played.length;
+    }
+
+    // On a match day, estimated times (when a member was merely added) are
+    // left out once real purchase times exist for that day.
+    function matchDaySales(kick) {
+        const all = D.sales.filter(x => dayKey(x[0]) === dayKey(kick)), exact = all.filter(x => x[1]);
+        return { all, shown: exact.length ? exact : all, hidden: exact.length ? all.length - exact.length : 0 };
     }
 
     // ---------- tooltip ----------
@@ -336,7 +339,7 @@
             <div class="panel"><div class="panel-h"><h2>Memberships</h2><span class="hint">Running total, with match days marked</span></div>
                 <div class="legend"><span><i class="sw" style="background:linear-gradient(135deg,#ffd27a,#c98a12)"></i>Members over time</span><span><i class="sw line" style="background:rgba(255,255,255,.4)"></i>Match day</span></div>
                 <div id="c-sales" class="chart"></div>
-                ${exact < D.sales.length ? `<p class="note"><b>${nf(D.sales.length - exact)} of ${nf(D.sales.length)}</b> sale times are when the member was <b>added here</b>, not when they paid. Re-upload your Squarespace orders CSV on the People page to fix that.</p>` : ''}
+                ${exact < D.sales.length ? `<p class="note"><b>${nf(D.sales.length - exact)} of ${nf(D.sales.length)}</b> sale times are when the member was <b>added here</b>, not when they paid.${IS_ADMIN ? ' Re-upload your Squarespace orders CSV on the People page to fix that.' : ''}</p>` : ''}
             </div>
             <div class="panel"><div class="panel-h"><h2>Coming back</h2><span class="hint">Matches attended per fan</span></div><div id="c-repeat"></div></div>
         </section>`;
@@ -441,7 +444,7 @@
         const bins = {}; cis.forEach(c => { const b = Math.floor(c.t / 300) * 300; bins[b] = (bins[b] || 0) + 1; });
         let peakB = null; Object.entries(bins).forEach(([b, n]) => { if (!peakB || n > peakB.n) peakB = { b: Number(b), n }; });
         const med = cis[Math.floor((total - 1) / 2)].t;
-        const sameDay = D.sales.filter(s => dayKey(s[0]) === dayKey(kick));
+        const sameDay = matchDaySales(kick).shown;
         const leadMin = Math.round((kick - first) / 60);
         const trickleMin = Math.max(1, Math.round((last - surgeEnd) / 60));
         const res = resultKey(m.result);
@@ -475,7 +478,7 @@
                 <span><i class="sw" style="background:#c9ccd3"></i>Checked in by name</span>
                 <span><i class="sw line"></i>Running total</span>
                 <span><i class="sw diamond" style="background:#f6b73c"></i>Membership sold</span>
-                <span><i class="sw diamond hollow"></i>Time added to system (estimate)</span>
+                ${sameDay.some(x => !x[1]) ? '<span><i class="sw diamond hollow"></i>Time added to system (estimate)</span>' : ''}
             </div>
             <div id="c-arrival" class="chart"></div>
             <p class="note" id="lane-note"></p>
@@ -485,7 +488,7 @@
             <p class="insight" id="sales-day-insight"></p>
             <div class="legend">
                 <span><i class="sw diamond" style="background:#f6b73c"></i>Purchase time</span>
-                <span><i class="sw diamond hollow"></i>Time added to system (estimate)</span>
+                ${sameDay.some(x => !x[1]) ? '<span><i class="sw diamond hollow"></i>Time added to system (estimate)</span>' : ''}
                 <span><i class="sw" style="background:rgba(227,27,35,.35)"></i>Fans arriving</span>
             </div>
             <div id="c-sales-day" class="chart"></div>
@@ -529,11 +532,11 @@
     }
 
     function drawArrival(el, m, cis, surge, surgePct, first, surgeEnd) {
-        const W = chartWidth(el), H = 430, L = 44, R = 46, T = 44, B = 112, iw = W - L - R, ih = H - T - B;
+        const W = chartWidth(el), H = 400, L = 44, R = 46, T = 52, B = 60, iw = W - L - R, ih = H - T - B;
         const kick = m.kickoff, last = cis[cis.length - 1].t, total = cis.length;
         const d0 = Math.floor((first - 600) / 300) * 300;
         const d1 = Math.ceil((Math.max(last, kick) + 600) / 300) * 300;
-        const sales = D.sales.filter(s => dayKey(s[0]) === dayKey(kick) && s[0] >= d0 - 1800 && s[0] <= d1 + 1800);
+        const dayInfo = matchDaySales(kick), sales = dayInfo.shown.filter(s => s[0] >= d0 - 1800 && s[0] <= d1 + 1800);
         const dd0 = sales.length ? Math.min(d0, Math.floor((Math.min(...sales.map(s => s[0])) - 300) / 300) * 300) : d0;
         const dd1 = sales.length ? Math.max(d1, Math.ceil((Math.max(...sales.map(s => s[0])) + 300) / 300) * 300) : d1;
         const span = dd1 - dd0, X = (t) => L + ((t - dd0) / span) * iw;
@@ -581,21 +584,19 @@
             if (Math.abs(X(t) - kx) < 90) continue;
             s += `<text class="ax" x="${X(t)}" y="${T + ih + 26}" text-anchor="middle">${timeFmt(t)}</text>`;
         }
-        // memberships lane
-        const laneY = T + ih + 74;
-        s += `<line x1="${L}" x2="${W - R}" y1="${laneY}" y2="${laneY}" stroke="rgba(255,255,255,.12)"/>`;
-        s += `<text class="ax" x="${L}" y="${laneY - 28}" style="letter-spacing:1.2px;font-size:11px">MEMBERSHIPS SOLD</text>`;
-        const dayAll = D.sales.filter(x => dayKey(x[0]) === dayKey(kick)), outside = dayAll.length - sales.length;
-        const laneNote = !sales.length
-            ? (dayAll.length ? `No memberships were recorded during the arrival window. <b>${dayAll.length}</b> were recorded that day outside it (earliest ${timeFmt(dayAll[0][0])}).` : 'No memberships were recorded that day.')
-            : (outside > 0 ? `<b>${outside}</b> more were recorded that day outside this window.` : '');
+        // memberships: each sits on top of the bar for its five-minute slot
+        const dayAll = dayInfo.shown, outside = dayAll.length - sales.length;
+        const laneNote = (!sales.length
+            ? (dayAll.length ? `No memberships were sold during the arrival window. <b>${dayAll.length}</b> were sold that day outside it (earliest ${timeFmt(Math.min(...dayAll.map(x => x[0])))}).` : 'No memberships were recorded that day.')
+            : (outside > 0 ? `<b>${outside}</b> more were sold that day outside this window.` : ''))
+            + (dayInfo.hidden ? ` <span style="color:var(--mute)">${dayInfo.hidden} other member${dayInfo.hidden === 1 ? ' was' : 's were'} added that day without a purchase time, so they aren’t shown.</span>` : '');
         const noteEl = $('#lane-note'); if (noteEl) noteEl.innerHTML = laneNote;
-        const stack = {};
+        const perBin = {};
         sales.slice().sort((a, b) => a[0] - b[0]).forEach(([t, exact]) => {
-            const key = Math.floor(t / 180); stack[key] = (stack[key] || 0) + 1;
-            const x = X(t), y = laneY - 2 - (stack[key] - 1) * 17;
+            const i = Math.min(nb - 1, Math.max(0, Math.floor((t - dd0) / 300))), k = perBin[i] = (perBin[i] || 0) + 1;
+            const cx = L + i * binW + binW / 2, y = Math.max(T - 4, T + ih - (counts[i] / yMax) * ih - 15 - (k - 1) * 20);
             const tipHtml = `<b>Membership</b> <span class='t-mute'>${timeFmt(t)}</span><br><span class='t-mute'>${exact ? 'Purchase time from Squarespace' : 'Time added to system, not purchase time'}</span>`;
-            s += `<g data-tip="${esc(tipHtml)}" class="fade-in" style="cursor:default"><rect x="${x - 7}" y="${y - 7}" width="14" height="14" transform="rotate(45 ${x} ${y})" rx="2" fill="${exact ? '#f6b73c' : 'rgba(7,8,11,.9)'}" stroke="#f6b73c" stroke-width="2"/></g>`;
+            s += `<g data-tip="${esc(tipHtml)}" class="fade-in" style="cursor:default"><rect x="${cx - 11}" y="${y - 11}" width="22" height="22" transform="rotate(45 ${cx} ${y})" rx="4" fill="rgba(7,8,11,.88)"/><rect x="${cx - 8}" y="${y - 8}" width="16" height="16" transform="rotate(45 ${cx} ${y})" rx="2.5" fill="${exact ? '#f6b73c' : 'rgba(7,8,11,.9)'}" stroke="#f6b73c" stroke-width="2"/></g>`;
         });
         el.innerHTML = s + '</svg>';
     }

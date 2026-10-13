@@ -2658,27 +2658,13 @@ def admin_leaderboard():
     )
 
 
-@app.route('/admin/dashboard')
-def admin_dashboard():
-    if not require_password():
-        return redirect(url_for('login'))
-    return render_template(
-        'admin_dashboard.html',
-        wordmark_data_uri=_asset_data_uri(PASS_THEMES["home"]["wordmark_path"]),
-    )
-
-
-@app.route('/api/admin/dashboard.json')
-def admin_dashboard_data():
+def _dashboard_payload():
     """Everything the dashboard draws, as raw timestamps -- the page does
     the binning and charting. Check-ins carry an anonymous member id (only
     to count repeat attendance), never a name."""
-    if not require_password():
-        return jsonify({"status": "error", "code": "unauthorized"}), 401
-
     season = db.get_current_season()
     if not season:
-        return jsonify({"status": "ok", "season": None, "matches": [], "checkins": [], "sales": []})
+        return {"status": "ok", "season": None, "matches": [], "checkins": [], "sales": []}
 
     with db.cursor() as cur:
         cur.execute(
@@ -2726,7 +2712,7 @@ def admin_dashboard_data():
             )
             sales = [[r['t'], 0] for r in cur.fetchall()]
 
-    return jsonify({
+    return {
         "status": "ok",
         "season": {"id": season['id'], "name": season['name']},
         "tz": os.getenv('TIMEZONE', 'America/New_York'),
@@ -2735,7 +2721,51 @@ def admin_dashboard_data():
         "matches": matches,
         "checkins": checkins,
         "sales": sales,
-    })
+    }
+
+
+def _dashboard_page(data_url, admin):
+    return render_template(
+        'admin_dashboard.html',
+        wordmark_data_uri=_asset_data_uri(PASS_THEMES["home"]["wordmark_path"]),
+        data_url=data_url,
+        admin=admin,
+    )
+
+
+@app.route('/admin/dashboard')
+def admin_dashboard():
+    if not require_password():
+        return redirect(url_for('login'))
+    return _dashboard_page(url_for('admin_dashboard_data'), admin=True)
+
+
+@app.route('/api/admin/dashboard.json')
+def admin_dashboard_data():
+    if not require_password():
+        return jsonify({"status": "error", "code": "unauthorized"}), 401
+    return jsonify(_dashboard_payload())
+
+
+def _dashboard_share_ok(token):
+    """The read-only share link is off until DASHBOARD_SHARE_TOKEN is set;
+    changing or clearing that value revokes every link already sent."""
+    expected = (os.getenv('DASHBOARD_SHARE_TOKEN') or '').strip()
+    return bool(expected) and secrets.compare_digest(token, expected)
+
+
+@app.route('/stats/<token>')
+def shared_dashboard(token):
+    if not _dashboard_share_ok(token):
+        return "Not found", 404
+    return _dashboard_page(url_for('shared_dashboard_data', token=token), admin=False)
+
+
+@app.route('/api/stats/<token>.json')
+def shared_dashboard_data(token):
+    if not _dashboard_share_ok(token):
+        return jsonify({"status": "error", "code": "not_found"}), 404
+    return jsonify(_dashboard_payload())
 
 
 # Aug 20, 2026: the exact time the webServiceURL double-/v1 fix was pushed
