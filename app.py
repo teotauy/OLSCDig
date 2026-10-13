@@ -1573,6 +1573,13 @@ def _parse_order_time(value):
             return datetime.strptime(value, fmt)
         except ValueError:
             continue
+    # Squarespace's own export: "10/11/26 22:29", no timezone.
+    for fmt in ("%m/%d/%y %H:%M", "%m/%d/%Y %H:%M", "%m/%d/%y %H:%M:%S", "%m/%d/%Y %H:%M:%S",
+                "%m/%d/%y %I:%M %p", "%m/%d/%Y %I:%M %p", "%m/%d/%y %I:%M:%S %p", "%m/%d/%Y %I:%M:%S %p"):
+        try:
+            return _display_tz().localize(datetime.strptime(value, fmt))
+        except ValueError:
+            continue
     try:
         parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
     except ValueError:
