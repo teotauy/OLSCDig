@@ -82,6 +82,25 @@ Render (`olsc-web-app`, see `render.yaml`), auto-deploys on push to
 (`.github/workflows/check-next-match.yml`) checks for match changes and
 pushes Wallet updates automatically.
 
+## Certificate renewal
+
+The Apple **Pass Type ID certificate** (`pass.com.twentysix.digitalID`,
+`APPLE_PASS_CERT_P12_BASE64` in Render) expires **Sep 5, 2027** — separate
+from the annual $99 Developer Program membership, and it does not
+auto-renew. WWDR intermediate cert is fine until 2030.
+
+Renew by generating a *new* certificate for the same Pass Type ID in the
+Apple Developer portal before the old one expires (Apple allows both to
+be valid at once — no forced revocation). Expiration only blocks signing
+new passes; already-installed member passes keep working either way.
+Revocation is the one to avoid — that breaks live passes immediately.
+
+Steps: Developer portal → Identifiers → Pass Type IDs →
+`pass.com.twentysix.digitalID` → new CSR via Keychain Access → upload →
+download `pass.cer` → import to Keychain → export new `.p12` → base64 →
+swap into Render's `APPLE_PASS_CERT_P12_BASE64` and redeploy. No code
+changes needed — `wallet_pass.py` just reads whatever's in the env var.
+
 ## Current known gaps
 
 Tracked honestly — full list in

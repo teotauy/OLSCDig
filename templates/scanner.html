@@ -19,24 +19,26 @@
             background: #fff;
             border-radius: 22px;
             box-shadow: 0 16px 48px rgba(0,0,0,0.4);
-            overflow: hidden;
         }
         /* Theme mirrors the 2026/27 kit — home (red) vs road (white, red
            lettering) — driven by the same is_home source as the pass and
            mobile web page, so scanner/pass/page never disagree. */
         .header {
-            padding: 22px 18px;
-            text-align: center;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            border-radius: 22px 22px 0 0;
         }
         .header.theme-home { background: linear-gradient(160deg, #e31b23 0%, #a30d25 100%); color: #fff; }
         .header.theme-away { background: linear-gradient(160deg, #ffffff 0%, #f0f0f0 100%); color: #e31b23; border-bottom: 1px solid #eee; }
-        .wordmark { max-width: 170px; height: auto; display: block; margin: 0 auto 10px; }
-        .header .role { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; opacity: 0.75; margin-bottom: 2px; }
+        .wordmark { max-width: 96px; height: auto; display: block; margin: 0; flex: 0 0 auto; }
+        .header-info { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; min-width: 0; }
         .match {
-            margin-top: 10px;
             display: inline-block;
             border-radius: 999px;
-            padding: 8px 14px;
+            padding: 5px 12px;
             font-size: 13px;
             font-weight: 600;
         }
@@ -128,30 +130,30 @@
         input:focus { outline: none; border-color: #e31b23; }
 
         .result {
-            margin: 16px;
-            border-radius: 20px;
-            padding: 20px 16px;
+            margin: 10px;
+            border-radius: 16px;
+            padding: 10px 12px;
             text-align: center;
             border: 4px solid #e4e4e4;
             background: #fafafa;
-            min-height: 132px;
+            min-height: 84px;
             display: flex;
             flex-direction: column;
             justify-content: center;
             transition: all 0.2s ease;
             position: sticky;
-            top: 8px;
+            top: 6px;
             z-index: 10;
         }
         .result.idle { color: #666; }
         .result.success { background: #d9fbe6; color: #063d1d; border-color: #00a65a; box-shadow: 0 0 0 8px rgba(0,166,90,0.18); }
         .result.warning { background: #fff4cf; color: #4a3300; border-color: #ffb000; box-shadow: 0 0 0 8px rgba(255,176,0,0.2); }
         .result.error { background: #ffe1e6; color: #5c0010; border-color: #e31b23; box-shadow: 0 0 0 8px rgba(227,27,35,0.18); }
-        .result h2 { font-size: 38px; line-height: 1.0; margin-bottom: 8px; letter-spacing: -0.5px; }
-        .result .member { font-size: 23px; font-weight: 800; margin-bottom: 6px; }
-        .result .detail { font-size: 15px; line-height: 1.4; }
+        .result h2 { font-size: 30px; line-height: 1.0; margin-bottom: 4px; letter-spacing: -0.5px; }
+        .result .member { font-size: 21px; font-weight: 800; margin-bottom: 2px; }
+        .result .detail { font-size: 14px; line-height: 1.3; }
 
-        .ball { display: none; font-size: 32px; margin-bottom: 6px; animation: bounce 0.55s ease-in-out 4; }
+        .ball { display: none; position: absolute; left: 12px; top: 10px; font-size: 26px; animation: bounce 0.55s ease-in-out 4; }
         .success .ball { display: block; }
         @keyframes bounce {
             0%, 100% { transform: translateY(0) scale(1); }
@@ -164,28 +166,28 @@
 
         @media (max-width: 430px) {
             body { padding: 8px; }
-            .header { padding: 16px; }
-            .result { margin: 10px; min-height: 118px; padding: 16px 12px; }
-            .result h2 { font-size: 34px; }
-            .section { padding: 12px; }
+            .header { padding: 8px 12px; }
+            .result { margin: 8px; min-height: 76px; padding: 8px 10px; }
+            .section { padding: 10px; }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header {{ 'theme-home' if is_home else 'theme-away' }}">
-            <div class="role">Scan in</div>
             <img class="wordmark" src="{{ wordmark_data_uri }}" alt="OLSC Brooklyn — Official Supporters Club">
-            <div class="match">
+            <div class="header-info">
+                <div class="match">
+                    {% if match %}
+                        {{ match.label }}{% if match.kickoff %} · {{ match.kickoff.split(', ')[-1] }}{% endif %}
+                    {% else %}
+                        No match today
+                    {% endif %}
+                </div>
                 {% if match %}
-                    {{ match.label }}{% if match.kickoff %} · {{ match.kickoff }}{% endif %}
-                {% else %}
-                    No match set
+                <div class="match" id="checkedInCount">{{ checked_in_count }} checked in</div>
                 {% endif %}
             </div>
-            {% if match %}
-            <div class="match" id="checkedInCount" style="margin-left:6px;">{{ checked_in_count }} checked in</div>
-            {% endif %}
         </div>
 
         <div id="result" class="result idle">
@@ -193,7 +195,7 @@
             <h2>Ready</h2>
             <div class="detail">Scan a pass.</div>
             {% if not match %}
-                <div class="detail" style="margin-top:8px; font-weight:700;">Pick a match first.</div>
+                <div class="detail" style="margin-top:8px; font-weight:700;">No match today. Scanning is off. For a special event, add it under Matches.</div>
             {% endif %}
         </div>
 
@@ -382,16 +384,35 @@
             }
         }
 
+        // True while door staff expect the camera to be live. Used to bring
+        // it back after the phone was backgrounded (switching apps, locking
+        // the screen), which leaves the video stream dead on iOS/Android.
+        let cameraWanted = false;
+
         async function startCamera() {
             if (!window.Html5Qrcode) {
                 setResult('error', 'Camera Error', '', 'Scanner library did not load. Use manual backup.');
                 return;
             }
-            if (!scanner) scanner = new Html5Qrcode('reader');
+            if (!scanner) scanner = new Html5Qrcode('reader', {
+                // Passes only carry QR codes; skipping every other format,
+                // and the mirrored-image retry, makes each frame decode faster.
+                formatsToSupport: window.Html5QrcodeSupportedFormats ? [Html5QrcodeSupportedFormats.QR_CODE] : undefined,
+            });
+            cameraWanted = true;
             try {
                 await scanner.start(
                     { facingMode: 'environment' },
-                    { fps: 10, qrbox: { width: 240, height: 240 } },
+                    {
+                        fps: 12,
+                        // Scan region scales with the view (a wider target
+                        // forgives bad angles and glare) instead of a fixed 240px.
+                        qrbox: (viewWidth, viewHeight) => {
+                            const edge = Math.floor(Math.min(viewWidth, viewHeight) * 0.78);
+                            return { width: edge, height: edge };
+                        },
+                        disableFlip: true,
+                    },
                     decodedText => submitScan(decodedText),
                     () => {}
                 );
@@ -403,7 +424,7 @@
             }
         }
 
-        async function stopCamera() {
+        async function releaseCamera() {
             if (!scanner) return;
             try {
                 await scanner.stop();
@@ -412,8 +433,28 @@
             }
             startBtn.disabled = false;
             stopBtn.disabled = true;
+        }
+
+        async function stopCamera() {
+            cameraWanted = false;
+            await releaseCamera();
             setResult('idle', 'Ready', '', 'Scan a pass QR code.');
         }
+
+        // Coming back from another app: the old stream is dead even though
+        // the page looks fine, so tear it down and start a fresh one.
+        document.addEventListener('visibilitychange', async () => {
+            if (document.hidden || !cameraWanted || cameraMode.style.display === 'none') return;
+            await releaseCamera();
+            startCamera().catch(() => {});
+        });
+        // iOS restores pages from its back/forward cache without re-running
+        // load, which has the same dead-stream effect.
+        window.addEventListener('pageshow', async event => {
+            if (!event.persisted || !cameraWanted || cameraMode.style.display === 'none') return;
+            await releaseCamera();
+            startCamera().catch(() => {});
+        });
 
         startBtn.addEventListener('click', startCamera);
         stopBtn.addEventListener('click', stopCamera);

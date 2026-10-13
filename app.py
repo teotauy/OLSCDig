@@ -1381,6 +1381,115 @@ def _extract_scan_token(raw_value):
     return value
 
 
+NO_MATCH_TODAY_MESSAGE = "No match today. For a special event, add it under Matches first."
+
+
+def _display_tz():
+    return pytz.timezone(os.getenv('TIMEZONE', 'America/New_York'))
+
+
+def _kickoff_from_next_match(next_match):
+    """get_next_match() carries only display strings ("Sunday, October 11"
+    and "11:30 AM"); rebuild a real kickoff datetime from them."""
+    tz = _display_tz()
+    now = datetime.now(tz)
+    day = datetime.strptime(f"{next_match['full_date']} {now.year}", "%A, %B %d %Y").date()
+    if (now.date() - day).days > 180:
+        day = day.replace(year=day.year + 1)
+    cleaned = (next_match.get('kickoff') or '').upper().replace('.', '').replace(' ', '')
+    kick_time = None
+    for fmt in ("%I:%M%p", "%I%p", "%H:%M"):
+        try:
+            kick_time = datetime.strptime(cleaned, fmt).time()
+            break
+        except ValueError:
+            continue
+    if kick_time is None:
+        kick_time = datetime.strptime("12:00", "%H:%M").time()
+    return tz.localize(datetime.combine(day, kick_time))
+
+
+def _todays_match_row(cur, season_id):
+    today = datetime.now(_display_tz()).date()
+    cur.execute(
+        """
+        SELECT * FROM matches
+        WHERE season_id = %s AND (kickoff_at AT TIME ZONE %s)::date = %s
+        ORDER BY is_current DESC, kickoff_at LIMIT 1
+        """,
+        (season_id, os.getenv('TIMEZONE', 'America/New_York'), today),
+    )
+    return cur.fetchone()
+
+
+_SCANNER_MATCH_CACHE = {"day": None, "row": None, "at": 0.0}
+SCANNER_MATCH_CACHE_SECONDS = 300
+
+
+def _resolve_scanner_match(create_if_missing=True):
+    """The match check-ins count against: today's match, picked
+    automatically. A matches row dated today wins (so a hand-added special
+    event works); otherwise, if the live fixture feed says Liverpool play
+    today, the row is created from it. Returns None on a non-match day, so
+    the scanner shows "no match today" instead of a stale count from the
+    last match that was clicked "current". Never raises: if the feed or DB
+    hiccups, an existing row for today is still used. A found match is
+    cached briefly so a queue of scans doesn't re-query every time."""
+    try:
+        today = datetime.now(_display_tz()).date()
+        cache = _SCANNER_MATCH_CACHE
+        if cache["row"] and cache["day"] == today and time.time() - cache["at"] < SCANNER_MATCH_CACHE_SECONDS:
+            return dict(cache["row"])
+        with db.cursor() as cur:
+            cur.execute("SELECT id, name FROM seasons WHERE is_current")
+            season = cur.fetchone()
+            row = _todays_match_row(cur, season['id']) if season else None
+        if not season:
+            return None
+        if not row and create_if_missing:
+            row = _create_todays_match_from_fixtures(season)
+        if not row:
+            return None
+        if not row['is_current']:
+            with db.cursor() as cur:
+                cur.execute("UPDATE matches SET is_current = FALSE WHERE is_current")
+                cur.execute("UPDATE matches SET is_current = TRUE WHERE id = %s", (row['id'],))
+            row['is_current'] = True
+        cache.update(day=today, row=dict(row), at=time.time())
+        return row
+    except Exception as e:
+        print(f"Could not resolve today's scanner match: {e}")
+        return None
+
+
+def _create_todays_match_from_fixtures(season):
+    try:
+        next_match = get_next_match()
+        if not next_match:
+            return None
+        kickoff_at = _kickoff_from_next_match(next_match)
+    except Exception as e:
+        print(f"Could not read the fixture feed for today's match: {e}")
+        return None
+    if kickoff_at.date() != datetime.now(_display_tz()).date():
+        return None
+    with db.cursor() as cur:
+        # Two scanners opening at once must not both insert a row.
+        cur.execute("SELECT pg_advisory_xact_lock(%s)", (741852,))
+        row = _todays_match_row(cur, season['id'])
+        if row:
+            return row
+        cur.execute(
+            """
+            INSERT INTO matches (season_id, opponent, is_home, competition, kickoff_at)
+            VALUES (%s, %s, %s, %s, %s) RETURNING *
+            """,
+            (season['id'], abbreviate_team_name(next_match['opponent']),
+             bool(next_match.get('is_home', True)), '', kickoff_at),
+        )
+        return cur.fetchone()
+
+
 def _format_match_for_scan(match):
     if not match:
         return None
@@ -1426,7 +1535,52 @@ def _likely_email_typo(email):
     return f"{local}@{matches[0]}"
 
 
-def _upsert_member_in_season(cur, first_name, last_name, email, phone, season_id):
+def _existing_member_in_season(cur, email, season_id):
+    """The member already holding this email in this season, or None. A
+    second purchase under the same email (typically a gift bought with the
+    buyer's own email) must not touch this person's name or pass."""
+    cur.execute(
+        """
+        SELECT m.id, m.first_name, m.last_name
+        FROM members m JOIN member_seasons ms ON ms.member_id = m.id
+        WHERE m.email = %s AND ms.season_id = %s
+        """,
+        (email, season_id),
+    )
+    return cur.fetchone()
+
+
+def _alert_club(subject, text):
+    """Plain-text heads-up to the club's own inbox for things a person has
+    to resolve (the order webhook can't ask anyone a question)."""
+    to_email = (os.getenv("ADMIN_ALERT_EMAIL") or os.getenv("RESEND_REPLY_TO") or "OLSC_BK@olscbrooklyn.com").strip()
+    try:
+        return _send_email_resend(to_email, subject, text=text)
+    except Exception as e:
+        print(f"Could not send club alert '{subject}': {e}")
+        return False
+
+
+def _parse_order_time(value):
+    """Squarespace's order time ("2025-10-08 17:17:35 -0400" in its CSV
+    export, ISO 8601 elsewhere) as an aware datetime, or None. A time with
+    no offset is read as the club's local time."""
+    value = (value or '').strip()
+    if not value:
+        return None
+    for fmt in ("%Y-%m-%d %H:%M:%S %z", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S.%f%z"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    try:
+        parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else _display_tz().localize(parsed)
+
+
+def _upsert_member_in_season(cur, first_name, last_name, email, phone, season_id, sold_at=None):
     """Returns (member_id, was_new) — was_new is False whenever this email
     already had a members row, whether from earlier in the same import,
     a previous season, or an earlier add. Callers that care about
@@ -1437,23 +1591,52 @@ def _upsert_member_in_season(cur, first_name, last_name, email, phone, season_id
         INSERT INTO members (first_name, last_name, email, phone)
         VALUES (%s, %s, %s, %s)
         ON CONFLICT (email) DO UPDATE SET
-            first_name = EXCLUDED.first_name,
-            last_name = EXCLUDED.last_name,
+            first_name = CASE WHEN EXISTS (
+                SELECT 1 FROM member_seasons ms
+                WHERE ms.member_id = members.id AND ms.season_id = %s
+            ) THEN members.first_name ELSE EXCLUDED.first_name END,
+            last_name = CASE WHEN EXISTS (
+                SELECT 1 FROM member_seasons ms
+                WHERE ms.member_id = members.id AND ms.season_id = %s
+            ) THEN members.last_name ELSE EXCLUDED.last_name END,
             phone = EXCLUDED.phone
         RETURNING id, (xmax = 0) AS was_new
         """,
-        (first_name, last_name, email, phone),
+        (first_name, last_name, email, phone, season_id, season_id),
     )
     row = cur.fetchone()
     member_id, was_new = row['id'], row['was_new']
-    cur.execute(
-        """
-        INSERT INTO member_seasons (member_id, season_id)
-        VALUES (%s, %s)
-        ON CONFLICT (member_id, season_id) DO NOTHING
-        """,
-        (member_id, season_id),
-    )
+    recorded = False
+    if sold_at:
+        # A re-imported order export fixes the sale time of members already
+        # added; the earlier of the two times always wins. If sold_at hasn't
+        # been migrated yet, fall back to a plain add rather than failing.
+        cur.execute("SAVEPOINT sold_at_try")
+        try:
+            cur.execute(
+                """
+                INSERT INTO member_seasons (member_id, season_id, sold_at)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (member_id, season_id) DO UPDATE SET
+                    sold_at = LEAST(member_seasons.sold_at, EXCLUDED.sold_at)
+                """,
+                (member_id, season_id, sold_at),
+            )
+            cur.execute("RELEASE SAVEPOINT sold_at_try")
+            recorded = True
+        except Exception as e:
+            if 'sold_at' not in str(e):
+                raise
+            cur.execute("ROLLBACK TO SAVEPOINT sold_at_try")
+    if not recorded:
+        cur.execute(
+            """
+            INSERT INTO member_seasons (member_id, season_id)
+            VALUES (%s, %s)
+            ON CONFLICT (member_id, season_id) DO NOTHING
+            """,
+            (member_id, season_id),
+        )
     return member_id, was_new
 
 
@@ -1476,6 +1659,13 @@ def admin_members():
             error = "First name, last name, and email are required."
         else:
             try:
+                with db.cursor() as cur:
+                    existing = _existing_member_in_season(cur, email, season['id'])
+                if existing and (existing['first_name'].strip().lower(), existing['last_name'].strip().lower()) != (first_name.lower(), last_name.lower()):
+                    raise ValueError(
+                        f"{existing['first_name']} {existing['last_name']} already has a {season['name']} membership under {email}. "
+                        "Use a different email for this person (a gift recipient needs their own)."
+                    )
                 with db.cursor() as cur:
                     member_id, _ = _upsert_member_in_season(cur, first_name, last_name, email, phone, season['id'])
                 added = f"{first_name} {last_name}"
@@ -1678,6 +1868,15 @@ def _passkit_web_service_url():
     return f"{_public_base_url()}{PASSKIT_WEBSERVICE_BASE}"
 
 
+def _is_matchday(next_match):
+    """True when the next match is today (display timezone). Drives the
+    pass's venue location, so the lock-screen "Up the Reds." prompt only
+    fires on game days instead of every time someone walks past the bar."""
+    if not next_match:
+        return False
+    return next_match.get('full_date') == datetime.now(_display_tz()).strftime("%A, %B %d")
+
+
 def _doors_note_match_key(next_match):
     """Identifies which match a doors note was written for."""
     if not next_match:
@@ -1702,9 +1901,11 @@ def _member_pass_data(member, serial_number, raw_token, season_name, auth_token=
     next_match_short = ""
     doors_note = ""
     is_home = True
+    matchday = False
     try:
         next_match = get_next_match()
         if next_match:
+            matchday = _is_matchday(next_match)
             doors_note = _current_doors_note(next_match)
             next_match_text = next_match.get('pass_display') or ""
             # pass_display is always "Short Team | Date Time" (both the
@@ -1731,6 +1932,7 @@ def _member_pass_data(member, serial_number, raw_token, season_name, auth_token=
         doors_note=doors_note,
         description="OLSC Brooklyn Membership",
         is_home=is_home,
+        **({} if matchday else {"locations": ()}),
         relevant_date=_current_match_relevant_date(),
         expiration_date=_season_expiration_date(season_name),
     )
@@ -1849,6 +2051,7 @@ def _next_match_fingerprint():
         str(next_match.get('full_date', '')),
         str(next_match.get('kickoff', '')),
         str(next_match.get('is_home', '')),
+        str(_is_matchday(next_match)),
     ])
 
 
@@ -2214,7 +2417,29 @@ def squarespace_order_webhook():
         return jsonify({"error": "no current season set"}), 400
 
     with db.cursor() as cur:
-        member_id, _ = _upsert_member_in_season(cur, first_name, last_name, email, phone, season['id'])
+        existing = _existing_member_in_season(cur, email, season['id'])
+    if existing:
+        # Already a member this season under this email -- most likely a gift
+        # bought with the buyer's own email. Leave their name and pass alone
+        # (re-issuing would kill the pass they already have) and tell a human.
+        existing_name = f"{existing['first_name']} {existing['last_name']}".strip()
+        order_name = f"{first_name} {last_name}".strip()
+        _alert_club(
+            f"Duplicate membership order for {email}",
+            f"Squarespace order {order_id} came in for {order_name} <{email}>, but {existing_name} "
+            f"already has a {season['name']} membership under that email, so nothing was changed.\n\n"
+            f"If this was a gift, add the recipient under Members with their own email address.",
+        )
+        return jsonify({
+            "status": "duplicate_in_season",
+            "member_id": existing['id'],
+            "email": email,
+            "pass_sent": False,
+        }), 200
+
+    sold_at = _parse_order_time(data.get('created_at') or data.get('sold_at'))
+    with db.cursor() as cur:
+        member_id, _ = _upsert_member_in_season(cur, first_name, last_name, email, phone, season['id'], sold_at=sold_at)
 
     new_member = {"id": member_id, "first_name": first_name, "last_name": last_name, "email": email}
     pass_ok, pass_message = _issue_and_email_pass(new_member, season)
@@ -2298,10 +2523,11 @@ def admin_members_import():
                     })
 
                 phone = (field('phone', 'person.mobilenumber') or '').strip()
+                sold_at = _parse_order_time(field('created at', 'paid at', 'sold_at'))
 
                 try:
                     cur.execute("SAVEPOINT row_import")
-                    _, was_new = _upsert_member_in_season(cur, first_name, last_name, email, phone, season['id'])
+                    _, was_new = _upsert_member_in_season(cur, first_name, last_name, email, phone, season['id'], sold_at=sold_at)
                     cur.execute("RELEASE SAVEPOINT row_import")
                     imported += 1
                     if not was_new:
@@ -2416,6 +2642,86 @@ def admin_leaderboard():
         rows=rows,
         wordmark_data_uri=_current_theme_wordmark_data_uri(),
     )
+
+
+@app.route('/admin/dashboard')
+def admin_dashboard():
+    if not require_password():
+        return redirect(url_for('login'))
+    return render_template(
+        'admin_dashboard.html',
+        wordmark_data_uri=_asset_data_uri(PASS_THEMES["home"]["wordmark_path"]),
+    )
+
+
+@app.route('/api/admin/dashboard.json')
+def admin_dashboard_data():
+    """Everything the dashboard draws, as raw timestamps -- the page does
+    the binning and charting. Check-ins carry an anonymous member id (only
+    to count repeat attendance), never a name."""
+    if not require_password():
+        return jsonify({"status": "error", "code": "unauthorized"}), 401
+
+    season = db.get_current_season()
+    if not season:
+        return jsonify({"status": "ok", "season": None, "matches": [], "checkins": [], "sales": []})
+
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, opponent, is_home, competition, result, final_score,
+                   extract(epoch FROM kickoff_at)::bigint AS kickoff
+            FROM matches WHERE season_id = %s ORDER BY kickoff_at
+            """,
+            (season['id'],),
+        )
+        matches = [dict(r) for r in cur.fetchall()]
+
+        cur.execute(
+            """
+            SELECT c.match_id, extract(epoch FROM c.checked_in_at)::bigint AS t,
+                   (c.source = 'manual') AS manual, c.member_id
+            FROM checkins c JOIN matches m ON m.id = c.match_id
+            WHERE m.season_id = %s ORDER BY c.checked_in_at
+            """,
+            (season['id'],),
+        )
+        checkins = [[r['match_id'], r['t'], 1 if r['manual'] else 0, r['member_id']] for r in cur.fetchall()]
+
+        cur.execute("SELECT count(*) AS n FROM member_seasons WHERE season_id = %s", (season['id'],))
+        member_count = cur.fetchone()['n']
+
+    sales = []
+    try:
+        with db.cursor() as cur:
+            cur.execute(
+                """
+                SELECT extract(epoch FROM COALESCE(sold_at, joined_at))::bigint AS t,
+                       (sold_at IS NOT NULL) AS exact
+                FROM member_seasons WHERE season_id = %s ORDER BY 1
+                """,
+                (season['id'],),
+            )
+            sales = [[r['t'], 1 if r['exact'] else 0] for r in cur.fetchall()]
+    except Exception:
+        # sold_at not migrated yet: fall back to when each row was entered.
+        with db.cursor() as cur:
+            cur.execute(
+                "SELECT extract(epoch FROM joined_at)::bigint AS t FROM member_seasons WHERE season_id = %s ORDER BY 1",
+                (season['id'],),
+            )
+            sales = [[r['t'], 0] for r in cur.fetchall()]
+
+    return jsonify({
+        "status": "ok",
+        "season": {"id": season['id'], "name": season['name']},
+        "tz": os.getenv('TIMEZONE', 'America/New_York'),
+        "generated_at": int(time.time()),
+        "members": member_count,
+        "matches": matches,
+        "checkins": checkins,
+        "sales": sales,
+    })
 
 
 # Aug 20, 2026: the exact time the webServiceURL double-/v1 fix was pushed
@@ -2981,7 +3287,7 @@ def scanner():
         return redirect(url_for('login'))
 
     season = db.get_current_season()
-    match = db.get_current_match()
+    match = _resolve_scanner_match()
     is_home, wordmark_data_uri = _current_theme()
     checked_in_count = db.count_checkins_for_match(match['id']) if match else 0
 
@@ -3005,7 +3311,7 @@ def api_checkins_count():
     "check out" in this system, checkins are a permanent per-match record."""
     if not require_scanner_access():
         return jsonify({"status": "error", "code": "unauthorized"}), 401
-    match = db.get_current_match()
+    match = _resolve_scanner_match(create_if_missing=False)
     if not match:
         return jsonify({"status": "ok", "count": 0, "match_id": None})
     return jsonify({"status": "ok", "count": db.count_checkins_for_match(match['id']), "match_id": match['id']})
@@ -3038,13 +3344,12 @@ def api_checkins_scan():
                     "message": "No current season is configured.",
                 }), 400
 
-            cur.execute("SELECT * FROM matches WHERE is_current")
-            match = cur.fetchone()
+            match = _resolve_scanner_match()
             if not match:
                 return jsonify({
                     "status": "error",
                     "code": "no_current_match",
-                    "message": "No current match is configured. Set one in Matches before scanning.",
+                    "message": NO_MATCH_TODAY_MESSAGE,
                 }), 400
 
             cur.execute(
@@ -3158,10 +3463,9 @@ def api_checkins_manual():
             if not season:
                 return jsonify({"status": "error", "code": "no_current_season", "message": "No current season is configured."}), 400
 
-            cur.execute("SELECT * FROM matches WHERE is_current")
-            match = cur.fetchone()
+            match = _resolve_scanner_match()
             if not match:
-                return jsonify({"status": "error", "code": "no_current_match", "message": "No current match is configured. Set one in Matches before scanning."}), 400
+                return jsonify({"status": "error", "code": "no_current_match", "message": NO_MATCH_TODAY_MESSAGE}), 400
 
             cur.execute(
                 """

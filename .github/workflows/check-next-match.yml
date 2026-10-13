@@ -2,11 +2,14 @@ name: Daily match sync (next-match push + finished-match results)
 
 on:
   schedule:
-    # GitHub Actions cron is UTC-only, no DST awareness. 9am UTC = 10am
-    # British Summer Time (UTC+1, roughly late Mar-late Oct). During GMT
-    # months (UTC+0) this runs at 9am UK time instead of 10 — a harmless
-    # one-hour drift for something that isn't time-critical.
-    - cron: "0 9 * * *"
+    # GitHub Actions cron is UTC-only, no DST awareness, and scheduled runs
+    # are often delayed by hours (the Oct 12 run meant for 9:00 UTC started
+    # at 18:50). One daily slot isn't reliable for something that flips the
+    # pass at midnight ET (next match, matchday-only location), so run five
+    # times a day, offset from the top of the hour where GitHub is busiest.
+    # Runs where nothing changed are cheap: the endpoint only pushes when
+    # the next match changes or some devices never fetched the last update.
+    - cron: "20 5,9,13,17,21 * * *"
   workflow_dispatch: {}
 
 jobs:

@@ -219,3 +219,9 @@ CREATE TABLE IF NOT EXISTS checkins (
     notes TEXT,
     UNIQUE (member_id, match_id)             -- one check-in per member per match
 );
+
+-- When the membership was actually bought (Squarespace's order time), as
+-- opposed to joined_at, which is only when the row was entered here -- a CSV
+-- import lands hundreds of rows at once. NULL = not known. The dashboard
+-- plots sold_at and falls back to joined_at, marked as an estimate.
+ALTER TABLE member_seasons ADD COLUMN IF NOT EXISTS sold_at TIMESTAMPTZ;

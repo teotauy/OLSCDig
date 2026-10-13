@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dashboard · OLSC Brooklyn</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #07080b;
+            --red: #e31b23;
+            --red-hi: #ff5a60;
+            --red-deep: #8f0f16;
+            --gold: #f6b73c;
+            --green: #3ddc84;
+            --amber: #f6b73c;
+            --lose: #ff5a60;
+            --ink: #f4f5f7;
+            --ink-2: #c9ccd3;
+            --mute: #8d93a0;
+            --line: rgba(255, 255, 255, 0.09);
+            --panel: rgba(255, 255, 255, 0.045);
+            --panel-hi: rgba(255, 255, 255, 0.075);
+            --display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+            --text: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html { -webkit-text-size-adjust: 100%; }
+        body {
+            font-family: var(--text);
+            color: var(--ink);
+            background: var(--bg);
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
+        }
+        .glow {
+            position: fixed; inset: 0; pointer-events: none; z-index: 0;
+            background:
+                radial-gradient(900px 520px at 8% -8%, rgba(227, 27, 35, 0.34), transparent 62%),
+                radial-gradient(700px 480px at 100% 0%, rgba(246, 183, 60, 0.10), transparent 60%),
+                radial-gradient(900px 600px at 50% 120%, rgba(227, 27, 35, 0.14), transparent 60%);
+        }
+        .wrap { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 22px 20px 80px; }
+
+        .top { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-bottom: 22px; }
+        .top img { height: 54px; width: auto; display: block; }
+        .top .titles { flex: 1; min-width: 200px; }
+        .top h1 { font-family: var(--display); font-weight: 800; font-size: 40px; letter-spacing: 0.5px; text-transform: uppercase; line-height: 1; }
+        .top .sub { color: var(--mute); font-size: 14px; margin-top: 6px; }
+        .top nav { display: flex; gap: 8px; flex-wrap: wrap; }
+        .top nav a {
+            color: var(--ink-2); text-decoration: none; font-size: 13px; font-weight: 600;
+            padding: 9px 14px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line);
+            transition: background 0.15s, color 0.15s;
+        }
+        .top nav a:hover { background: var(--panel-hi); color: #fff; }
+
+        .tabs {
+            display: flex; gap: 10px; overflow-x: auto; padding: 4px 2px 14px; margin-bottom: 8px;
+            scrollbar-width: none; -webkit-overflow-scrolling: touch; position: sticky; top: 0; z-index: 5;
+            background: rgba(7, 8, 11, 0.3); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 18px;
+        }
+        .tabs::-webkit-scrollbar { display: none; }
+        .tab {
+            flex: 0 0 auto; border: 1px solid var(--line); background: var(--panel); color: var(--ink-2);
+            border-radius: 16px; padding: 10px 16px 11px; cursor: pointer; text-align: left; font-family: var(--text);
+            transition: transform 0.15s, background 0.15s, border-color 0.15s, box-shadow 0.2s;
+            min-width: 92px;
+        }
+        .tab:hover { background: var(--panel-hi); transform: translateY(-1px); }
+        .tab .t-top { font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--mute); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+        .tab .t-main { font-family: var(--display); font-size: 21px; font-weight: 700; letter-spacing: 0.3px; margin-top: 2px; white-space: nowrap; }
+        .tab .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mute); display: inline-block; }
+        .tab .dot.win { background: var(--green); }
+        .tab .dot.draw { background: var(--amber); }
+        .tab .dot.loss { background: var(--lose); }
+        .tab.active {
+            background: linear-gradient(160deg, var(--red) 0%, var(--red-deep) 100%);
+            border-color: rgba(255, 255, 255, 0.28); color: #fff;
+            box-shadow: 0 10px 34px rgba(227, 27, 35, 0.42);
+        }
+        .tab.active .t-top { color: rgba(255, 255, 255, 0.8); }
+
+        .filter { font-size: 12.5px; color: var(--mute); margin: -4px 4px 14px; }
+        .filter button { background: none; border: none; color: var(--red-hi); font: inherit; font-weight: 600; cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 3px; }
+        #view { animation: fadeUp 0.45s ease both; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+        .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(176px, 1fr)); gap: 14px; margin-bottom: 18px; }
+        .kpi {
+            background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 18px 20px 16px;
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            transition: transform 0.2s, background 0.2s;
+        }
+        .kpi:hover { transform: translateY(-2px); background: var(--panel-hi); }
+        .kpi .k-label { font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--mute); font-weight: 600; }
+        .kpi .k-value {
+            font-family: var(--display); font-weight: 800; font-size: 60px; line-height: 1; margin-top: 8px; letter-spacing: 0.5px;
+            background: linear-gradient(180deg, #fff 30%, #ffb4b7 130%); -webkit-background-clip: text; background-clip: text; color: transparent;
+            font-variant-numeric: tabular-nums;
+        }
+        .kpi .k-value small { font-size: 26px; font-weight: 700; letter-spacing: 0.5px; margin-left: 4px; }
+        .kpi .k-value .tm { font-size: 50px; }
+        .kpi .k-value .tm + small { font-size: 20px; }
+        .kpi .k-sub { font-size: 13px; color: var(--ink-2); margin-top: 8px; line-height: 1.35; }
+        .kpi.gold .k-value { background: linear-gradient(180deg, #fff 20%, var(--gold) 140%); -webkit-background-clip: text; background-clip: text; }
+
+        .panel {
+            background: var(--panel); border: 1px solid var(--line); border-radius: 24px; padding: 22px 22px 18px;
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); margin-bottom: 18px; min-width: 0;
+        }
+        .panel-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+        .panel-h h2 { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spacing: 0.8px; text-transform: uppercase; }
+        .panel-h .hint { font-size: 13px; color: var(--mute); }
+        .insight { font-size: 16px; line-height: 1.5; color: var(--ink-2); margin: 4px 0 14px; max-width: 880px; }
+        .insight b { color: #fff; }
+        .grid2 { display: grid; grid-template-columns: 1.6fr 1fr; gap: 18px; }
+        @media (max-width: 880px) { .grid2 { grid-template-columns: 1fr; } }
+
+        .chart { width: 100%; position: relative; }
+        .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+        .legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 6px 0 2px; font-size: 12.5px; color: var(--ink-2); }
+        .legend span { display: inline-flex; align-items: center; gap: 7px; }
+        .sw { width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
+        .sw.diamond { transform: rotate(45deg) scale(0.82); border-radius: 2px; }
+        .sw.hollow { background: transparent !important; border: 2px solid var(--gold); }
+        .sw.line { height: 3px; width: 18px; border-radius: 2px; background: #fff; }
+
+        svg text { font-family: var(--text); }
+        .ax { fill: var(--mute); font-size: 12px; }
+        .ax-strong { fill: var(--ink-2); font-size: 13px; font-weight: 600; }
+        .val { font-family: var(--display) !important; font-weight: 800; font-size: 30px; fill: #fff; }
+        .grid-line { stroke: rgba(255, 255, 255, 0.07); stroke-width: 1; }
+        .bar { transform-box: fill-box; transform-origin: 50% 100%; animation: rise 0.7s cubic-bezier(.2, .8, .2, 1) both; cursor: pointer; transition: filter 0.15s; }
+        .bar:hover { filter: brightness(1.25); }
+        @keyframes rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+        .draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 1.4s ease 0.25s forwards; }
+        @keyframes draw { to { stroke-dashoffset: 0; } }
+        .fade-in { animation: fadeIn 0.8s ease 0.5s both; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .hit { cursor: pointer; }
+
+        .hero {
+            position: relative; overflow: hidden; border-radius: 28px; padding: 30px 30px 26px; margin-bottom: 18px;
+            background: linear-gradient(135deg, rgba(227, 27, 35, 0.9) 0%, rgba(143, 15, 22, 0.92) 60%, rgba(60, 6, 10, 0.95) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.18); box-shadow: 0 22px 60px rgba(227, 27, 35, 0.28);
+        }
+        .hero::after {
+            content: ''; position: absolute; right: -80px; top: -120px; width: 360px; height: 360px; border-radius: 50%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.16), transparent 65%);
+        }
+        .hero-big { position: absolute; right: 34px; top: 22px; text-align: right; z-index: 1; }
+        .hero-big span { font-family: var(--display); font-weight: 800; font-size: 150px; line-height: 0.9; display: block; }
+        .hero-big em { font-style: normal; font-size: 12px; letter-spacing: 2.2px; text-transform: uppercase; color: rgba(255, 255, 255, 0.8); font-weight: 600; }
+        @media (max-width: 760px) { .hero-big { position: static; text-align: left; margin-top: 10px; } .hero-big span { font-size: 84px; } }
+        .hero .eyebrow { font-size: 12px; letter-spacing: 2.2px; text-transform: uppercase; color: rgba(255, 255, 255, 0.78); font-weight: 600; }
+        .hero h2 { font-family: var(--display); font-weight: 800; font-size: 76px; line-height: 0.95; text-transform: uppercase; margin-top: 8px; letter-spacing: 0.5px; }
+        .hero .meta { margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 15px; color: rgba(255, 255, 255, 0.92); }
+        .pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700; letter-spacing: 0.4px; background: rgba(0, 0, 0, 0.28); border: 1px solid rgba(255, 255, 255, 0.2); }
+        .pill.win { background: rgba(61, 220, 132, 0.2); border-color: rgba(61, 220, 132, 0.6); color: #b9f5d3; }
+        .pill.draw { background: rgba(246, 183, 60, 0.2); border-color: rgba(246, 183, 60, 0.6); color: #ffe2a6; }
+        .pill.loss { background: rgba(255, 90, 96, 0.2); border-color: rgba(255, 90, 96, 0.6); color: #ffc7c9; }
+        @media (max-width: 640px) { .hero h2 { font-size: 52px; } .hero { padding: 24px 20px 20px; } .top h1 { font-size: 32px; } .kpi .k-value { font-size: 50px; } }
+
+        .repeat-row { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+        .repeat-row .r-label { width: 120px; font-size: 14px; color: var(--ink-2); flex: 0 0 auto; }
+        .repeat-row .r-track { flex: 1; height: 16px; border-radius: 999px; background: rgba(255, 255, 255, 0.07); overflow: hidden; }
+        .repeat-row .r-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--red-deep), var(--red-hi)); width: 0; transition: width 0.9s cubic-bezier(.2, .8, .2, 1); }
+        .repeat-row .r-num { font-family: var(--display); font-weight: 800; font-size: 28px; width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
+        .note { font-size: 13px; color: var(--mute); line-height: 1.5; margin-top: 14px; }
+        .note b { color: var(--ink-2); }
+        .banner { border: 1px solid rgba(246, 183, 60, 0.35); background: rgba(246, 183, 60, 0.08); color: #ffe2a6; border-radius: 16px; padding: 12px 16px; font-size: 13.5px; line-height: 1.5; margin-bottom: 18px; }
+        .empty { text-align: center; padding: 70px 20px; color: var(--mute); }
+        .empty h2 { font-family: var(--display); font-size: 34px; color: var(--ink); text-transform: uppercase; margin-bottom: 8px; }
+
+        #tip {
+            position: fixed; z-index: 50; pointer-events: none; opacity: 0; transform: translateY(4px);
+            background: rgba(12, 13, 18, 0.96); border: 1px solid rgba(255, 255, 255, 0.16); color: var(--ink);
+            padding: 10px 13px; border-radius: 12px; font-size: 13px; line-height: 1.45; max-width: 260px;
+            box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5); transition: opacity 0.12s, transform 0.12s;
+        }
+        #tip.on { opacity: 1; transform: none; }
+        #tip b { font-weight: 700; }
+        #tip .t-mute { color: var(--mute); }
+
+        @media (prefers-reduced-motion: reduce) {
+            .bar, .draw, .fade-in, #view { animation: none !important; }
+            .draw { stroke-dashoffset: 0; }
+        }
+    </style>
+</head>
+<body>
+<div class="glow"></div>
+<div class="wrap">
+    <header class="top">
+        <img src="{{ wordmark_data_uri }}" alt="OLSC Brooklyn">
+        <div class="titles">
+            <h1>Season Dashboard</h1>
+            <div class="sub" id="sub">Loading…</div>
+        </div>
+        <nav>
+            <a href="{{ url_for('admin_index') }}">Home</a>
+            <a href="{{ url_for('admin_members') }}">People</a>
+            <a href="{{ url_for('admin_matches') }}">Matches</a>
+            <a href="{{ url_for('admin_leaderboard') }}">Scores</a>
+        </nav>
+    </header>
+
+    <div class="tabs" id="tabs"></div>
+    <div class="filter" id="filter"></div>
+    <main id="view"></main>
+</div>
+<div id="tip"></div>
+
+<script>
+(function () {
+    const DATA_URL = "{{ url_for('admin_dashboard_data') }}";
+    const $ = (s, el) => (el || document).querySelector(s);
+    let D = null;
+    let current = 'season';
+    let hideSmall = true;
+    const SMALL = 5;
+
+    // ---------- formatting ----------
+    const TZ = () => D.tz;
+    const timeFmt = (t) => new Date(t * 1000).toLocaleTimeString('en-US', { timeZone: TZ(), hour: 'numeric', minute: '2-digit' });
+    const dayFmt = (t) => new Date(t * 1000).toLocaleDateString('en-US', { timeZone: TZ(), month: 'short', day: 'numeric' });
+    const longDayFmt = (t) => new Date(t * 1000).toLocaleDateString('en-US', { timeZone: TZ(), weekday: 'long', month: 'long', day: 'numeric' });
+    const dayKey = (t) => new Date(t * 1000).toLocaleDateString('en-CA', { timeZone: TZ() });
+    const nf = (n) => Number(n).toLocaleString('en-US');
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    const SHORT = {
+        'Manchester City': 'Man City', 'Manchester United': 'Man U', 'Tottenham Hotspur': 'Spurs',
+        'Newcastle United': 'Newcastle', 'Nottingham Forest': 'Forest', 'Brighton & Hove Albion': 'Brighton',
+        'Wolverhampton Wanderers': 'Wolves', 'West Ham United': 'West Ham', 'Crystal Palace': 'Palace',
+        'Leicester City': 'Leicester', 'Leeds United': 'Leeds', 'Ipswich Town': 'Ipswich',
+    };
+    function short(name) {
+        let n = String(name || '').replace(/\s+(FC|AFC|CF|SK)$/i, '').replace(/^(AFC|FC)\s+/i, '').trim();
+        if (SHORT[n]) return SHORT[n];
+        if (n.length > 11) n = n.split(' ')[0];
+        return n;
+    }
+    function resultKey(r) { return r === 'win' ? 'win' : r === 'draw' ? 'draw' : r === 'loss' ? 'loss' : ''; }
+    function resultLetter(r) { return r === 'win' ? 'W' : r === 'draw' ? 'D' : r === 'loss' ? 'L' : ''; }
+    const niceMax = (v) => { if (v <= 4) return 4; const p = Math.pow(10, Math.floor(Math.log10(v))); const f = v / p; const steps = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]; return steps.find(x => f <= x + 1e-9) * p; };
+
+    // ---------- derived data ----------
+    function prep() {
+        const byMatch = {};
+        D.checkins.forEach(([mid, t, manual, member]) => { (byMatch[mid] = byMatch[mid] || []).push({ t, manual, member }); });
+        D.byMatch = byMatch;
+        D.allPlayed = D.matches.filter(m => (byMatch[m.id] || []).length > 0).sort((a, b) => a.kickoff - b.kickoff);
+        applyFilter();
+    }
+    // Early test scans (a handful of check-ins) would skew every season stat,
+    // so they are hidden unless asked for.
+    function applyFilter() {
+        D.played = D.allPlayed.filter(m => !hideSmall || D.byMatch[m.id].length >= SMALL);
+        const ids = new Set(D.played.map(m => m.id));
+        D.visibleCheckins = D.checkins.filter(c => ids.has(c[0]));
+        D.hiddenCount = D.allPlayed.length - D.played.length;
+    }
+
+    // ---------- tooltip ----------
+    const tip = $('#tip');
+    function showTip(html, x, y) {
+        tip.innerHTML = html; tip.classList.add('on');
+        const r = tip.getBoundingClientRect();
+        let left = x + 14, top = y - r.height - 12;
+        if (left + r.width > window.innerWidth - 8) left = x - r.width - 14;
+        if (left < 8) left = 8;
+        if (top < 8) top = y + 18;
+        tip.style.left = left + 'px'; tip.style.top = top + 'px';
+    }
+    document.addEventListener('mousemove', (e) => {
+        const el = e.target.closest && e.target.closest('[data-tip]');
+        if (el) showTip(el.getAttribute('data-tip'), e.clientX, e.clientY); else tip.classList.remove('on');
+    });
+    document.addEventListener('touchstart', (e) => {
+        const el = e.target.closest && e.target.closest('[data-tip]');
+        if (el && !el.dataset.go) { const t = e.touches[0]; showTip(el.getAttribute('data-tip'), t.clientX, t.clientY); setTimeout(() => tip.classList.remove('on'), 2600); }
+    }, { passive: true });
+
+    // ---------- small helpers ----------
+    function countUp(root) {
+        root.querySelectorAll('[data-count]').forEach(el => {
+            const to = Number(el.dataset.count), dec = Number(el.dataset.dec || 0), suffix = el.dataset.suffix || '';
+            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { el.firstChild.nodeValue = to.toFixed(dec); return; }
+            const start = performance.now(), dur = 900;
+            (function frame(now) {
+                const p = Math.min(1, (now - start) / dur), e = 1 - Math.pow(1 - p, 3);
+                el.firstChild.nodeValue = (to * e).toFixed(dec);
+                if (p < 1) requestAnimationFrame(frame);
+            })(start);
+        });
+    }
+    function kpi(label, value, sub, opts) {
+        opts = opts || {};
+        const isNum = typeof value === 'number';
+        const tm = !isNum && /^\d{1,2}:\d{2}\s?[AP]M$/i.test(value) ? String(value).split(/\s+/) : null;
+        const v = tm ? `<span class="tm">${esc(tm[0])}</span><small>${esc(tm[1])}</small>` : isNum ? `<span data-count="${value}" data-dec="${opts.dec || 0}">0</span>${opts.unit ? `<small>${opts.unit}</small>` : ''}` : `<span>${esc(value)}</span>`;
+        return `<div class="kpi ${opts.gold ? 'gold' : ''}"><div class="k-label">${esc(label)}</div><div class="k-value">${v}</div><div class="k-sub">${sub || ''}</div></div>`;
+    }
+    const chartWidth = (el) => Math.max(300, Math.floor(el.getBoundingClientRect().width));
+
+    // ---------- SEASON VIEW ----------
+    function seasonView() {
+        const total = D.visibleCheckins.length;
+        const uniq = new Set(D.visibleCheckins.map(c => c[3])).size;
+        const nights = D.played.length;
+        let best = null;
+        D.played.forEach(m => { const n = D.byMatch[m.id].length; if (!best || n > best.n) best = { n, m }; });
+        const avg = nights ? total / nights : 0;
+        const rate = D.members ? (uniq / D.members) * 100 : 0;
+        const exact = D.sales.filter(s => s[1]).length;
+
+        let html = '';
+        if (!nights) {
+            html += `<div class="panel empty"><h2>No check-ins yet</h2><p>Once the scanner is used on a match day, the season will fill in here.</p></div>`;
+        } else {
+            html += `<section class="kpis">
+                ${kpi('Members', D.members, 'on the books this season')}
+                ${kpi('Check-ins', total, `across ${nights} match${nights === 1 ? '' : 'es'}`)}
+                ${kpi('Different fans', uniq, `${Math.round(rate)}% of members have come in`)}
+                ${kpi('Best night', best.n, `vs ${esc(short(best.m.opponent))}, ${dayFmt(best.m.kickoff)}`, { gold: true })}
+                ${kpi('Average night', avg, 'check-ins per scanned match', { dec: 1 })}
+            </section>`;
+            html += `<section class="panel"><div class="panel-h"><h2>Check-ins by match</h2><span class="hint">Tap a match for the full story</span></div><div id="c-matches" class="chart"></div></section>`;
+        }
+        html += `<section class="grid2">
+            <div class="panel"><div class="panel-h"><h2>Memberships</h2><span class="hint">Running total, with match days marked</span></div>
+                <div class="legend"><span><i class="sw" style="background:linear-gradient(135deg,#ffd27a,#c98a12)"></i>Members over time</span><span><i class="sw line" style="background:rgba(255,255,255,.4)"></i>Match day</span></div>
+                <div id="c-sales" class="chart"></div>
+                ${exact < D.sales.length ? `<p class="note"><b>${nf(D.sales.length - exact)} of ${nf(D.sales.length)}</b> sale times are when the member was <b>added here</b>, not when they paid. Re-upload your Squarespace orders CSV on the People page to fix that.</p>` : ''}
+            </div>
+            <div class="panel"><div class="panel-h"><h2>Coming back</h2><span class="hint">Matches attended per fan</span></div><div id="c-repeat"></div></div>
+        </section>`;
+        $('#view').innerHTML = html;
+        countUp($('#view'));
+        if (nights) drawMatchBars($('#c-matches'));
+        drawSales($('#c-sales'));
+        drawRepeat($('#c-repeat'));
+    }
+
+    function drawMatchBars(el) {
+        const ms = D.played, n = ms.length, W = chartWidth(el), H = 330;
+        const L = 8, R = 8, T = 40, B = 92, iw = W - L - R, ih = H - T - B;
+        const counts = ms.map(m => D.byMatch[m.id].length), yMax = niceMax(Math.max(...counts));
+        const slot = iw / n, bw = Math.min(96, slot * 0.62);
+        let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Check-ins by match"><defs>
+            <linearGradient id="gBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff5a60"/><stop offset="1" stop-color="#9b1119"/></linearGradient></defs>`;
+        [0, 0.5, 1].forEach(f => { const y = T + ih - ih * f; s += `<line class="grid-line" x1="${L}" x2="${W - R}" y1="${y}" y2="${y}"/><text class="ax" x="${L}" y="${y - 6}">${Math.round(yMax * f)}</text>`; });
+        ms.forEach((m, i) => {
+            const c = counts[i], h = Math.max(4, (c / yMax) * ih), x = L + slot * i + (slot - bw) / 2, y = T + ih - h;
+            const scanned = D.byMatch[m.id].filter(k => !k.manual).length, manual = c - scanned;
+            const tipHtml = `<b>${esc(short(m.opponent))}</b> <span class='t-mute'>${dayFmt(m.kickoff)}</span><br>${c} checked in<br><span class='t-mute'>${scanned} scanned · ${manual} by name</span>`;
+            s += `<rect class="bar hit" data-go="m${m.id}" data-tip="${esc(tipHtml)}" x="${x}" y="${y}" width="${bw}" height="${h}" rx="12" fill="url(#gBar)" style="animation-delay:${i * 70}ms"/>`;
+            s += `<text class="val fade-in" x="${x + bw / 2}" y="${y - 10}" text-anchor="middle">${c}</text>`;
+            const cx = x + bw / 2, base = T + ih;
+            s += `<text class="ax-strong" x="${cx}" y="${base + 26}" text-anchor="middle">${esc(short(m.opponent))}</text>`;
+            s += `<text class="ax" x="${cx}" y="${base + 45}" text-anchor="middle">${dayFmt(m.kickoff)}</text>`;
+            const rl = resultLetter(m.result);
+            if (rl) {
+                const col = m.result === 'win' ? '#3ddc84' : m.result === 'draw' ? '#f6b73c' : '#ff5a60';
+                s += `<circle cx="${cx}" cy="${base + 66}" r="11" fill="${col}" fill-opacity=".18" stroke="${col}"/><text x="${cx}" y="${base + 70.5}" text-anchor="middle" fill="${col}" style="font-size:12px;font-weight:800">${rl}</text>`;
+            }
+        });
+        el.innerHTML = s + '</svg>';
+        el.querySelectorAll('[data-go]').forEach(r => r.addEventListener('click', () => go(r.dataset.go)));
+        el.querySelectorAll('[data-go]').forEach(r => r.dataset.go && (r.dataset.go = r.dataset.go));
+    }
+
+    function drawSales(el) {
+        const sales = D.sales.map(s => s[0]).sort((a, b) => a - b);
+        if (!sales.length) { el.innerHTML = '<div class="empty" style="padding:40px 10px">No memberships recorded yet.</div>'; return; }
+        const W = chartWidth(el), H = 300, L = 40, R = 14, T = 26, B = 40, iw = W - L - R, ih = H - T - B;
+        const t0 = sales[0], t1 = Math.max(D.generated_at, sales[sales.length - 1]), span = Math.max(1, t1 - t0);
+        const X = (t) => L + ((t - t0) / span) * iw;
+        const total = sales.length, yMax = niceMax(total), Y = (v) => T + ih - (v / yMax) * ih;
+        // cumulative step path
+        let path = `M ${X(t0)} ${Y(0)}`, last = 0;
+        sales.forEach((t, i) => { const x = X(t); path += ` L ${x} ${Y(last)} L ${x} ${Y(i + 1)}`; last = i + 1; });
+        path += ` L ${X(t1)} ${Y(last)}`;
+        const area = path + ` L ${X(t1)} ${Y(0)} L ${X(t0)} ${Y(0)} Z`;
+        let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Memberships over time"><defs>
+            <linearGradient id="gGold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6b73c" stop-opacity=".55"/><stop offset="1" stop-color="#f6b73c" stop-opacity="0"/></linearGradient></defs>`;
+        [0, 0.5, 1].forEach(f => { const y = Y(yMax * f); s += `<line class="grid-line" x1="${L}" x2="${W - R}" y1="${y}" y2="${y}"/><text class="ax" x="${L - 8}" y="${y + 4}" text-anchor="end">${Math.round(yMax * f)}</text>`; });
+        // match-day markers
+        D.played.forEach(m => {
+            if (m.kickoff < t0 || m.kickoff > t1) return;
+            const x = X(m.kickoff);
+            s += `<line x1="${x}" x2="${x}" y1="${T}" y2="${T + ih}" stroke="rgba(255,255,255,.35)" stroke-dasharray="3 5"/>`;
+            s += `<text class="ax-strong" x="${x}" y="${T - 8}" text-anchor="middle" style="font-size:11px">${esc(short(m.opponent))}</text>`;
+        });
+        s += `<path d="${area}" fill="url(#gGold)" class="fade-in"/><path d="${path}" pathLength="1" class="draw" fill="none" stroke="#f6b73c" stroke-width="3" stroke-linejoin="round"/>`;
+        // biggest days
+        const perDay = {};
+        sales.forEach(t => { const k = dayKey(t); (perDay[k] = perDay[k] || { n: 0, t }).n++; });
+        Object.values(perDay).filter(d => d.n >= 25).forEach(d => {
+            const x = X(d.t), flip = x + 150 > W - R;
+            s += `<text class="ax-strong fade-in" x="${flip ? x - 12 : x + 12}" y="${Y(0) - 12}" style="font-size:12.5px" text-anchor="${flip ? 'end' : 'start'}">+${d.n} added ${dayFmt(d.t)}</text>`;
+        });
+        s += `<circle cx="${X(t1)}" cy="${Y(total)}" r="6" fill="#fff" class="fade-in"/><text class="val fade-in" x="${X(t1) - 12}" y="${Y(total) - 12}" text-anchor="end">${total}</text>`;
+        const ticks = 4;
+        for (let i = 0; i <= ticks; i++) { const t = t0 + (span * i) / ticks; s += `<text class="ax" x="${X(t)}" y="${H - 12}" text-anchor="${i === 0 ? 'start' : i === ticks ? 'end' : 'middle'}">${dayFmt(t)}</text>`; }
+        // hover hit areas per day
+        Object.entries(perDay).forEach(([k, d]) => {
+            s += `<circle cx="${X(d.t)}" cy="${Y(sales.filter(t => t <= d.t).length)}" r="9" fill="transparent" data-tip="${esc(`<b>${dayFmt(d.t)}</b><br>+${d.n} member${d.n === 1 ? '' : 's'}<br><span class='t-mute'>${sales.filter(t => t <= d.t).length} total</span>`)}"/>`;
+        });
+        el.innerHTML = s + '</svg>';
+    }
+
+    function drawRepeat(el) {
+        const perMember = {};
+        D.visibleCheckins.forEach(([mid, t, manual, member]) => { (perMember[member] = perMember[member] || new Set()).add(mid); });
+        const buckets = { '1 match': 0, '2 matches': 0, '3+ matches': 0 };
+        Object.values(perMember).forEach(set => { const n = set.size; buckets[n >= 3 ? '3+ matches' : n === 2 ? '2 matches' : '1 match']++; });
+        const people = Object.keys(perMember).length, max = Math.max(1, ...Object.values(buckets));
+        if (!people) { el.innerHTML = '<div class="empty" style="padding:40px 10px">Nobody has checked in yet.</div>'; return; }
+        el.innerHTML = Object.entries(buckets).map(([k, v]) =>
+            `<div class="repeat-row"><div class="r-label">${k}</div><div class="r-track"><div class="r-fill" data-w="${(v / max) * 100}"></div></div><div class="r-num">${v}</div></div>`
+        ).join('') + `<p class="note"><b>${people}</b> different fans have checked in so far${D.played.length < 2 ? '. Repeat visits will show up after the next scanned match.' : '.'}</p>`;
+        requestAnimationFrame(() => requestAnimationFrame(() => el.querySelectorAll('.r-fill').forEach(f => f.style.width = f.dataset.w + '%')));
+    }
+
+    // ---------- MATCH VIEW ----------
+    function matchView(m) {
+        const cis = (D.byMatch[m.id] || []).slice().sort((a, b) => a.t - b.t);
+        const total = cis.length, manual = cis.filter(c => c.manual).length, scanned = total - manual;
+        const kick = m.kickoff, first = cis[0].t, last = cis[total - 1].t;
+        const surgeEnd = first + 15 * 60;
+        const surge = cis.filter(c => c.t < surgeEnd).length, surgePct = Math.round((surge / total) * 100);
+        const rest = total - surge;
+        const before = cis.filter(c => c.t <= kick).length, beforePct = Math.round((before / total) * 100);
+        // peak 5 minutes
+        const bins = {}; cis.forEach(c => { const b = Math.floor(c.t / 300) * 300; bins[b] = (bins[b] || 0) + 1; });
+        let peakB = null; Object.entries(bins).forEach(([b, n]) => { if (!peakB || n > peakB.n) peakB = { b: Number(b), n }; });
+        const med = cis[Math.floor((total - 1) / 2)].t;
+        const sameDay = D.sales.filter(s => dayKey(s[0]) === dayKey(kick));
+        const leadMin = Math.round((kick - first) / 60);
+        const trickleMin = Math.max(1, Math.round((last - surgeEnd) / 60));
+        const res = resultKey(m.result);
+        const homeAway = m.is_home ? 'vs' : '@';
+
+        let insight;
+        if (total < 6) insight = `Only <b>${total}</b> check-in${total === 1 ? '' : 's'} on this one, so there isn’t much of a shape to read yet.`;
+        else if (rest <= 0) insight = `The whole crowd came through in the first <b>15 minutes</b>: <b>${total} fans</b> in a single wave.`;
+        else insight = `<b>${surgePct}%</b> of the crowd (<b>${surge} fans</b>) came through in the first 15 minutes after the first scan at <b>${timeFmt(first)}</b>. The other <b>${rest}</b> trickled in over the next ${trickleMin} minutes, and <b>${beforePct}%</b> were inside before kickoff.`;
+
+        const html = `
+        <section class="hero">
+            <div class="eyebrow">${longDayFmt(kick)}${m.competition ? ' · ' + esc(m.competition) : ''}</div>
+            <h2>${homeAway} ${esc(short(m.opponent))}</h2>
+            <div class="hero-big"><span data-count="${total}">0</span><em>checked in</em></div>
+            <div class="meta"><span>Kickoff ${timeFmt(kick)}</span>${m.final_score ? `<span class="pill ${res}">${esc(m.final_score)}</span>` : ''}${res ? '' : '<span class="pill">Result pending</span>'}</div>
+        </section>
+        <section class="kpis">
+            ${kpi('Checked in', total, `${scanned} scanned · ${manual} by name`)}
+            ${kpi('First scan', timeFmt(first), leadMin > 0 ? `${leadMin} min before kickoff` : 'after kickoff')}
+            ${kpi('First 15 minutes', surge, `${surgePct}% of the crowd, the doors-open rush`)}
+            ${kpi('Busiest 5 minutes', peakB.n, `around ${timeFmt(peakB.b)}`, { gold: true })}
+            ${kpi('Inside by kickoff', beforePct, `${before} of ${total} fans`, { unit: '%' })}
+            ${sameDay.length ? kpi('Memberships sold', sameDay.length, 'recorded on match day', { gold: true }) : ''}
+        </section>
+        <section class="panel">
+            <div class="panel-h"><h2>Arrival timeline</h2><span class="hint">Five-minute bars, local time</span></div>
+            <p class="insight">${insight}</p>
+            <div class="legend">
+                <span><i class="sw" style="background:linear-gradient(#ff5a60,#9b1119)"></i>Scanned</span>
+                <span><i class="sw" style="background:#c9ccd3"></i>Checked in by name</span>
+                <span><i class="sw line"></i>Running total</span>
+                <span><i class="sw diamond" style="background:#f6b73c"></i>Membership sold</span>
+                <span><i class="sw diamond hollow"></i>Time added to system (estimate)</span>
+            </div>
+            <div id="c-arrival" class="chart"></div>
+            <p class="note" id="lane-note"></p>
+        </section>`;
+        $('#view').innerHTML = html;
+        countUp($('#view'));
+        drawArrival($('#c-arrival'), m, cis, surge, surgePct, first, surgeEnd);
+    }
+
+    function drawArrival(el, m, cis, surge, surgePct, first, surgeEnd) {
+        const W = chartWidth(el), H = 430, L = 44, R = 46, T = 44, B = 112, iw = W - L - R, ih = H - T - B;
+        const kick = m.kickoff, last = cis[cis.length - 1].t, total = cis.length;
+        const d0 = Math.floor((first - 600) / 300) * 300;
+        const d1 = Math.ceil((Math.max(last, kick) + 600) / 300) * 300;
+        const sales = D.sales.filter(s => dayKey(s[0]) === dayKey(kick) && s[0] >= d0 - 1800 && s[0] <= d1 + 1800);
+        const dd0 = sales.length ? Math.min(d0, Math.floor((Math.min(...sales.map(s => s[0])) - 300) / 300) * 300) : d0;
+        const dd1 = sales.length ? Math.max(d1, Math.ceil((Math.max(...sales.map(s => s[0])) + 300) / 300) * 300) : d1;
+        const span = dd1 - dd0, X = (t) => L + ((t - dd0) / span) * iw;
+        const nb = Math.round(span / 300), binW = iw / nb;
+        const counts = new Array(nb).fill(0), manual = new Array(nb).fill(0);
+        cis.forEach(c => { const i = Math.min(nb - 1, Math.floor((c.t - dd0) / 300)); counts[i]++; if (c.manual) manual[i]++; });
+        const yMax = niceMax(Math.max(...counts)), Y = (v) => T + ih - (v / yMax) * ih, YC = (v) => T + ih - (v / total) * ih;
+
+        let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Arrival timeline"><defs>
+            <linearGradient id="gArr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff5a60"/><stop offset="1" stop-color="#9b1119"/></linearGradient>
+            <linearGradient id="gSurge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e31b23" stop-opacity=".22"/><stop offset="1" stop-color="#e31b23" stop-opacity="0"/></linearGradient>
+            <linearGradient id="gCum" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".16"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>`;
+        // surge band
+        const sx0 = X(Math.floor(first / 300) * 300), sx1 = X(Math.floor(first / 300) * 300 + 900);
+        s += `<rect class="fade-in" x="${sx0}" y="${T - 8}" width="${sx1 - sx0}" height="${ih + 8}" rx="14" fill="url(#gSurge)" stroke="rgba(227,27,35,.45)" stroke-dasharray="4 5"/>`;
+        s += `<text class="ax-strong fade-in" x="${Math.min(W - R - 130, Math.max(L + 130, (sx0 + sx1) / 2))}" y="${T - 16}" text-anchor="middle" style="fill:#ff8a8f;font-size:12px;letter-spacing:.6px">DOORS-OPEN RUSH · ${surge} FANS · ${surgePct}%</text>`;
+        // grid + left axis
+        [0, 0.25, 0.5, 0.75, 1].forEach(f => { const y = T + ih - ih * f; s += `<line class="grid-line" x1="${L}" x2="${W - R}" y1="${y}" y2="${y}"/>`; });
+        [0, 0.5, 1].forEach(f => { s += `<text class="ax" x="${L - 8}" y="${T + ih - ih * f + 4}" text-anchor="end">${Math.round(yMax * f)}</text>`; });
+        [0, 0.5, 1].forEach(f => { s += `<text class="ax" x="${W - R + 8}" y="${T + ih - ih * f + 4}">${Math.round(total * f)}</text>`; });
+        // cumulative area + line
+        let cum = 0, pts = [`${X(dd0)},${YC(0)}`];
+        const sorted = cis.map(c => c.t);
+        sorted.forEach((t, i) => { pts.push(`${X(t)},${YC(i)}`); pts.push(`${X(t)},${YC(i + 1)}`); });
+        pts.push(`${X(dd1)},${YC(total)}`);
+        s += `<polygon class="fade-in" points="${pts.join(' ')} ${X(dd1)},${YC(0)} ${X(dd0)},${YC(0)}" fill="url(#gCum)"/>`;
+        // bars
+        counts.forEach((c, i) => {
+            if (!c) return;
+            const x = L + i * binW + binW * 0.11, w = binW * 0.78, tStart = dd0 + i * 300;
+            const hAll = (c / yMax) * ih, hMan = (manual[i] / yMax) * ih;
+            const tipHtml = `<b>${timeFmt(tStart)}–${timeFmt(tStart + 300)}</b><br>${c} checked in${manual[i] ? `<br><span class='t-mute'>${c - manual[i]} scanned · ${manual[i]} by name</span>` : ''}`;
+            s += `<g class="bar" style="animation-delay:${Math.min(900, i * 25)}ms" data-tip="${esc(tipHtml)}"><rect x="${x}" y="${T + ih - hAll}" width="${w}" height="${hAll}" rx="${Math.min(6, w / 2)}" fill="url(#gArr)"/>`;
+            if (manual[i]) s += `<rect x="${x}" y="${T + ih - hAll}" width="${w}" height="${hMan}" rx="${Math.min(6, w / 2)}" fill="#c9ccd3"/>`;
+            s += `</g>`;
+        });
+        s += `<polyline class="draw" pathLength="1" points="${pts.join(' ')}" fill="none" stroke="#fff" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>`;
+        // kickoff marker
+        const kx = X(kick);
+        s += `<line x1="${kx}" x2="${kx}" y1="${T - 6}" y2="${T + ih + 8}" stroke="#f6b73c" stroke-width="2" stroke-dasharray="6 5"/>`;
+        s += `<rect x="${kx - 68}" y="${T + ih + 10}" width="136" height="22" rx="11" fill="#f6b73c"/><text x="${kx}" y="${T + ih + 25.5}" text-anchor="middle" style="font-size:11.5px;font-weight:800;fill:#241700;letter-spacing:.4px">KICKOFF ${timeFmt(kick).replace(' ', ' ')}</text>`;
+        // x axis
+        const step = [900, 1800, 3600, 7200].find(st => (iw * st) / span >= 84) || 7200;
+        for (let t = Math.ceil(dd0 / step) * step; t <= dd1; t += step) {
+            if (Math.abs(X(t) - kx) < 90) continue;
+            s += `<text class="ax" x="${X(t)}" y="${T + ih + 26}" text-anchor="middle">${timeFmt(t)}</text>`;
+        }
+        // memberships lane
+        const laneY = T + ih + 74;
+        s += `<line x1="${L}" x2="${W - R}" y1="${laneY}" y2="${laneY}" stroke="rgba(255,255,255,.12)"/>`;
+        s += `<text class="ax" x="${L}" y="${laneY - 28}" style="letter-spacing:1.2px;font-size:11px">MEMBERSHIPS SOLD</text>`;
+        const dayAll = D.sales.filter(x => dayKey(x[0]) === dayKey(kick)), outside = dayAll.length - sales.length;
+        const laneNote = !sales.length
+            ? (dayAll.length ? `No memberships were recorded during the arrival window. <b>${dayAll.length}</b> were recorded that day outside it (earliest ${timeFmt(dayAll[0][0])}).` : 'No memberships were recorded that day.')
+            : (outside > 0 ? `<b>${outside}</b> more were recorded that day outside this window.` : '');
+        const noteEl = $('#lane-note'); if (noteEl) noteEl.innerHTML = laneNote;
+        const stack = {};
+        sales.slice().sort((a, b) => a[0] - b[0]).forEach(([t, exact]) => {
+            const key = Math.floor(t / 180); stack[key] = (stack[key] || 0) + 1;
+            const x = X(t), y = laneY - 2 - (stack[key] - 1) * 17;
+            const tipHtml = `<b>Membership</b> <span class='t-mute'>${timeFmt(t)}</span><br><span class='t-mute'>${exact ? 'Purchase time from Squarespace' : 'Time added to system, not purchase time'}</span>`;
+            s += `<g data-tip="${esc(tipHtml)}" class="fade-in" style="cursor:default"><rect x="${x - 7}" y="${y - 7}" width="14" height="14" transform="rotate(45 ${x} ${y})" rx="2" fill="${exact ? '#f6b73c' : 'rgba(7,8,11,.9)'}" stroke="#f6b73c" stroke-width="2"/></g>`;
+        });
+        el.innerHTML = s + '</svg>';
+    }
+
+    // ---------- tabs + routing ----------
+    function renderTabs() {
+        const tabs = [`<button class="tab ${current === 'season' ? 'active' : ''}" data-go="season"><div class="t-top">Whole season</div><div class="t-main">All matches</div></button>`];
+        D.played.forEach(m => {
+            const n = D.byMatch[m.id].length, key = 'm' + m.id;
+            tabs.push(`<button class="tab ${current === key ? 'active' : ''}" data-go="${key}"><div class="t-top"><i class="dot ${resultKey(m.result)}"></i>${dayFmt(m.kickoff)} · ${n}</div><div class="t-main">${esc(short(m.opponent))}</div></button>`);
+        });
+        const el = $('#tabs'); el.innerHTML = tabs.join('');
+        const tg = $('#filter');
+        if (D.allPlayed.some(m => D.byMatch[m.id].length < SMALL)) {
+            const n = D.allPlayed.filter(m => D.byMatch[m.id].length < SMALL).length;
+            tg.innerHTML = hideSmall ? `${n} low-turnout match${n === 1 ? '' : 'es'} (under ${SMALL} check-ins) hidden · <button type="button" id="ftoggle">Show</button>`
+                                     : `Showing every match, including ${n} with under ${SMALL} check-ins · <button type="button" id="ftoggle">Hide them</button>`;
+            $('#ftoggle').addEventListener('click', () => { hideSmall = !hideSmall; applyFilter(); render(); });
+        } else tg.innerHTML = '';
+        el.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
+        const active = el.querySelector('.active'); if (active && active.scrollIntoView) active.scrollIntoView({ inline: 'center', block: 'nearest' });
+    }
+    function render() {
+        tip.classList.remove('on');
+        renderTabs();
+        const m = current.startsWith('m') ? D.played.find(x => 'm' + x.id === current) : null;
+        if (m) matchView(m); else { current = 'season'; renderTabs(); seasonView(); }
+    }
+    function go(key) { if (location.hash !== '#' + key) history.replaceState(null, '', '#' + key); current = key; render(); window.scrollTo({ top: 0 }); }
+
+    async function init() {
+        try {
+            D = window.__DASH_DATA__ || await (await fetch(DATA_URL, { credentials: 'same-origin' })).json();
+            if (D.status !== 'ok') throw new Error(D.code || 'error');
+        } catch (e) { $('#sub').textContent = 'Could not load the dashboard.'; return; }
+        if (!D.season) { $('#sub').textContent = 'No season set up yet.'; return; }
+        prep();
+        $('#sub').textContent = `${D.season.name} season · updated ${timeFmt(D.generated_at)}`;
+        current = (location.hash || '#season').slice(1);
+        render();
+        let resizeTimer;
+        window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 150); });
+    }
+    init();
+})();
+</script>
+</body>
+</html>
