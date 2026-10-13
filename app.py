@@ -2537,7 +2537,7 @@ def admin_members_import():
                     })
 
                 phone = (field('phone', 'person.mobilenumber') or '').strip()
-                sold_at = _parse_order_time(field('created at', 'paid at', 'sold_at'))
+                sold_at = _parse_order_time(field('paid at', 'created at', 'sold_at'))
 
                 try:
                     cur.execute("SAVEPOINT row_import")
