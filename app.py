@@ -2498,16 +2498,23 @@ def admin_members_import():
                             return val
                     return None
 
-                email = (field('email', 'person.emailaddress', 'product form: email') or '').strip().lower()
+                # The order form's own fields come first: on a gift, the plain
+                # Email/Name columns are the buyer's, the Product Form ones
+                # are the person the membership is for.
+                email = (field('product form: email', 'email', 'person.emailaddress') or '').strip().lower()
                 if not email:
                     skipped += 1
                     continue
 
-                first_name = (field('first_name') or '').strip()
-                last_name = (field('last_name') or '').strip()
+                first_name, last_name = '', ''
+                form_name = field('product form: name')
+                if form_name:
+                    first_name, last_name = _split_name(form_name)
                 if not first_name and not last_name:
-                    full_name = field('person.displayname', 'product form: name')
-                    first_name, last_name = _split_name(full_name)
+                    first_name = (field('first_name') or '').strip()
+                    last_name = (field('last_name') or '').strip()
+                if not first_name and not last_name:
+                    first_name, last_name = _split_name(field('person.displayname'))
 
                 if not first_name and not last_name:
                     skipped += 1
