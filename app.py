@@ -2604,6 +2604,8 @@ def admin_matches():
     for m in matches:
         if m['kickoff_at']:
             m['kickoff_at'] = m['kickoff_at'].astimezone(tz)
+        opens = m.get('public_opens_at')
+        m['public_opens_value'] = opens.astimezone(tz).strftime('%H:%M') if opens else ''
 
     pushed = request.args.get('pushed')
     push_total = request.args.get('push_total')
@@ -2666,17 +2668,23 @@ def _dashboard_payload(match_id=None):
     if not season:
         return {"status": "ok", "season": None, "matches": [], "checkins": [], "sales": []}
 
+    match_sql = """
+        SELECT id, opponent, is_home, competition, result, final_score,
+               extract(epoch FROM kickoff_at)::bigint AS kickoff{extra}
+        FROM matches WHERE season_id = %s AND COALESCE(competition, '') NOT ILIKE 'test%%'
+        ORDER BY kickoff_at
+        """
+    try:
+        with db.cursor() as cur:
+            cur.execute(match_sql.format(extra=", extract(epoch FROM public_opens_at)::bigint AS public_opens"), (season['id'],))
+            matches = [dict(r) for r in cur.fetchall()]
+    except Exception:
+        # public_opens_at not migrated yet.
+        with db.cursor() as cur:
+            cur.execute(match_sql.format(extra=""), (season['id'],))
+            matches = [dict(r) for r in cur.fetchall()]
+
     with db.cursor() as cur:
-        cur.execute(
-            """
-            SELECT id, opponent, is_home, competition, result, final_score,
-                   extract(epoch FROM kickoff_at)::bigint AS kickoff
-            FROM matches WHERE season_id = %s AND COALESCE(competition, '') NOT ILIKE 'test%%'
-            ORDER BY kickoff_at
-            """,
-            (season['id'],),
-        )
-        matches = [dict(r) for r in cur.fetchall()]
         if match_id is not None:
             matches = [m for m in matches if m['id'] == match_id]
             if not matches:
@@ -3069,6 +3077,32 @@ def admin_match_set_current(match_id):
         cur.execute("UPDATE matches SET is_current = FALSE WHERE is_current")
         cur.execute("UPDATE matches SET is_current = TRUE WHERE id = %s", (match_id,))
 
+    return redirect(url_for('admin_matches'))
+
+
+@app.route('/admin/matches/<int:match_id>/public-open', methods=['POST'])
+def admin_match_public_open(match_id):
+    """When the doors opened to the general public for this match (a time on
+    the match's own day); blank clears it. Drawn as a line on the dashboard."""
+    if not require_password():
+        return redirect(url_for('login'))
+    raw = (request.form.get('time') or '').strip()
+    try:
+        tz = pytz.timezone(os.getenv('TIMEZONE', 'America/New_York'))
+        with db.cursor() as cur:
+            cur.execute("SELECT kickoff_at FROM matches WHERE id = %s", (match_id,))
+            row = cur.fetchone()
+            if not row:
+                return redirect(url_for('admin_matches'))
+            opens = None
+            if raw:
+                day = row['kickoff_at'].astimezone(tz).date()
+                opens = tz.localize(datetime.combine(day, datetime.strptime(raw, '%H:%M').time()))
+            cur.execute("UPDATE matches SET public_opens_at = %s WHERE id = %s", (opens, match_id))
+    except ValueError:
+        return redirect(url_for('admin_matches', doors_error="Enter the time as hours and minutes."))
+    except Exception as e:
+        return redirect(url_for('admin_matches', doors_error=f"Could not save the opening time (has schema.sql been applied?): {e}"))
     return redirect(url_for('admin_matches'))
 
 

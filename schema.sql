@@ -225,3 +225,7 @@ CREATE TABLE IF NOT EXISTS checkins (
 -- import lands hundreds of rows at once. NULL = not known. The dashboard
 -- plots sold_at and falls back to joined_at, marked as an estimate.
 ALTER TABLE member_seasons ADD COLUMN IF NOT EXISTS sold_at TIMESTAMPTZ;
+
+-- When the doors opened to the general public for a match (members-only
+-- entry before that). Shown as a line on the dashboard's arrival timeline.
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS public_opens_at TIMESTAMPTZ;
