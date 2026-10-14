@@ -293,9 +293,10 @@ def _build_pass_json(config, pass_data, theme):
     if pass_data.next_match_short:
         # The label renders in a much smaller font than the value, so the
         # date/time rides there to stay visible when collapsed without
-        # overflowing the way putting it in the value did.
+        # overflowing the way putting it in the value did. Real device (Oct 14)
+        # fits about 17 characters, so "NEXT" is left off to keep it whole.
         _, _, when = pass_data.next_match.partition(" | ")
-        label = f"NEXT \u00b7 {when}" if when else "NEXT MATCH"
+        label = when.replace(" ", " \u00b7 ", 1) if when else "NEXT MATCH"
         header_fields.append({"key": "nextMatch", "label": label, "value": pass_data.next_match_short})
 
     pass_json = {
