@@ -2658,7 +2658,7 @@ def admin_leaderboard():
     )
 
 
-def _dashboard_payload():
+def _dashboard_payload(match_id=None):
     """Everything the dashboard draws, as raw timestamps -- the page does
     the binning and charting. Check-ins carry an anonymous member id (only
     to count repeat attendance), never a name."""
@@ -2671,22 +2671,29 @@ def _dashboard_payload():
             """
             SELECT id, opponent, is_home, competition, result, final_score,
                    extract(epoch FROM kickoff_at)::bigint AS kickoff
-            FROM matches WHERE season_id = %s ORDER BY kickoff_at
+            FROM matches WHERE season_id = %s AND COALESCE(competition, '') NOT ILIKE 'test%%'
+            ORDER BY kickoff_at
             """,
             (season['id'],),
         )
         matches = [dict(r) for r in cur.fetchall()]
+        if match_id is not None:
+            matches = [m for m in matches if m['id'] == match_id]
+            if not matches:
+                return None
 
         cur.execute(
             """
             SELECT c.match_id, extract(epoch FROM c.checked_in_at)::bigint AS t,
                    (c.source = 'manual') AS manual, c.member_id
             FROM checkins c JOIN matches m ON m.id = c.match_id
-            WHERE m.season_id = %s ORDER BY c.checked_in_at
+            WHERE m.season_id = %s AND COALESCE(m.competition, '') NOT ILIKE 'test%%'
+            ORDER BY c.checked_in_at
             """,
             (season['id'],),
         )
-        checkins = [[r['match_id'], r['t'], 1 if r['manual'] else 0, r['member_id']] for r in cur.fetchall()]
+        checkins = [[r['match_id'], r['t'], 1 if r['manual'] else 0, r['member_id']] for r in cur.fetchall()
+                    if match_id is None or r['match_id'] == match_id]
 
         cur.execute("SELECT count(*) AS n FROM member_seasons WHERE season_id = %s", (season['id'],))
         member_count = cur.fetchone()['n']
@@ -2712,24 +2719,35 @@ def _dashboard_payload():
             )
             sales = [[r['t'], 0] for r in cur.fetchall()]
 
+    tz_name = os.getenv('TIMEZONE', 'America/New_York')
+    if match_id is not None:
+        # A one-match report carries only that match and its own day's sales.
+        tz = pytz.timezone(tz_name)
+        day = datetime.fromtimestamp(matches[0]['kickoff'], tz).date()
+        sales = [x for x in sales if datetime.fromtimestamp(x[0], tz).date() == day]
+        member_count = None
     return {
         "status": "ok",
         "season": {"id": season['id'], "name": season['name']},
-        "tz": os.getenv('TIMEZONE', 'America/New_York'),
+        "tz": tz_name,
         "generated_at": int(time.time()),
         "members": member_count,
         "matches": matches,
         "checkins": checkins,
         "sales": sales,
+        "single": match_id is not None,
     }
 
 
-def _dashboard_page(data_url, admin):
+def _dashboard_page(data_url, admin, single_match_id=None):
+    token = (os.getenv('DASHBOARD_SHARE_TOKEN') or '').strip()
     return render_template(
         'admin_dashboard.html',
         wordmark_data_uri=_asset_data_uri(PASS_THEMES["home"]["wordmark_path"]),
         data_url=data_url,
         admin=admin,
+        single_match_id=single_match_id,
+        share_base=f"{_public_base_url()}/stats/{token}" if (admin and token) else "",
     )
 
 
@@ -2759,6 +2777,24 @@ def shared_dashboard(token):
     if not _dashboard_share_ok(token):
         return "Not found", 404
     return _dashboard_page(url_for('shared_dashboard_data', token=token), admin=False)
+
+
+@app.route('/stats/<token>/<int:match_id>')
+def shared_match_dashboard(token, match_id):
+    if not _dashboard_share_ok(token):
+        return "Not found", 404
+    return _dashboard_page(url_for('shared_match_dashboard_data', token=token, match_id=match_id),
+                           admin=False, single_match_id=match_id)
+
+
+@app.route('/api/stats/<token>/<int:match_id>.json')
+def shared_match_dashboard_data(token, match_id):
+    if not _dashboard_share_ok(token):
+        return jsonify({"status": "error", "code": "not_found"}), 404
+    payload = _dashboard_payload(match_id=match_id)
+    if payload is None:
+        return jsonify({"status": "error", "code": "not_found"}), 404
+    return jsonify(payload)
 
 
 @app.route('/api/stats/<token>.json')

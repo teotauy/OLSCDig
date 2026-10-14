@@ -136,11 +136,12 @@ def get_leaderboard(season_id):
                         ELSE 0
                     END
                 ), 0) AS points,
-                COUNT(c.id) AS matches_checked_in
+                COUNT(mt.id) AS matches_checked_in
             FROM members m
             JOIN member_seasons ms ON ms.member_id = m.id AND ms.season_id = %s
             LEFT JOIN checkins c ON c.member_id = m.id
             LEFT JOIN matches mt ON mt.id = c.match_id AND mt.season_id = %s
+                AND COALESCE(mt.competition, '') NOT ILIKE 'test%%'
             GROUP BY m.id, m.first_name, m.last_name
             ORDER BY points DESC, matches_checked_in DESC, m.last_name, m.first_name
             """,

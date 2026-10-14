@@ -85,8 +85,28 @@
         }
         .tab.active .t-top { color: rgba(255, 255, 255, 0.8); }
 
-        .filter { font-size: 12.5px; color: var(--mute); margin: -4px 4px 14px; }
-        .filter button { background: none; border: none; color: var(--red-hi); font: inherit; font-weight: 600; cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 3px; }
+        .toolbar { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; margin: 0 2px 14px; }
+        .toolbar:empty { display: none; }
+        .toolbar button, .modal button {
+            font-family: var(--text); font-size: 13px; font-weight: 600; color: var(--ink-2); background: var(--panel);
+            border: 1px solid var(--line); border-radius: 999px; padding: 9px 16px; cursor: pointer; transition: background 0.15s, color 0.15s;
+        }
+        .toolbar button:hover, .modal button:hover { background: var(--panel-hi); color: #fff; }
+        .toolbar button.primary, .modal button.primary { background: linear-gradient(160deg, var(--red), var(--red-deep)); color: #fff; border-color: rgba(255, 255, 255, 0.25); }
+        #toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px); background: #111318; color: #fff; border: 1px solid var(--line);
+                 padding: 11px 18px; border-radius: 999px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s; z-index: 80; }
+        #toast.on { opacity: 1; transform: translate(-50%, 0); }
+        .modal { position: fixed; inset: 0; z-index: 70; background: rgba(4, 5, 8, 0.82); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; padding: 18px; }
+        .modal[hidden] { display: none; }
+        .modal-box { background: #0d0f14; border: 1px solid var(--line); border-radius: 24px; padding: 20px; max-width: 560px; width: 100%; max-height: 96vh; display: flex; flex-direction: column; gap: 14px; }
+        .modal-h { display: flex; justify-content: space-between; align-items: center; }
+        .modal-h h2 { font-family: var(--display); font-weight: 700; font-size: 26px; text-transform: uppercase; letter-spacing: 0.8px; }
+        .modal .x { font-size: 22px; line-height: 1; padding: 6px 13px; }
+        .fmts { display: flex; gap: 8px; flex-wrap: wrap; }
+        .fmts button.on { background: #fff; color: #111; }
+        .card-wrap { display: flex; justify-content: center; min-height: 0; }
+        .card-wrap canvas { max-width: 100%; max-height: 58vh; border-radius: 14px; box-shadow: 0 14px 44px rgba(0, 0, 0, 0.55); }
+        .modal-actions { display: flex; gap: 10px; flex-wrap: wrap; }
         #view { animation: fadeUp 0.45s ease both; }
         @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
@@ -199,26 +219,42 @@
     <header class="top">
         <img src="{{ wordmark_data_uri }}" alt="OLSC Brooklyn">
         <div class="titles">
-            <h1>Season Dashboard</h1>
+            <h1 id="ttl">Season Dashboard</h1>
             <div class="sub" id="sub">Loading…</div>
         </div>
     </header>
 
     <div class="tabs" id="tabs"></div>
-    <div class="filter" id="filter"></div>
+    <div class="toolbar" id="toolbar"></div>
     <main id="view"></main>
 </div>
 <div id="tip"></div>
+<div id="toast"></div>
+<div class="modal" id="cardModal" hidden>
+    <div class="modal-box">
+        <div class="modal-h"><h2>Social image</h2><button type="button" class="x" id="cardClose" aria-label="Close">&times;</button></div>
+        <div class="fmts" id="cardFmts">
+            <button type="button" data-fmt="portrait" class="on">4:5 post</button>
+            <button type="button" data-fmt="square">Square</button>
+            <button type="button" data-fmt="story">Story 9:16</button>
+        </div>
+        <div class="card-wrap"><canvas id="cardCanvas"></canvas></div>
+        <div class="modal-actions">
+            <button type="button" class="primary" id="cardDownload">Download PNG</button>
+            <button type="button" id="cardShare">Share…</button>
+        </div>
+    </div>
+</div>
 
 <script>
 (function () {
     const DATA_URL = "{{ data_url }}";
     const IS_ADMIN = {{ 'true' if admin else 'false' }};
+    const SHARE_BASE = {{ share_base|tojson }};
+    const SINGLE = {{ single_match_id|tojson }};
     const $ = (s, el) => (el || document).querySelector(s);
     let D = null;
     let current = 'season';
-    let hideSmall = true;
-    const SMALL = 5;
 
     // ---------- formatting ----------
     const TZ = () => D.tz;
@@ -250,18 +286,9 @@
         const byMatch = {};
         D.checkins.forEach(([mid, t, manual, member]) => { (byMatch[mid] = byMatch[mid] || []).push({ t, manual, member }); });
         D.byMatch = byMatch;
-        D.allPlayed = D.matches.filter(m => (byMatch[m.id] || []).length > 0).sort((a, b) => a.kickoff - b.kickoff);
-        applyFilter();
+        D.played = D.matches.filter(m => (byMatch[m.id] || []).length > 0).sort((a, b) => a.kickoff - b.kickoff);
+        D.visibleCheckins = D.checkins;
     }
-    // Early test scans (a handful of check-ins) would skew every season stat,
-    // so they are hidden unless asked for.
-    function applyFilter() {
-        D.played = D.allPlayed.filter(m => !hideSmall || D.byMatch[m.id].length >= SMALL);
-        const ids = new Set(D.played.map(m => m.id));
-        D.visibleCheckins = D.checkins.filter(c => ids.has(c[0]));
-        D.hiddenCount = D.allPlayed.length - D.played.length;
-    }
-
     // On a match day, estimated times (when a member was merely added) are
     // left out once real purchase times exist for that day.
     function matchDaySales(kick) {
@@ -432,7 +459,7 @@
     }
 
     // ---------- MATCH VIEW ----------
-    function matchView(m) {
+    function matchStats(m) {
         const cis = (D.byMatch[m.id] || []).slice().sort((a, b) => a.t - b.t);
         const total = cis.length, manual = cis.filter(c => c.manual).length, scanned = total - manual;
         const kick = m.kickoff, first = cis[0].t, last = cis[total - 1].t;
@@ -440,13 +467,16 @@
         const surge = cis.filter(c => c.t < surgeEnd).length, surgePct = Math.round((surge / total) * 100);
         const rest = total - surge;
         const before = cis.filter(c => c.t <= kick).length, beforePct = Math.round((before / total) * 100);
-        // peak 5 minutes
         const bins = {}; cis.forEach(c => { const b = Math.floor(c.t / 300) * 300; bins[b] = (bins[b] || 0) + 1; });
         let peakB = null; Object.entries(bins).forEach(([b, n]) => { if (!peakB || n > peakB.n) peakB = { b: Number(b), n }; });
-        const med = cis[Math.floor((total - 1) / 2)].t;
         const sameDay = matchDaySales(kick).shown;
         const leadMin = Math.round((kick - first) / 60);
         const trickleMin = Math.max(1, Math.round((last - surgeEnd) / 60));
+        return { cis, total, manual, scanned, kick, first, last, surgeEnd, surge, surgePct, rest, before, beforePct, bins, peakB, sameDay, leadMin, trickleMin };
+    }
+
+    function matchView(m) {
+        const { cis, total, manual, scanned, kick, first, last, surgeEnd, surge, surgePct, rest, before, beforePct, peakB, sameDay, leadMin, trickleMin } = matchStats(m);
         const res = resultKey(m.result);
         const homeAway = m.is_home ? 'vs' : '@';
 
@@ -558,6 +588,175 @@
         el.innerHTML = s + '</svg>';
     }
 
+    // ---------- share + social image ----------
+    const toastEl = $('#toast');
+    function toast(msg) { toastEl.textContent = msg; toastEl.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => toastEl.classList.remove('on'), 2600); }
+    async function copyText(text) {
+        try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* fall through */ }
+        try { const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); ta.remove(); return ok; } catch (e) { return false; }
+    }
+    function currentMatch() { return current.startsWith('m') ? D.played.find(x => 'm' + x.id === current) : null; }
+    function renderToolbar() {
+        const el = $('#toolbar');
+        if (!IS_ADMIN) { el.innerHTML = ''; return; }
+        const m = currentMatch();
+        el.innerHTML = `<button type="button" id="tbCopy">${m ? 'Copy link to this match' : 'Copy link to the season'}</button><button type="button" class="primary" id="tbCard">Social image</button>`;
+        $('#tbCopy').addEventListener('click', async () => {
+            if (!SHARE_BASE) { toast('Sharing is off. Add DASHBOARD_SHARE_TOKEN in Render first.'); return; }
+            const url = m ? `${SHARE_BASE}/${m.id}` : SHARE_BASE;
+            toast((await copyText(url)) ? (m ? 'Link to this match copied' : 'Link to the season copied') : url);
+        });
+        $('#tbCard').addEventListener('click', () => openCard());
+    }
+
+    const FORMATS = { portrait: { W: 1080, H: 1350 }, square: { W: 1080, H: 1080 }, story: { W: 1080, H: 1920 } };
+    let cardFmt = 'portrait';
+    function openCard(fmt) { if (fmt && FORMATS[fmt]) cardFmt = fmt; $('#cardModal').hidden = false; drawCardNow(); }
+    $('#cardClose').addEventListener('click', () => { $('#cardModal').hidden = true; });
+    $('#cardModal').addEventListener('click', (e) => { if (e.target.id === 'cardModal') $('#cardModal').hidden = true; });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#cardModal').hidden = true; });
+    document.querySelectorAll('#cardFmts button').forEach(b => b.addEventListener('click', () => { cardFmt = b.dataset.fmt; drawCardNow(); }));
+    async function drawCardNow() {
+        document.querySelectorAll('#cardFmts button').forEach(b => b.classList.toggle('on', b.dataset.fmt === cardFmt));
+        try { await Promise.all([document.fonts.load('800 100px "Barlow Condensed"'), document.fonts.load('700 40px "Barlow Condensed"'), document.fonts.load('600 30px "Inter"'), document.fonts.load('500 28px "Inter"')]); } catch (e) { /* draw with fallbacks */ }
+        const c = $('#cardCanvas'), f = FORMATS[cardFmt];
+        c.width = f.W; c.height = f.H;
+        paintCard(c.getContext('2d'), f, cardFmt, currentMatch());
+    }
+    function cardFileName() {
+        const m = currentMatch();
+        const base = m ? `olsc-${short(m.opponent).toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${dayKey(m.kickoff)}` : `olsc-season-${D.season.name.replace(/[^0-9a-z]+/gi, '-')}`;
+        return `${base}-${cardFmt}.png`;
+    }
+    $('#cardDownload').addEventListener('click', () => $('#cardCanvas').toBlob((blob) => {
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = cardFileName();
+        document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    }, 'image/png'));
+    $('#cardShare').addEventListener('click', () => $('#cardCanvas').toBlob(async (blob) => {
+        const file = new File([blob], cardFileName(), { type: 'image/png' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file] }); } catch (e) { /* cancelled */ } }
+        else toast('Sharing isn’t available in this browser. Use Download.');
+    }, 'image/png'));
+
+    function roundRect(ctx, x, y, w, h, r) {
+        ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+    }
+    function text(ctx, str, x, y, font, color, align, spacing) {
+        ctx.font = font; ctx.fillStyle = color; ctx.textAlign = align || 'left';
+        if ('letterSpacing' in ctx) ctx.letterSpacing = (spacing || 0) + 'px';
+        ctx.fillText(str, x, y);
+        if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    }
+    function fitSize(ctx, str, weight, family, maxW, start) {
+        let size = start; ctx.font = `${weight} ${size}px ${family}`;
+        while (size > 40 && ctx.measureText(str).width > maxW) { size -= 4; ctx.font = `${weight} ${size}px ${family}`; }
+        return size;
+    }
+    const DISPLAY = '"Barlow Condensed", "Arial Narrow", sans-serif', BODY = 'Inter, -apple-system, "Segoe UI", sans-serif';
+
+    function cardContent(m) {
+        if (m) {
+            const S = matchStats(m), sales = S.sameDay.length;
+            return {
+                eyebrow: (longDayFmt(m.kickoff) + (m.competition ? ' · ' + m.competition : '')).toUpperCase(),
+                head: `${m.is_home ? 'vs' : '@'} ${short(m.opponent)}`.toUpperCase(),
+                big: String(S.total), bigLabel: ['CHECKED IN', 'AT THE DOOR'],
+                trio: [[S.surgePct + '%', 'came in during the\nfirst 15 minutes'],
+                       sales ? [String(sales), 'new memberships\nsold that day'] : [String(S.peakB.n), 'fans in the\nbusiest 5 minutes'],
+                       [S.beforePct + '%', 'inside before\nkickoff']],
+                chart: { kind: 'arrival', m, S },
+            };
+        }
+        const total = D.visibleCheckins.length, played = D.played.length;
+        let best = null; D.played.forEach(x => { const n = D.byMatch[x.id].length; if (!best || n > best.n) best = { n, m: x }; });
+        return {
+            eyebrow: `${D.season.name} SEASON`, head: 'THE SEASON SO FAR',
+            big: String(D.members), bigLabel: ['MEMBERS', 'ON THE BOOKS'],
+            trio: [[String(total), 'check-ins at\nthe door'], [String(played), `match${played === 1 ? '' : 'es'}\nscanned`], best ? [String(best.n), `best match,\nvs ${short(best.m.opponent)}`] : ['0', 'best match']],
+            chart: { kind: 'matches' },
+        };
+    }
+
+    function paintCard(ctx, f, fmt, m) {
+        const { W, H } = f, P = 72, C = cardContent(m), story = fmt === 'story', square = fmt === 'square';
+        let g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#ea2430'); g.addColorStop(0.55, '#9a1019'); g.addColorStop(1, '#350509');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+        g = ctx.createRadialGradient(W * 0.88, H * 0.06, 0, W * 0.88, H * 0.06, W * 0.8); g.addColorStop(0, 'rgba(255,255,255,0.24)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+        g = ctx.createLinearGradient(0, H * 0.55, 0, H); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.32)');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+        const wm = document.querySelector('.top img'), wmH = 104;
+        if (wm && wm.naturalWidth) ctx.drawImage(wm, P, P, wmH * wm.naturalWidth / wm.naturalHeight, wmH);
+        let y = P + wmH + (story ? 110 : square ? 40 : 46);
+
+        text(ctx, C.eyebrow, P, y + 26, `600 30px ${BODY}`, 'rgba(255,255,255,0.84)', 'left', 4);
+        y += 26 + (square ? 18 : 26);
+        const headStart = story ? 190 : 150, hs = fitSize(ctx, C.head, 800, DISPLAY, W - P * 2, headStart);
+        text(ctx, C.head, P, y + hs * 0.8, `800 ${hs}px ${DISPLAY}`, '#ffffff', 'left', 1);
+        y += hs * 0.86 + (square ? 14 : 22);
+
+        const bigS = story ? 600 : square ? 330 : 380;
+        text(ctx, C.big, P - 6, y + bigS * 0.78, `800 ${bigS}px ${DISPLAY}`, '#ffffff', 'left', 0);
+        ctx.font = `800 ${bigS}px ${DISPLAY}`; const bw = ctx.measureText(C.big).width;
+        const lx = P + bw + 30, lb = y + bigS * 0.78;
+        text(ctx, C.bigLabel[1], lx, lb, `700 ${square ? 44 : 56}px ${DISPLAY}`, 'rgba(255,255,255,0.8)', 'left', 3);
+        text(ctx, C.bigLabel[0], lx, lb - (square ? 52 : 64), `800 ${square ? 62 : 80}px ${DISPLAY}`, '#ffffff', 'left', 2);
+        y += bigS * 0.78 + (square ? 26 : story ? 40 : 30);
+
+        const panelH = square ? 190 : story ? 230 : 210;
+        ctx.fillStyle = 'rgba(0,0,0,0.26)'; roundRect(ctx, P, y, W - P * 2, panelH, 30); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 2; roundRect(ctx, P, y, W - P * 2, panelH, 30); ctx.stroke();
+        const colW = (W - P * 2) / 3;
+        C.trio.forEach(([val, cap], i) => {
+            const cx = P + colW * i + 34;
+            text(ctx, val, cx, y + (square ? 92 : 112), `800 ${square ? 84 : 104}px ${DISPLAY}`, '#ffffff', 'left', 0);
+            cap.split('\n').forEach((line, k) => text(ctx, line, cx, y + (square ? 130 : 156) + k * 31, `500 25px ${BODY}`, 'rgba(255,255,255,0.86)', 'left', 0));
+            if (i) { ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(P + colW * i, y + 30); ctx.lineTo(P + colW * i, y + panelH - 30); ctx.stroke(); }
+        });
+        y += panelH + (square ? 0 : story ? 44 : 36);
+
+        const footY = H - P + 8, chartBottom = footY - 70, chartTop = y;
+        if (!square && chartBottom - chartTop > 110) paintCardChart(ctx, C.chart, P, chartTop, W - P * 2, chartBottom - chartTop);
+        text(ctx, 'OLSC BROOKLYN', P, footY, `600 23px ${BODY}`, 'rgba(255,255,255,0.72)', 'left', 3);
+        text(ctx, 'WALK ON.', W - P, footY, `800 34px ${DISPLAY}`, '#ffffff', 'right', 3);
+    }
+
+    function paintCardChart(ctx, ch, x0, top, w, h) {
+        const labelH = 46, plotH = h - labelH, base = top + plotH;
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x0, base); ctx.lineTo(x0 + w, base); ctx.stroke();
+        if (ch.kind === 'matches') {
+            const ms = D.played.slice(-8), n = ms.length; if (!n) return;
+            const counts = ms.map(x => D.byMatch[x.id].length), max = Math.max(...counts), slot = w / n, bw = Math.min(110, slot * 0.6);
+            ms.forEach((x, i) => {
+                const bh = Math.max(6, (counts[i] / max) * (plotH - 46)), cx = x0 + slot * i + slot / 2;
+                ctx.fillStyle = 'rgba(255,255,255,0.92)'; roundRect(ctx, cx - bw / 2, base - bh, bw, bh, 10); ctx.fill();
+                text(ctx, String(counts[i]), cx, base - bh - 12, `800 44px ${DISPLAY}`, '#ffffff', 'center', 0);
+                text(ctx, short(x.opponent).toUpperCase(), cx, base + 34, `600 22px ${BODY}`, 'rgba(255,255,255,0.8)', 'center', 1);
+            });
+            return;
+        }
+        const { S, m } = ch, d0 = Math.floor((S.first - 300) / 300) * 300, d1 = Math.ceil((S.last + 600) / 300) * 300, nb = Math.round((d1 - d0) / 300), slot = w / nb;
+        const counts = new Array(nb).fill(0); S.cis.forEach(c => { counts[Math.min(nb - 1, Math.floor((c.t - d0) / 300))]++; });
+        const max = Math.max(...counts), bw = slot * 0.74, rushEnd = S.first + 900;
+        counts.forEach((c, i) => {
+            if (!c) return;
+            const bh = Math.max(6, (c / max) * (plotH - 52)), bx = x0 + slot * i + (slot - bw) / 2, binStart = d0 + i * 300;
+            ctx.fillStyle = binStart < rushEnd ? '#ffffff' : 'rgba(255,255,255,0.5)'; roundRect(ctx, bx, base - bh, bw, bh, Math.min(8, bw / 2)); ctx.fill();
+        });
+        const per = {};
+        S.sameDay.forEach(([t]) => {
+            if (t < d0 || t > d1) return;
+            const i = Math.min(nb - 1, Math.floor((t - d0) / 300)), k = per[i] = (per[i] || 0) + 1;
+            const cx = x0 + slot * i + slot / 2, cy = base - (counts[i] / max) * (plotH - 52) - 24 - (k - 1) * 30;
+            ctx.save(); ctx.translate(cx, cy); ctx.rotate(Math.PI / 4); ctx.fillStyle = '#f6b73c'; ctx.strokeStyle = 'rgba(40,6,10,0.9)'; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.rect(-10, -10, 20, 20); ctx.stroke(); ctx.fill(); ctx.restore();
+        });
+        text(ctx, timeFmt(S.first), x0, base + 34, `600 24px ${BODY}`, 'rgba(255,255,255,0.8)', 'left', 1);
+        text(ctx, timeFmt(S.last), x0 + w, base + 34, `600 24px ${BODY}`, 'rgba(255,255,255,0.8)', 'right', 1);
+        if (S.sameDay.length) { ctx.fillStyle = '#f6b73c'; ctx.save(); ctx.translate(x0 + w / 2 - 150, base + 25); ctx.rotate(Math.PI / 4); ctx.fillRect(-7, -7, 14, 14); ctx.restore(); text(ctx, 'NEW MEMBERSHIP', x0 + w / 2 - 128, base + 34, `600 22px ${BODY}`, 'rgba(255,255,255,0.8)', 'left', 1); }
+    }
+
     // ---------- tabs + routing ----------
     function renderTabs() {
         const tabs = [`<button class="tab ${current === 'season' ? 'active' : ''}" data-go="season"><div class="t-top">Whole season</div><div class="t-main">All matches</div></button>`];
@@ -566,13 +765,6 @@
             tabs.push(`<button class="tab ${current === key ? 'active' : ''}" data-go="${key}"><div class="t-top"><i class="dot ${resultKey(m.result)}"></i>${dayFmt(m.kickoff)} · ${n}</div><div class="t-main">${esc(short(m.opponent))}</div></button>`);
         });
         const el = $('#tabs'); el.innerHTML = tabs.join('');
-        const tg = $('#filter');
-        if (D.allPlayed.some(m => D.byMatch[m.id].length < SMALL)) {
-            const n = D.allPlayed.filter(m => D.byMatch[m.id].length < SMALL).length;
-            tg.innerHTML = hideSmall ? `${n} low-turnout match${n === 1 ? '' : 'es'} (under ${SMALL} check-ins) hidden · <button type="button" id="ftoggle">Show</button>`
-                                     : `Showing every match, including ${n} with under ${SMALL} check-ins · <button type="button" id="ftoggle">Hide them</button>`;
-            $('#ftoggle').addEventListener('click', () => { hideSmall = !hideSmall; applyFilter(); render(); });
-        } else tg.innerHTML = '';
         el.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
         const active = el.querySelector('.active'); if (active && active.scrollIntoView) active.scrollIntoView({ inline: 'center', block: 'nearest' });
     }
@@ -581,8 +773,9 @@
         renderTabs();
         const m = current.startsWith('m') ? D.played.find(x => 'm' + x.id === current) : null;
         if (m) matchView(m); else { current = 'season'; renderTabs(); seasonView(); }
+        renderToolbar();
     }
-    function go(key) { if (location.hash !== '#' + key) history.replaceState(null, '', '#' + key); current = key; render(); window.scrollTo({ top: 0 }); }
+    function go(key) { if (SINGLE) return; if (location.hash !== '#' + key) history.replaceState(null, '', '#' + key); current = key; render(); window.scrollTo({ top: 0 }); }
 
     async function init() {
         try {
@@ -593,7 +786,9 @@
         prep();
         $('#sub').textContent = `${D.season.name} season · updated ${timeFmt(D.generated_at)}`;
         current = (location.hash || '#season').slice(1);
+        if (SINGLE) { current = 'm' + SINGLE; $('#tabs').style.display = 'none'; $('#ttl').textContent = 'Match report'; $('#sub').textContent = `${D.season.name} season · updated ${timeFmt(D.generated_at)}`; }
         render();
+        const wantCard = new URLSearchParams(location.search).get('card'); if (wantCard && IS_ADMIN) openCard(wantCard);
         let resizeTimer;
         window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 150); });
     }
